@@ -1,7 +1,7 @@
-# Voice Spells
+# Iron's Spells: Incantation
 
 **Cast Iron's Spells 'n Spellbooks spells by saying their names.** No training samples, no
-keybind to remember — Voice Spells piggybacks on your Simple Voice Chat mic and runs an offline
+keybind to remember — Incantation piggybacks on your Simple Voice Chat mic and runs an offline
 speech recognizer (Vosk) restricted to a grammar of your installed spell names. Say `fireball`,
 it casts fireball.
 
@@ -42,7 +42,7 @@ custom phrases (see Configuration).
 
 - **Spellbook + imbued-weapon casting.** Either a spellbook in your Curios spellbook slot
   (default), a hand-held spellbook (with `castMode = ANY_SPELLBOOK`), or an imbued sword/staff
-  in hand — Voice Spells finds the right item and casts via the matching `CastSource` so mana
+  in hand — Incantation finds the right item and casts via the matching `CastSource` so mana
   and cooldowns behave exactly like a manual cast.
 - **HUD chip** showing model status, mic state, last heard phrase, and a live audio meter.
   Configurable corner, offset, opacity. Toggle with **B**.
@@ -67,7 +67,7 @@ custom phrases (see Configuration).
 
 ## Keybinds
 
-Rebind in Controls → Voice Spells. Defaults:
+Rebind in Controls → Incantation. Defaults:
 
 | Key | Action |
 | --- | --- |
@@ -80,7 +80,7 @@ Rebind in Controls → Voice Spells. Defaults:
 
 ## Configuration
 
-Most settings have UI: **Mods → Voice Spells → Config** (or the More… screen for the rest).
+Most settings have UI: **Mods → Incantation → Config** (or the More… screen for the rest).
 The raw file is `config/voicespells-client.toml`; edits hot-reload without restarting.
 
 Highlights:

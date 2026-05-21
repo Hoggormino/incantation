@@ -1,5 +1,5 @@
 {
-  "key.categories.voicespells": "Voice Spells",
+  "key.categories.voicespells": "Iron's Spells: Incantation",
   "key.voicespells.toggle_listening": "Toggle Voice Casting",
   "key.voicespells.toggle_hud": "Toggle Voice HUD",
   "key.voicespells.accept_suggestion": "Accept Alias Suggestion",
@@ -8,14 +8,14 @@
   "key.voicespells.quick_recast": "Quick Recast Last Spell",
 
   "text.voicespells.heard": "Heard \"%s\" → casting %s",
-  "text.voicespells.model_missing": "Voice Spells: Vosk model not found. Unzip a small English model into %s and try again.",
+  "text.voicespells.model_missing": "Incantation: Vosk model not found. Unzip a small English model into %s and try again.",
 
   "text.voicespells.listening_on":  "Voice casting: ON",
   "text.voicespells.listening_off": "Voice casting: OFF",
   "text.voicespells.hud_on":  "Voice HUD: ON",
   "text.voicespells.hud_off": "Voice HUD: OFF",
 
-  "voicespells.config.title": "Voice Spells",
+  "voicespells.config.title": "Iron's Spells: Incantation",
   "voicespells.config.reset": "Reset",
   "voicespells.config.transparent": "Transparent",
   "voicespells.config.spelllist": "Spell List",

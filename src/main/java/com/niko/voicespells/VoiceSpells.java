@@ -65,7 +65,7 @@ public final class VoiceSpells {
         LOGGER.info("Integrations — Simple Voice Chat: {}, Iron's Spells: {}",
             svc ? "found" : "missing", iron ? "found" : "missing");
         if (!svc && !iron) {
-            LOGGER.info("Neither integration installed; Voice Spells will be inactive.");
+            LOGGER.info("Neither integration installed; Incantation will be inactive.");
         } else if (!svc) {
             LOGGER.info("No mic source (SVC missing); spells are indexed but won't be triggered by speech.");
         } else if (!iron) {

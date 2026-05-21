@@ -1,4 +1,4 @@
-# Incantation
+# Iron's Spells: Incantation
 
 **Say a spell's name. Cast it.**
 
@@ -79,7 +79,7 @@ For tricky spell names (Traveloptics, Cataclysm, anything with unusual phonetics
 
 ## Configuration
 
-Most settings are accessible in-game from **Mods → Voice Spells → Config**.
+Most settings are accessible in-game from **Mods → Iron's Spells: Incantation → Config**.
 
 - **Recognition tab** — owned-spell restriction, fuzzy tolerance, substring match, dedup
   window, debug monitor.

@@ -45,7 +45,7 @@ public final class FirstRunScreen extends Screen {
     private NeonButton nextBtn;
 
     public FirstRunScreen(Screen parent) {
-        super(Component.literal("Welcome to Voice Spells"));
+        super(Component.literal("Welcome to Incantation"));
         this.parent = parent;
     }
 
@@ -158,9 +158,9 @@ public final class FirstRunScreen extends Screen {
     private void renderWelcome(GuiGraphics g, int x, int y) {
         drawHeading(g, x, y, "What this does");
         drawLines(g, x, y + 14, new String[] {
-            "Voice Spells lets you cast Iron's Spells",
-            "by speaking their names through your",
-            "Simple Voice Chat mic.",
+            "Cast Iron's Spells by speaking their",
+            "names through your Simple Voice Chat",
+            "microphone.",
             "",
             "No keybinds — just talk like normal.",
             "When you say a spell name you have",

@@ -27,7 +27,7 @@ public final class HelpScreen extends Screen {
     private static final String[][] PAGES = {
         {
             "What this mod does",
-            "Voice Spells lets you cast Iron's Spells by",
+            "Incantation lets you cast Iron's Spells by",
             "speaking their names into your Simple Voice",
             "Chat microphone.",
             "",
@@ -106,7 +106,7 @@ public final class HelpScreen extends Screen {
     };
 
     public HelpScreen(Screen parent) {
-        super(Component.literal("Voice Spells — Help"));
+        super(Component.literal("Incantation — Help"));
         this.parent = parent;
     }
 
