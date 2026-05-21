@@ -1,0 +1,105 @@
+plugins {
+	id 'java-library'
+	id 'eclipse'
+	id 'idea'
+	id 'net.neoforged.moddev' version '2.0.78'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+	archivesName = mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+neoForge {
+	version = project.neo_version
+
+	runs {
+		client {
+			client()
+			systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+		}
+		data {
+			data()
+			programArguments.addAll '--mod', project.mod_id, '--all',
+				'--output', file('src/generated/resources/').getAbsolutePath(),
+				'--existing', file('src/main/resources/').getAbsolutePath()
+		}
+	}
+
+	mods {
+		"${mod_id}" {
+			sourceSet sourceSets.main
+		}
+	}
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+repositories {
+	maven {
+		name = 'NeoForged'
+		url = 'https://maven.neoforged.net/releases'
+	}
+	maven {
+		name = 'Henkelmax (Simple Voice Chat)'
+		url  = 'https://maven.maxhenkel.de/repository/public'
+	}
+	mavenCentral()
+}
+
+dependencies {
+	// Simple Voice Chat public API. compileOnly because SVC itself ships the API at runtime.
+	compileOnly "de.maxhenkel.voicechat:voicechat-api:${voicechat_api_version}"
+
+	// Vosk offline speech recognition (JNA-backed; native libs auto-extracted at runtime).
+	// Split declaration:
+	//   - implementation: compile + runtime visibility for prod usage of the shaded classes.
+	//   - jarJar: ships the dep inside the mod jar via NeoForge's nested-jar mechanism so end
+	//     users don't need to install a Vosk library separately.
+	//   - localRuntime: dev-only runClient classpath; NeoForge's dev ModLauncher won't pick
+	//     up jarJar-bundled deps before runtime extraction happens.
+	implementation("com.alphacephei:vosk:0.3.45")
+	// Make Vosk visible to NeoForge's dev ModLauncher. `implementation` alone keeps it on
+	// Gradle's runtimeClasspath but moddev's runClient uses a stricter classpath that needs
+	// libraries declared explicitly here.
+	additionalRuntimeClasspath("com.alphacephei:vosk:0.3.45")
+	jarJar("com.alphacephei:vosk:0.3.45") {
+		version {
+			strictly "[0.3.45,1)"
+			prefer "0.3.45"
+		}
+	}
+}
+
+tasks.named('processResources', ProcessResources).configure {
+	var replaceProperties = [
+		minecraft_version       : minecraft_version,
+		minecraft_version_range : minecraft_version_range,
+		neo_version             : neo_version,
+		neo_version_range       : neo_version_range,
+		loader_version_range    : loader_version_range,
+		mod_id                  : mod_id,
+		mod_name                : mod_name,
+		mod_license             : mod_license,
+		mod_version             : mod_version,
+		mod_authors             : mod_authors,
+		mod_description         : mod_description,
+	]
+	inputs.properties replaceProperties
+
+	filesMatching(['META-INF/neoforge.mods.toml']) {
+		expand replaceProperties
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = 'UTF-8'
+}
+
+java {
+	withSourcesJar()
+}

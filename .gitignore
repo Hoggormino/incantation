@@ -1,0 +1,36 @@
+# --- Gradle / build outputs ---
+.gradle/
+build/
+out/
+bin/
+
+# --- IDE state ---
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.eclipse/
+.classpath
+.project
+.settings/
+.factorypath
+
+# --- Generated NeoForge dev artifacts ---
+src/generated/
+
+# --- Runtime / local development data ---
+# The /run folder contains a player's dev test world, configs, logs, screenshots, and the
+# Vosk model (huge). Keep it strictly local — never commit.
+run/
+!run/.gitkeep
+
+# --- macOS / Windows junk ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Local secrets / credentials (just in case) ---
+*.env
+secrets/
+*.key

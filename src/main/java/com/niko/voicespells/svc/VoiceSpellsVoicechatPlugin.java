@@ -1,0 +1,67 @@
+package com.niko.voicespells.svc;
+
+import com.niko.voicespells.VoiceSpells;
+import com.niko.voicespells.client.VoiceController;
+import de.maxhenkel.voicechat.api.ForgeVoicechatPlugin;
+import de.maxhenkel.voicechat.api.VoicechatApi;
+import de.maxhenkel.voicechat.api.VoicechatClientApi;
+import de.maxhenkel.voicechat.api.VoicechatPlugin;
+import de.maxhenkel.voicechat.api.events.ClientSoundEvent;
+import de.maxhenkel.voicechat.api.events.EventRegistration;
+
+/**
+ * Discovered by SVC via {@link ForgeVoicechatPlugin}. We forward the local mic's raw PCM frames
+ * to {@link VoiceController} whenever the user is transmitting AND not muted in SVC.
+ *
+ * SVC fires {@link ClientSoundEvent} from its capture thread before the mute-aware encoding stage,
+ * so we have to check {@link VoicechatClientApi#isMuted()} ourselves to honour the user's mute
+ * toggle. We also force a flush at the mute→unmuted boundary so a partial recognition left over
+ * from before the mute can't bleed into the next utterance.
+ */
+@ForgeVoicechatPlugin
+public final class VoiceSpellsVoicechatPlugin implements VoicechatPlugin {
+
+    private static final short[] EMPTY_FRAME = new short[0];
+
+    private volatile VoicechatClientApi clientApi;
+    private boolean wasMuted = false;
+
+    @Override
+    public String getPluginId() {
+        return VoiceSpells.MOD_ID;
+    }
+
+    @Override
+    public void initialize(VoicechatApi api) {
+        // On the client the API object SVC hands us is always a VoicechatClientApi; on a dedicated
+        // server it'd be a VoicechatServerApi (which we don't care about — no mic there).
+        if (api instanceof VoicechatClientApi c) {
+            this.clientApi = c;
+        }
+        VoiceSpells.LOGGER.info("Registered with Simple Voice Chat as plugin '{}'", getPluginId());
+    }
+
+    @Override
+    public void registerEvents(EventRegistration registration) {
+        registration.registerEvent(ClientSoundEvent.class, this::onClientSound);
+    }
+
+    private void onClientSound(ClientSoundEvent event) {
+        VoicechatClientApi api = clientApi;
+        boolean muted = api != null && api.isMuted();
+
+        // Mute transition: if we just got muted mid-utterance, push a synthetic end-of-transmission
+        // so any partial recognition flushes and doesn't poison the next session.
+        if (muted != wasMuted) {
+            if (muted) VoiceController.onMicFrame(EMPTY_FRAME);
+            wasMuted = muted;
+        }
+        if (muted) return;
+
+        short[] pcm = event.getRawAudio();
+        if (pcm == null) return;
+        // Empty arrays are SVC's end-of-transmission marker — pass them through so the controller
+        // can flush the recognizer instead of dropping them here.
+        VoiceController.onMicFrame(pcm);
+    }
+}

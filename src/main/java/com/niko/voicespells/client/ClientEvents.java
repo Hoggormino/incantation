@@ -1,0 +1,739 @@
+package com.niko.voicespells.client;
+
+import com.mojang.blaze3d.platform.InputConstants;
+import com.niko.voicespells.VoiceSpells;
+import com.niko.voicespells.VoiceSpellsConfig;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.LayeredDraw;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
+import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+import net.neoforged.neoforge.client.settings.KeyConflictContext;
+import net.neoforged.neoforge.common.NeoForge;
+import org.lwjgl.glfw.GLFW;
+
+public final class ClientEvents {
+
+    private static final KeyMapping TOGGLE_LISTENING = new KeyMapping(
+        "key.voicespells.toggle_listening",
+        KeyConflictContext.IN_GAME,
+        InputConstants.Type.KEYSYM,
+        GLFW.GLFW_KEY_V,
+        "key.categories.voicespells"
+    );
+
+    private static final KeyMapping TOGGLE_HUD = new KeyMapping(
+        "key.voicespells.toggle_hud",
+        KeyConflictContext.IN_GAME,
+        InputConstants.Type.KEYSYM,
+        GLFW.GLFW_KEY_B,
+        "key.categories.voicespells"
+    );
+
+    /** Press to accept the most recent alias suggestion — opens AddAliasScreen pre-filled
+     *  with the heard phrase + the suggested spell id, so it's a single keystroke + Enter. */
+    private static final KeyMapping ACCEPT_SUGGESTION = new KeyMapping(
+        "key.voicespells.accept_suggestion",
+        KeyConflictContext.IN_GAME,
+        InputConstants.Type.KEYSYM,
+        GLFW.GLFW_KEY_Y,
+        "key.categories.voicespells"
+    );
+
+    /** Toggle voice-macro recording. While recording, every dispatched cast is appended to
+     *  the macro buffer along with its relative timestamp. */
+    private static final KeyMapping TOGGLE_MACRO = new KeyMapping(
+        "key.voicespells.toggle_macro",
+        KeyConflictContext.IN_GAME,
+        InputConstants.Type.KEYSYM,
+        GLFW.GLFW_KEY_J,
+        "key.categories.voicespells"
+    );
+
+    /** Play the most recently recorded macro. Each step fires through the normal network
+     *  path, with the original inter-step delays preserved on a daemon thread. */
+    private static final KeyMapping PLAY_MACRO = new KeyMapping(
+        "key.voicespells.play_macro",
+        KeyConflictContext.IN_GAME,
+        InputConstants.Type.KEYSYM,
+        GLFW.GLFW_KEY_K,
+        "key.categories.voicespells"
+    );
+
+    /** Quick-recast the most recently voice-cast spell. Lets the player chain a repeat cast
+     *  without speaking the phrase a second time — useful for fast-cast spells where speech
+     *  recognition latency would otherwise be a bottleneck. */
+    private static final KeyMapping QUICK_RECAST = new KeyMapping(
+        "key.voicespells.quick_recast",
+        KeyConflictContext.IN_GAME,
+        InputConstants.Type.KEYSYM,
+        GLFW.GLFW_KEY_RIGHT_BRACKET,
+        "key.categories.voicespells"
+    );
+
+    private ClientEvents() {}
+
+    /** Called from {@link VoiceSpells} constructor on the client. */
+    public static void bootstrap(IEventBus modBus) {
+        modBus.addListener(ClientEvents::onClientSetup);
+        modBus.addListener(ClientEvents::onRegisterGuiLayers);
+        modBus.addListener(ClientEvents::onRegisterKeys);
+        NeoForge.EVENT_BUS.addListener(ClientEvents::onClientTickPost);
+        NeoForge.EVENT_BUS.addListener(ClientEvents::onClientChat);
+        // Live-apply external edits to voicespells-client.toml (no game restart).
+        com.niko.voicespells.VoiceSpellsConfig.reloadCallback = VoiceController::onConfigChanged;
+        Runtime.getRuntime().addShutdownHook(new Thread(VoiceController::shutdown,
+            "VoiceSpells-Shutdown"));
+    }
+
+    private static void onClientSetup(FMLClientSetupEvent event) {
+        // SpellIndex is populated in common setup which has already fired by now, so kicking off
+        // the Vosk load here means the model is usually ready before the first SVC transmission.
+        event.enqueueWork(VoiceController::preloadAsync);
+    }
+
+    private static void onRegisterKeys(RegisterKeyMappingsEvent event) {
+        event.register(TOGGLE_LISTENING);
+        event.register(TOGGLE_HUD);
+        event.register(ACCEPT_SUGGESTION);
+        event.register(TOGGLE_MACRO);
+        event.register(PLAY_MACRO);
+        event.register(QUICK_RECAST);
+    }
+
+    private static void onRegisterGuiLayers(RegisterGuiLayersEvent event) {
+        event.registerAboveAll(
+            ResourceLocation.fromNamespaceAndPath(VoiceSpells.MOD_ID, "voice_hud"),
+            new HudOverlay()
+        );
+        event.registerAboveAll(
+            ResourceLocation.fromNamespaceAndPath(VoiceSpells.MOD_ID, "cast_vignette"),
+            new CastingVignette()
+        );
+        event.registerAboveAll(
+            ResourceLocation.fromNamespaceAndPath(VoiceSpells.MOD_ID, "cooldown_indicator"),
+            new CooldownIndicator()
+        );
+    }
+
+    /** Drain the keybind click queue every tick. consumeClick() returns true once per press,
+     *  which is exactly the toggle semantics we want — holding the key won't spam. Also
+     *  drains the cast queue so a spell parked during a long cast fires when the cast ends.
+     *  Pops the first-run wizard once we're in a world, the model is ready and no other
+     *  screen is up — that's the first moment the wizard can demonstrate anything live. */
+    private static boolean firstRunPopped = false;
+    private static long    firstRunEligibleSinceMs = 0L;
+
+    /** Prepend the player's voice-cast rank to outgoing chat messages when {@code chatRankTag}
+     *  is on. Cosmetic; sent BEFORE the server sees it so other players see the prefix too. */
+    private static void onClientChat(net.neoforged.neoforge.client.event.ClientChatEvent event) {
+        if (!VoiceSpellsConfig.cChatRankTag) return;
+        String original = event.getMessage();
+        if (original == null || original.isEmpty()) return;
+        // Skip if the player already prefixed something brackety so we don't double up.
+        if (original.startsWith("[")) return;
+        String rank = com.niko.voicespells.client.VoiceStats.currentRank();
+        event.setMessage("[" + rank + "] " + original);
+    }
+
+    private static void onClientTickPost(ClientTickEvent.Post event) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) {
+            firstRunEligibleSinceMs = 0L; // reset settle timer between worlds
+            return;
+        }
+        VoiceController.tryDrainCastQueue();
+        VoiceController.sampleWaveformIfDue();
+        VoiceController.tickAfkPosition(mc.player);
+        VoiceController.refreshOwnedSpellsIfDue();
+
+        // First-run wizard: pop once in-world, after the Vosk model has finished loading and
+        // the player has been stable on no-screen for ~1.5s. Doing it in-game means the
+        // audio meter and recognition feed actually work, which is the whole point.
+        if (!firstRunPopped && mc.screen == null
+                && "READY".equals(VoiceController.statusLine())) {
+            long nowMs = System.currentTimeMillis();
+            if (firstRunEligibleSinceMs == 0L) {
+                firstRunEligibleSinceMs = nowMs;
+            } else if (nowMs - firstRunEligibleSinceMs >= 1500L) {
+                firstRunPopped = true;
+                try {
+                    // Pop only if BOTH the config flag is still true AND the stats-side flag
+                    // hasn't latched. The stats flag is the reliable one — config writes can
+                    // be lost on a fast exit, so checking stats keeps the wizard from re-
+                    // appearing in that case.
+                    if (VoiceSpellsConfig.CLIENT.firstRun.get() && !VoiceStats.wizardSeen()) {
+                        mc.setScreen(new FirstRunScreen(null));
+                    }
+                } catch (Throwable ignored) { /* config not ready — try again on next session */ }
+            }
+        } else if (mc.screen != null) {
+            // Player opened something — restart the settle timer when they close it.
+            firstRunEligibleSinceMs = 0L;
+        }
+        while (TOGGLE_LISTENING.consumeClick()) {
+            boolean on = VoiceController.toggleListening();
+            mc.player.displayClientMessage(
+                Component.translatable(on ? "text.voicespells.listening_on"
+                                          : "text.voicespells.listening_off"),
+                true);
+        }
+        while (TOGGLE_HUD.consumeClick()) {
+            boolean on = VoiceController.toggleHud();
+            mc.player.displayClientMessage(
+                Component.translatable(on ? "text.voicespells.hud_on"
+                                          : "text.voicespells.hud_off"),
+                true);
+        }
+        while (TOGGLE_MACRO.consumeClick()) {
+            boolean nowRec = VoiceController.toggleMacroRecording();
+            mc.player.displayClientMessage(
+                Component.literal(nowRec
+                    ? "Voice macro: recording (cast spells, press J to stop)"
+                    : "Voice macro: stopped, " + VoiceController.macroStepCount()
+                        + " step(s) — press K to play"),
+                true);
+        }
+        while (PLAY_MACRO.consumeClick()) {
+            int n = VoiceController.macroStepCount();
+            if (n == 0) {
+                mc.player.displayClientMessage(
+                    Component.literal("Voice macro: empty (record one with J first)"),
+                    true);
+            } else {
+                VoiceController.playMacro();
+                mc.player.displayClientMessage(
+                    Component.literal("Voice macro: playing " + n + " step(s)"), true);
+            }
+        }
+        while (QUICK_RECAST.consumeClick()) {
+            String last = VoiceController.lastDispatchedSpellId();
+            if (last == null || last.isEmpty()) {
+                mc.player.displayClientMessage(
+                    Component.literal("Nothing to recast yet — say a spell first."), true);
+            } else {
+                VoiceController.quickRecastLast();
+            }
+        }
+        while (ACCEPT_SUGGESTION.consumeClick()) {
+            VoiceController.AliasSuggestion s = VoiceController.lastSuggestion();
+            if (s == null) continue;
+            long age = System.nanoTime() - s.shownAtNanos();
+            if (age > VoiceController.SUGGESTION_LIFETIME_NANOS) {
+                VoiceController.clearSuggestion();
+                continue;
+            }
+            // Open the alias editor pre-filled with the heard phrase + suggested spell id.
+            mc.setScreen(new AddAliasScreen(null, s.candidateSpellId().toString(), s.heardPhrase()));
+            VoiceController.clearSuggestion();
+        }
+    }
+
+    /**
+     * Cooldown indicator. Shows a small accent chip just under the crosshair with the name of
+     * the last voice-cast spell when it's currently on cooldown, plus the remaining cooldown
+     * percentage. Disappears once the cooldown clears. Reflective so it stays silent when
+     * Iron's Spells isn't present or the API shape shifts.
+     */
+    /** Iron's Spells reflection cache. Resolving Class.forName + getMethod each frame for the
+     *  cooldown indicator and cast vignette burned measurable CPU in long sessions. Resolve
+     *  once on first use, then call through the cached Method handle every frame. */
+    private static final class IronsSpellsRefl {
+        static final Class<?> CMD;                // ClientMagicData
+        static final java.lang.reflect.Method GET_COOLDOWNS;
+        static final java.lang.reflect.Method IS_CASTING;
+        static volatile Class<?> COOLDOWNS_CLS;   // resolved lazily — depends on getPlayerCooldowns return
+        static volatile java.lang.reflect.Method GET_PCT;        // (String) -> float
+        static volatile java.lang.reflect.Method IS_ON_COOLDOWN; // (String) -> boolean fallback
+        static volatile boolean cooldownReady = false;
+        static {
+            Class<?> cmd = null;
+            java.lang.reflect.Method getCd = null;
+            java.lang.reflect.Method isCast = null;
+            try {
+                cmd = Class.forName("io.redspace.ironsspellbooks.api.magic.ClientMagicData");
+                for (String m : new String[]{ "getPlayerCooldowns", "getCooldowns" }) {
+                    try { getCd = cmd.getMethod(m); break; }
+                    catch (NoSuchMethodException ignored) {}
+                }
+                try { isCast = cmd.getMethod("isCasting"); }
+                catch (NoSuchMethodException ignored) {}
+            } catch (Throwable ignored) {}
+            CMD = cmd;
+            GET_COOLDOWNS = getCd;
+            IS_CASTING = isCast;
+        }
+        private IronsSpellsRefl() {}
+    }
+
+    private static final class CooldownIndicator implements LayeredDraw.Layer {
+        @Override
+        public void render(GuiGraphics g, net.minecraft.client.DeltaTracker delta) {
+            String spellId = VoiceController.lastDispatchedSpellId();
+            if (spellId == null || spellId.isEmpty()) return;
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || mc.options.hideGui) return;
+            float percent = getCooldownPercent(spellId);
+            if (percent <= 0f || percent >= 1f) return; // 1.0 = no cooldown, 0 = unknown
+            int w = mc.getWindow().getGuiScaledWidth();
+            int h = mc.getWindow().getGuiScaledHeight();
+            String name = com.niko.voicespells.spells.SpellInfo.of(spellId).name;
+            if (name == null || name.isEmpty()) {
+                int colon = spellId.indexOf(':');
+                name = (colon >= 0 ? spellId.substring(colon + 1) : spellId).replace('_', ' ');
+            }
+            String label = name + "  " + Math.round(percent * 100) + "%";
+            Font font = mc.font;
+            int tw = font.width(label);
+            int chipW = tw + 12;
+            int chipH = 12;
+            int x = (w - chipW) / 2;
+            int y = h / 2 + 16; // just under the crosshair
+            // Background + frame. World HUD overlays read best on dark regardless of menu
+            // palette — light cream behind text on a bright sky becomes unreadable — so the
+            // chip background is intentionally fixed-dark. Only the accent border follows
+            // the current theme.
+            g.fill(x, y, x + chipW, y + chipH, 0xAA0A0A12);
+            int border = (Theme.C_ACCENT & 0x00FFFFFF) | 0xAA000000;
+            g.fill(x, y, x + chipW, y + 1, border);
+            g.fill(x, y + chipH - 1, x + chipW, y + chipH, border);
+            // tiny progress bar at the bottom: from full → empty as cooldown elapses
+            int barW = (int) (chipW * (1f - percent));
+            if (barW > 0) {
+                g.fill(x, y + chipH - 1, x + barW, y + chipH, Theme.C_ACCENT_BRIGHT);
+            }
+            // Fixed light text — the chip background is fixed-dark above, so we can't use
+            // Theme.C_TEXT (which goes dark in light mode and would vanish into the dark chip).
+            g.drawString(font, Component.literal(label), x + 6, y + 2, 0xFFEAE6FA, false);
+        }
+
+        /** Returns 0..1 cooldown remaining (1.0 = full cooldown active, 0.0 = ready). Returns
+         *  -1 when we can't determine (Iron's Spells absent / API mismatch). All reflection
+         *  is resolved once via {@link IronsSpellsRefl} and cached — the per-frame path is
+         *  just two virtual calls. */
+        private static float getCooldownPercent(String spellId) {
+            if (IronsSpellsRefl.GET_COOLDOWNS == null) return 0f;
+            try {
+                Object cooldowns = IronsSpellsRefl.GET_COOLDOWNS.invoke(null);
+                if (cooldowns == null) return 0f;
+                if (!IronsSpellsRefl.cooldownReady) {
+                    // First time we see a non-null cooldowns object — bind the per-spell
+                    // method handles. Synchronized once; subsequent frames skip this branch.
+                    synchronized (IronsSpellsRefl.class) {
+                        if (!IronsSpellsRefl.cooldownReady) {
+                            Class<?> cls = cooldowns.getClass();
+                            IronsSpellsRefl.COOLDOWNS_CLS = cls;
+                            for (String m : new String[]{ "getCooldownPercent", "getCurrentCooldownPercent" }) {
+                                try { IronsSpellsRefl.GET_PCT = cls.getMethod(m, String.class); break; }
+                                catch (NoSuchMethodException ignored) {}
+                            }
+                            try { IronsSpellsRefl.IS_ON_COOLDOWN = cls.getMethod("isOnCooldown", String.class); }
+                            catch (NoSuchMethodException ignored) {}
+                            IronsSpellsRefl.cooldownReady = true;
+                        }
+                    }
+                }
+                if (IronsSpellsRefl.GET_PCT != null) {
+                    Object v = IronsSpellsRefl.GET_PCT.invoke(cooldowns, spellId);
+                    if (v instanceof Number n) return Math.max(0f, Math.min(1f, n.floatValue()));
+                }
+                if (IronsSpellsRefl.IS_ON_COOLDOWN != null) {
+                    boolean onCd = (boolean) IronsSpellsRefl.IS_ON_COOLDOWN.invoke(cooldowns, spellId);
+                    return onCd ? 0.5f : 0f;
+                }
+            } catch (Throwable ignored) {}
+            return 0f;
+        }
+    }
+
+    /**
+     * Cinematic accent edges while the player is casting a long spell. Reflectively reads
+     * ClientMagicData.isCasting() each frame — when true, draws a quietly pulsing accent line
+     * at the top and bottom of the screen plus a corner glow. Disabled when no cast is in
+     * flight so it never interferes with normal play.
+     */
+    private static final class CastingVignette implements LayeredDraw.Layer {
+        @Override
+        public void render(GuiGraphics g, net.minecraft.client.DeltaTracker delta) {
+            if (!isCasting()) return;
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.options.hideGui) return;
+            int w = mc.getWindow().getGuiScaledWidth();
+            int h = mc.getWindow().getGuiScaledHeight();
+            float p = Theme.pulse(1800f); // 1.8s breath
+            int alphaCore = (int) (45 + 35 * p);
+            int alphaSoft = (int) (12 + 18 * p);
+            int rgb = Theme.C_ACCENT & 0x00FFFFFF;
+            int core = (Math.min(255, alphaCore) << 24) | rgb;
+            int soft = (Math.min(255, alphaSoft) << 24) | rgb;
+            // Top and bottom 1px crisp accent bars.
+            g.fill(0, 0,         w, 1, core);
+            g.fill(0, h - 1,     w, h, core);
+            // Soft 6px band just inside the crisp lines.
+            g.fill(0, 1,         w, 7,     soft);
+            g.fill(0, h - 7,     w, h - 1, soft);
+            // Corner glows — small 24x6 boxes at each corner for a "cinematic" feel.
+            g.fill(0, 0,             24, 6,         core);
+            g.fill(w - 24, 0,        w,  6,         core);
+            g.fill(0, h - 6,         24, h,         core);
+            g.fill(w - 24, h - 6,    w,  h,         core);
+        }
+
+        private static boolean isCasting() {
+            if (IronsSpellsRefl.IS_CASTING == null) return false;
+            try {
+                return (boolean) IronsSpellsRefl.IS_CASTING.invoke(null);
+            } catch (Throwable ignored) {
+                return false;
+            }
+        }
+    }
+
+    /**
+     * Slick bottom-left HUD. Two stacked chips:
+     *   - main:  status dot + label + audio meter, always shown while HUD is visible
+     *   - toast: fades in/out when a spell just cast, positioned just above the main chip
+     *
+     * Chip frames use a one-pixel border drawn as two nested rects — cheap "rounded enough"
+     * look that fits MC's pixel aesthetic without needing custom textures.
+     */
+    private static final class HudOverlay implements LayeredDraw.Layer {
+
+        private static final int CHIP_H   = 14;
+        private static final int PAD_X    = 5;
+        private static final int DOT_SIZE = 4;
+        private static final int METER_W  = 24;
+        private static final int METER_H  = 4;
+
+        @Override
+        public void render(GuiGraphics g, net.minecraft.client.DeltaTracker delta) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.options.hideGui || mc.player == null) return;
+            if (!VoiceController.isHudVisible()) return;
+            // Don't draw the toast while any screen is open (config menu, inventory, pause…).
+            // The HUD layer otherwise renders into the same pass behind the screen's dim
+            // backdrop, so the toast bleeds through the config panel.
+            if (mc.screen != null) return;
+
+            // The persistent "voice / listening / loading" chip is gone — Simple Voice Chat's
+            // own mic indicator already shows whether you're transmitting, so duplicating it
+            // here was visual noise. We only draw the spell-cast toast now, anchored to the
+            // configured corner. Off / error / loading still get conveyed via the chat
+            // messages emitted by the toggle and load paths.
+            Font font = mc.font;
+
+            int screenW = mc.getWindow().getGuiScaledWidth();
+            int screenH = mc.getWindow().getGuiScaledHeight();
+            VoiceSpellsConfig.Corner corner = VoiceSpellsConfig.cHudCorner;
+            int offX = VoiceSpellsConfig.cHudOffsetX;
+            int offY = VoiceSpellsConfig.cHudOffsetY;
+
+            int anchorX = anchorX(corner, screenW, 0, offX);
+            int anchorY = anchorY(corner, screenH, CHIP_H, offY);
+            boolean isBottom = (corner == VoiceSpellsConfig.Corner.BOTTOM_LEFT
+                             || corner == VoiceSpellsConfig.Corner.BOTTOM_RIGHT);
+
+            drawToastIfActive(g, font, anchorX, anchorY, isBottom);
+
+            // History strip — older casts trail the most recent cast toast in a stack that
+            // fades out individually. The freshest history entry is the same as the cast
+            // toast, so we skip index 0 when rendering.
+            drawHistoryStrip(g, font, anchorX, anchorY, isBottom);
+
+            int slotsUsed = Math.max(0, VoiceController.spellHistory().size() - 1);
+
+            // "Queued" chip — visible while a spell is parked in the cast queue waiting for
+            // the current cast to finish. Slot lives just past the history strip.
+            String queuedName = VoiceController.queuedSpellDisplay();
+            if (!queuedName.isEmpty()) {
+                int qY = anchorY + (isBottom ? -(CHIP_H + 3) * (slotsUsed + 1)
+                                              :  (CHIP_H + 3) * (slotsUsed + 1));
+                drawQueuedChip(g, font, anchorX, qY, queuedName);
+                slotsUsed++;
+            }
+
+            // Miss toast (showMisses): a muted note one slot outward from the queue chip.
+            if (VoiceSpellsConfig.cShowMisses) {
+                int missY = anchorY
+                    + (isBottom ? -(CHIP_H + 3) * (slotsUsed + 1)
+                                 :  (CHIP_H + 3) * (slotsUsed + 1));
+                drawMissToastIfActive(g, font, anchorX, missY);
+                slotsUsed++;
+            }
+
+            // Always-show-heard chip: persistent chip showing the last heard phrase. Lower
+            // visual weight than the cast toast — meant for tuning sessions.
+            if (VoiceSpellsConfig.cAlwaysShowHeard) {
+                String heard = VoiceController.lastHeard();
+                if (heard != null && !heard.isEmpty()) {
+                    int hY = anchorY
+                        + (isBottom ? -(CHIP_H + 3) * (slotsUsed + 1)
+                                     :  (CHIP_H + 3) * (slotsUsed + 1));
+                    drawHeardChip(g, font, anchorX, hY, heard);
+                    slotsUsed++;
+                }
+            }
+
+            // "Did you mean ...?" alias suggestion chip — fades after SUGGESTION_LIFETIME_NANOS,
+            // dismissable by pressing the configured keybind.
+            VoiceController.AliasSuggestion suggestion = VoiceController.lastSuggestion();
+            if (suggestion != null) {
+                long age = System.nanoTime() - suggestion.shownAtNanos();
+                if (age > VoiceController.SUGGESTION_LIFETIME_NANOS) {
+                    VoiceController.clearSuggestion();
+                } else {
+                    int sY = anchorY
+                        + (isBottom ? -(CHIP_H + 3) * (slotsUsed + 1)
+                                     :  (CHIP_H + 3) * (slotsUsed + 1));
+                    drawAliasSuggestionChip(g, font, anchorX, sY, suggestion, age);
+                }
+            }
+
+            // (Custom achievement toasts removed — vanilla advancements now drive the toasts
+            //  via voicespells:voice_cast and the JSONs under data/voicespells/advancement/.)
+        }
+
+        private static int anchorX(VoiceSpellsConfig.Corner corner, int screenW, int chipW, int offX) {
+            switch (corner) {
+                case TOP_RIGHT:
+                case BOTTOM_RIGHT: return screenW - chipW - offX;
+                default:           return offX;
+            }
+        }
+        private static int anchorY(VoiceSpellsConfig.Corner corner, int screenH, int chipH, int offY) {
+            switch (corner) {
+                case BOTTOM_LEFT:
+                case BOTTOM_RIGHT: return screenH - chipH - offY;
+                default:           return offY;
+            }
+        }
+
+        private static void drawToastIfActive(GuiGraphics g, Font font, int anchorX, int anchorY,
+                                              boolean placeAbove) {
+            String spell = VoiceController.lastCastDisplay();
+            long castTime = VoiceController.lastCastNanos();
+            if (spell == null || spell.isEmpty() || castTime == 0L) return;
+            long elapsed = System.nanoTime() - castTime;
+            if (elapsed >= VoiceController.TOAST_DURATION_NANOS) return;
+
+            float alpha;
+            if (elapsed < VoiceController.TOAST_FADE_IN_NANOS) {
+                alpha = elapsed / (float) VoiceController.TOAST_FADE_IN_NANOS;
+            } else {
+                long fadeStart = VoiceController.TOAST_DURATION_NANOS - VoiceController.TOAST_FADE_OUT_NANOS;
+                if (elapsed > fadeStart) {
+                    alpha = 1f - (elapsed - fadeStart) / (float) VoiceController.TOAST_FADE_OUT_NANOS;
+                } else {
+                    alpha = 1f;
+                }
+            }
+            alpha = Math.max(0f, Math.min(1f, alpha));
+
+            String text = VoiceSpellsConfig.cStreamerMode
+                ? "✦ " + obscure(spell)
+                : "✦ " + capitalize(spell);
+            int streak = VoiceController.castStreak();
+            if (streak >= 2) text += "  ×" + streak; // chained casts get a streak badge
+            int textW = font.width(text);
+            int toastW = PAD_X + textW + PAD_X;
+            // With no persistent chip beneath us, the toast can sit right at the anchor — no
+            // need to nudge it above or below. placeAbove is still respected for users who
+            // want a top-anchored layout to flow downward.
+            int toastX = anchorX;
+            int toastY = anchorY;
+
+            drawChip(g, toastX, toastY, toastW, CHIP_H, alpha);
+            // Per-school text color so the cast toast carries an extra cue. The user's
+            // configured cTextToast is still used as the alpha source so opacity stays
+            // wired to the toml [colors] section.
+            int schoolRgb = com.niko.voicespells.spells.SpellSchools.colorFor(
+                VoiceController.lastCastSchool());
+            int color = withAlpha(schoolRgb, alpha);
+            int textY = toastY + (CHIP_H - 8) / 2;
+            g.drawString(font, Component.literal(text), toastX + PAD_X, textY, color, false);
+        }
+
+        /** Stack of recent-cast history chips trailing the main cast toast. Index 0 of the
+         *  history is the same event as the cast toast, so we render indices 1..N-1 only.
+         *  Each chip fades in/out on its own clock and lives longer than the main toast so a
+         *  burst of casts visibly accumulates before settling back down. */
+        private static void drawHistoryStrip(GuiGraphics g, Font font, int anchorX, int anchorY,
+                                              boolean isBottom) {
+            java.util.List<VoiceController.HistoryEntry> history = VoiceController.spellHistory();
+            if (history.size() <= 1) return;
+            long now = System.nanoTime();
+            long lifetime = 4_500_000_000L;          // 4.5s on screen
+            long fadeIn   =   180_000_000L;          // 0.18s
+            long fadeOut  =   900_000_000L;          // 0.9s
+            float maxAlpha = 0.55f;                  // history is dimmer than the main toast
+
+            for (int i = 1; i < history.size(); i++) {
+                VoiceController.HistoryEntry entry = history.get(i);
+                long elapsed = now - entry.nanoTime();
+                if (elapsed < 0 || elapsed >= lifetime) continue;
+                float alpha;
+                if (elapsed < fadeIn) {
+                    alpha = (elapsed / (float) fadeIn) * maxAlpha;
+                } else if (elapsed > lifetime - fadeOut) {
+                    alpha = ((lifetime - elapsed) / (float) fadeOut) * maxAlpha;
+                } else {
+                    alpha = maxAlpha;
+                }
+                alpha = Math.max(0f, Math.min(maxAlpha, alpha));
+
+                String text = VoiceSpellsConfig.cStreamerMode
+                    ? "↳ " + obscure(entry.display())
+                    : "↳ " + capitalize(entry.display());
+                int toastW = PAD_X + font.width(text) + PAD_X;
+                int yOff = (isBottom ? -1 : 1) * (CHIP_H + 3) * i;
+                int toastY = anchorY + yOff;
+
+                drawChip(g, anchorX, toastY, toastW, CHIP_H, alpha);
+                int color = withAlpha(VoiceSpellsConfig.cTextMuted, alpha);
+                int textY = toastY + (CHIP_H - 8) / 2;
+                g.drawString(font, Component.literal(text), anchorX + PAD_X, textY, color, false);
+            }
+        }
+
+        /** Always-show-heard chip — quiet, persistent display of the last heard phrase.
+         *  Used for tuning recognition; doesn't fade like the toast / miss / suggestion chips. */
+        private static void drawHeardChip(GuiGraphics g, Font font, int anchorX, int anchorY,
+                                           String heard) {
+            String text = "» " + (heard.length() > 28 ? heard.substring(0, 27) + "…" : heard);
+            int toastW = PAD_X + font.width(text) + PAD_X;
+            drawChip(g, anchorX, anchorY, toastW, CHIP_H, 0.55f);
+            int color = withAlpha(VoiceSpellsConfig.cTextMuted, 0.85f);
+            int textY = anchorY + (CHIP_H - 8) / 2;
+            g.drawString(font, Component.literal(text), anchorX + PAD_X, textY, color, false);
+        }
+
+        /** "Did you mean X?" alias-suggestion chip — appears after a near-miss recognition,
+         *  fades in/out, and tells the player which key to press to add the alias. */
+        private static void drawAliasSuggestionChip(GuiGraphics g, Font font, int anchorX, int anchorY,
+                                                     VoiceController.AliasSuggestion s, long elapsed) {
+            long lifetime = VoiceController.SUGGESTION_LIFETIME_NANOS;
+            float alpha;
+            if (elapsed < 200_000_000L) alpha = elapsed / 200_000_000f;
+            else if (elapsed > lifetime - 600_000_000L) alpha = (lifetime - elapsed) / 600_000_000f;
+            else alpha = 1f;
+            alpha = Math.max(0f, Math.min(1f, alpha));
+
+            String text = "? " + capitalize(s.candidateDisplay()) + "  [press Y]";
+            int toastW = PAD_X + font.width(text) + PAD_X;
+            drawChip(g, anchorX, anchorY, toastW, CHIP_H, alpha);
+            // Bright accent text — this is actionable, treat it differently from a miss toast.
+            int color = withAlpha(Theme.C_ACCENT, alpha);
+            int textY = anchorY + (CHIP_H - 8) / 2;
+            g.drawString(font, Component.literal(text), anchorX + PAD_X, textY, color, false);
+        }
+
+        /** Persistent chip while a spell is queued — gives the player visible confirmation
+         *  that the spell will fire after the current cast ends, instead of disappearing
+         *  into silent state. Slightly dimmer than the live toast so it reads as "pending". */
+        private static void drawQueuedChip(GuiGraphics g, Font font, int anchorX, int anchorY,
+                                            String name) {
+            String body = VoiceSpellsConfig.cStreamerMode ? obscure(name) : name;
+            int extra = Math.max(0, VoiceController.queuedCount() - 1);
+            String text = extra == 0 ? "▷ " + body : "▷ " + body + "  (+" + extra + ")";
+            int toastW = PAD_X + font.width(text) + PAD_X;
+            drawChip(g, anchorX, anchorY, toastW, CHIP_H, 0.75f);
+            int color = withAlpha(VoiceSpellsConfig.cTextToast, 0.85f);
+            int textY = anchorY + (CHIP_H - 8) / 2;
+            g.drawString(font, Component.literal(text), anchorX + PAD_X, textY, color, false);
+        }
+
+        private static void drawMissToastIfActive(GuiGraphics g, Font font, int anchorX, int anchorY) {
+            String heard = VoiceController.lastMissText();
+            long t = VoiceController.lastMissNanos();
+            if (heard == null || heard.isEmpty() || t == 0L) return;
+            long elapsed = System.nanoTime() - t;
+            if (elapsed >= VoiceController.TOAST_DURATION_NANOS) return;
+
+            float alpha;
+            if (elapsed < VoiceController.TOAST_FADE_IN_NANOS) {
+                alpha = elapsed / (float) VoiceController.TOAST_FADE_IN_NANOS;
+            } else {
+                long fadeStart = VoiceController.TOAST_DURATION_NANOS - VoiceController.TOAST_FADE_OUT_NANOS;
+                alpha = elapsed > fadeStart
+                    ? 1f - (elapsed - fadeStart) / (float) VoiceController.TOAST_FADE_OUT_NANOS
+                    : 1f;
+            }
+            alpha = Math.max(0f, Math.min(1f, alpha));
+
+            String text = "? " + (VoiceSpellsConfig.cStreamerMode ? obscure(heard) : heard);
+            int toastW = PAD_X + font.width(text) + PAD_X;
+            drawChip(g, anchorX, anchorY, toastW, CHIP_H, alpha * 0.85f);
+            int color = withAlpha(VoiceSpellsConfig.cTextMuted, alpha);
+            g.drawString(font, Component.literal(text), anchorX + PAD_X,
+                anchorY + (CHIP_H - 8) / 2, color, false);
+        }
+
+        private static void drawChip(GuiGraphics g, int x, int y, int w, int h, float alpha) {
+            int border = withAlpha(VoiceSpellsConfig.cBorder, alpha);
+            int bg     = withAlpha(VoiceSpellsConfig.cBg,     alpha);
+            // Border is drawn as four thin edge rectangles, NOT as a full fill behind the body.
+            // If we filled the whole area first, an alpha=0 background would leave the border
+            // colour visible across the entire chip (alpha-blend "src*0 + dst*1 = dst" never
+            // overwrites). With edge lines, a transparent body is actually transparent.
+            g.fill(x,         y,         x + w,     y + 1,     border); // top
+            g.fill(x,         y + h - 1, x + w,     y + h,     border); // bottom
+            g.fill(x,         y + 1,     x + 1,     y + h - 1, border); // left
+            g.fill(x + w - 1, y + 1,     x + w,     y + h - 1, border); // right
+            // Inner body; transparent bg here is a real no-op now.
+            if (((bg >>> 24) & 0xFF) > 0) {
+                g.fill(x + 1, y + 1, x + w - 1, y + h - 1, bg);
+            }
+        }
+
+        private static int withAlpha(int argb, float alpha) {
+            int origA = (argb >>> 24) & 0xFF;
+            int newA = Math.max(0, Math.min(255, Math.round(origA * alpha)));
+            return (newA << 24) | (argb & 0x00FFFFFF);
+        }
+
+        private static int scaleBrightness(int argb, float factor) {
+            int a = (argb >>> 24) & 0xFF;
+            int r = Math.max(0, Math.min(255, Math.round(((argb >> 16) & 0xFF) * factor)));
+            int gC = Math.max(0, Math.min(255, Math.round(((argb >> 8) & 0xFF) * factor)));
+            int b = Math.max(0, Math.min(255, Math.round((argb & 0xFF) * factor)));
+            return (a << 24) | (r << 16) | (gC << 8) | b;
+        }
+
+        /** Streamer-safe display: keep the word/letter count so the chip width feels stable,
+         *  but replace every non-space character with a bullet. Viewers reading the screen
+         *  see "✦ ●●●●●●●●" instead of "✦ Fireball". */
+        private static String obscure(String s) {
+            if (s == null || s.isEmpty()) return s;
+            StringBuilder sb = new StringBuilder(s.length());
+            for (int i = 0; i < s.length(); i++) {
+                char c = s.charAt(i);
+                sb.append(c == ' ' ? ' ' : '●');
+            }
+            return sb.toString();
+        }
+
+        private static String capitalize(String s) {
+            if (s == null || s.isEmpty()) return "";
+            StringBuilder sb = new StringBuilder(s.length());
+            boolean capNext = true;
+            for (int i = 0; i < s.length(); i++) {
+                char c = s.charAt(i);
+                if (capNext && Character.isLetter(c)) {
+                    sb.append(Character.toUpperCase(c));
+                    capNext = false;
+                } else {
+                    sb.append(c);
+                    if (c == ' ') capNext = true;
+                }
+            }
+            return sb.toString();
+        }
+    }
+}
