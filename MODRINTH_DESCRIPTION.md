@@ -61,7 +61,7 @@ your PC.
 
 ## Setup
 
-1. Drop `voicespells-0.9.0.jar` in your `mods/` folder alongside SVC and Iron's Spells.
+1. Drop `incantation-0.9.0.jar` in your `mods/` folder alongside SVC and Iron's Spells.
 2. Grab a Vosk model from [alphacephei.com/vosk/models](https://alphacephei.com/vosk/models)
    — `vosk-model-small-en-us-0.15.zip` is plenty for vanilla spell names.
 3. Unzip and copy the **contents** of that folder into `config/voicespells/model/` so you
