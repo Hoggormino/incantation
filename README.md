@@ -21,7 +21,7 @@ degrades to hand-only).
 
 ## Setup
 
-1. Drop `voicespells-x.y.z.jar` into your `mods/` folder.
+1. Drop `incantation-x.y.z.jar` into your `mods/` folder.
 2. Download a Vosk model from <https://alphacephei.com/vosk/models>. The small English model
    (`vosk-model-small-en-us-0.15.zip`) is enough for vanilla spell names.
 3. Unzip and copy the **contents** into `<minecraft>/config/voicespells/model/` so the layout is:
@@ -107,6 +107,30 @@ customPhrases = [
 Custom phrases override generated ones and are added to the Vosk grammar. Use the in-game spell
 list or the debug monitor to find exact spell ids. Requires a restart (the grammar is built
 once at startup).
+
+### Localisation / phrasebook
+
+For bulk-translating every spell name to a non-English language, edit
+`config/voicespells/phrasebook.json`. The file is auto-generated on first launch with one entry
+per installed spell:
+
+```json
+{
+  "_help": "Replace the 'override' value for each spell with the words you want to say…",
+  "spells": {
+    "irons_spellbooks:fireball": { "default": "fireball", "override": "" },
+    "irons_spellbooks:firebolt":  { "default": "firebolt",  "override": "" }
+  }
+}
+```
+
+Set the `override` value to whatever you want to say for that spell; leave it empty to use the
+English default. New spells installed later are appended automatically, and your existing
+overrides are preserved across updates.
+
+Vosk only recognises words from the loaded model's lexicon, so non-English overrides need a
+same-language Vosk model — install one from <https://alphacephei.com/vosk/models> and point
+`modelPath` at it in `voicespells-client.toml`.
 
 ## Troubleshooting
 

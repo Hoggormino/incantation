@@ -89,6 +89,16 @@ public final class ClientEvents {
         NeoForge.EVENT_BUS.addListener(ClientEvents::onClientChat);
         // Live-apply external edits to voicespells-client.toml (no game restart).
         com.niko.voicespells.VoiceSpellsConfig.reloadCallback = VoiceController::onConfigChanged;
+        // Wire the cross-package back-references that we deliberately kept off the static
+        // import graph so common/server code can be loaded on a dedicated server without
+        // dragging in the client-only Minecraft GUI chain (fixes the 0.9.0 server crash).
+        com.niko.voicespells.svc.VoiceSpellsVoicechatPlugin.micFrameSink = VoiceController::onMicFrame;
+        com.niko.voicespells.spells.SpellIndex.ownedSpellsSupplier = VoiceController::ownedSpellIds;
+        com.niko.voicespells.VoiceSpellsConfig.themeApplier = () -> {
+            com.niko.voicespells.VoiceSpellsConfig.Client c = com.niko.voicespells.VoiceSpellsConfig.CLIENT;
+            Theme.applyPalette(c.uiPalette.get());
+            Theme.applyPreset(c.themePreset.get());
+        };
         Runtime.getRuntime().addShutdownHook(new Thread(VoiceController::shutdown,
             "VoiceSpells-Shutdown"));
     }

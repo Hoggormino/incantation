@@ -79,6 +79,11 @@ public final class VoiceSpellsConfig {
      *  config class never link-references the client-only controller. */
     public static volatile Runnable reloadCallback;
 
+    /** Set by client init to a runnable that re-applies the active {@link ThemePreset} and
+     *  {@link UiPalette} to the client-only {@code Theme} class. Stays {@code null} on a
+     *  dedicated server so {@code cacheColors()} can run there without triggering Theme load. */
+    public static volatile Runnable themeApplier;
+
     public static void onConfigReload(ModConfigEvent.Reloading e) {
         if (e.getConfig().getType() == ModConfig.Type.CLIENT) {
             cacheColors();
@@ -421,8 +426,11 @@ public final class VoiceSpellsConfig {
         cHudCorner        = c.hudCorner.get();
         cHudOffsetX       = c.hudOffsetX.get();
         cHudOffsetY       = c.hudOffsetY.get();
-        com.niko.voicespells.client.Theme.applyPalette(c.uiPalette.get());
-        com.niko.voicespells.client.Theme.applyPreset(c.themePreset.get());
+        // Indirect call so the dedicated server can load this class without resolving Theme
+        // (which transitively pulls in client-only Minecraft GUI classes). Client init wires
+        // {@link #themeApplier} at startup; on a server it stays null and we skip.
+        Runnable applier = themeApplier;
+        if (applier != null) applier.run();
         cOpacity     = (float) Math.max(0.0, Math.min(1.0, c.globalOpacity.get()));
         cBg          = applyOpacity(parseHex(c.bgColor.get(),     0xCC0A0A0A), cOpacity);
         cBorder      = applyOpacity(parseHex(c.borderColor.get(), 0xFF1F1F1F), cOpacity);

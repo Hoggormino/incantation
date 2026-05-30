@@ -115,15 +115,19 @@ public final class SpellIndex {
         }
     }
 
+    /** Wired client-side at startup so {@link #getPhrases()} can ask "which spells does the
+     *  local player have?". Stays {@code null} on a dedicated server so this class can be
+     *  loaded without dragging in the client-only VoiceController chain. */
+    public static volatile java.util.function.Supplier<java.util.Set<String>> ownedSpellsSupplier;
+
     public static List<String> getPhrases() {
         Map<String, ResourceLocation> all = STATE.get().phraseToId;
         // Optional restriction: only include phrases whose target spell id is in the
-        // currently-owned set. Owned set comes from VoiceController's periodic scan; when
-        // it's null/empty we either pre-filter is off OR no scan has run yet — fall back to
-        // the full set so recognition never silently goes blank.
+        // currently-owned set. Supplier is wired on client init; on a dedicated server it stays
+        // null and we fall through to the full phrase set, which is the safe default.
         java.util.Set<String> ownedFilter = null;
-        if (com.niko.voicespells.VoiceSpellsConfig.cRestrictToOwned) {
-            java.util.Set<String> owned = com.niko.voicespells.client.VoiceController.ownedSpellIds();
+        if (com.niko.voicespells.VoiceSpellsConfig.cRestrictToOwned && ownedSpellsSupplier != null) {
+            java.util.Set<String> owned = ownedSpellsSupplier.get();
             if (owned != null && !owned.isEmpty()) ownedFilter = owned;
         }
         List<String> base;
@@ -396,7 +400,14 @@ public final class SpellIndex {
         Method getSpellId   = spellClass.getMethod("getSpellId");
         Method isEnabled    = spellClass.getMethod("isEnabled");
 
+        // Make sure the phrasebook is loaded BEFORE we derive phrases, so per-spell overrides
+        // take effect on every indexed entry from the very first pass.
+        Phrasebook.load();
+
         Map<String, ResourceLocation> phraseToId = new LinkedHashMap<>();
+        // Capture the English-default phrase for every spell as we go, so we can rewrite
+        // phrasebook.json with the current installed-spell set at the end of indexing.
+        Map<String, String> defaultsForPhrasebook = new LinkedHashMap<>();
         for (Object spell : registry) {
             if (!spellClass.isInstance(spell)) continue;
             try {
@@ -405,7 +416,15 @@ public final class SpellIndex {
 
                 String idString = (String) getSpellId.invoke(spell);
                 ResourceLocation id = ResourceLocation.parse(idString);
-                String phrase = phraseFromPath(id.getPath());
+                String defaultPhrase = phraseFromPath(id.getPath());
+                if (defaultPhrase.isEmpty()) continue;
+                defaultsForPhrasebook.put(idString, defaultPhrase);
+
+                // User override (from phrasebook.json) wins over the underscore-derived default
+                // — this is the bulk-translation workflow. If no override is set, we use the
+                // English default exactly as before.
+                String override = Phrasebook.overrideFor(idString);
+                String phrase = (override != null) ? normalize(override) : defaultPhrase;
                 if (phrase.isEmpty()) continue;
 
                 phraseToId.put(phrase, id);
@@ -414,14 +433,25 @@ public final class SpellIndex {
                 // variant generation was removed — it polluted the grammar with non-words like
                 // "abys sal" that competed during recognition and caused misfires. The bigger
                 // model + custom phrases handle compounds far better.)
-                List<String> extras = ALIASES.get(phrase);
-                if (extras != null) {
-                    for (String alias : extras) phraseToId.put(alias, id);
+                //
+                // Aliases only apply when the user hasn't replaced the default with their own
+                // override; otherwise we'd quietly pollute their grammar with English aliases for
+                // a spell they've already translated.
+                if (override == null) {
+                    List<String> extras = ALIASES.get(defaultPhrase);
+                    if (extras != null) {
+                        for (String alias : extras) phraseToId.put(alias, id);
+                    }
                 }
             } catch (Throwable inner) {
                 VoiceSpells.LOGGER.warn("Skipped spell during indexing: {}", inner.toString());
             }
         }
+
+        // Refresh phrasebook.json with the current installed-spell set. Preserves existing
+        // overrides, appends entries for any newly-discovered spell, and keeps stale entries so
+        // a temporarily-uninstalled addon doesn't wipe the user's translation work.
+        Phrasebook.rewrite(defaultsForPhrasebook);
 
         // User-defined "phrase=namespace:spell_id" overrides. These win over generated phrases
         // (put, not putIfAbsent) so a user can re-point a phrase if they want. They're added to
