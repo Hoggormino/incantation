@@ -13,6 +13,7 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -42,6 +43,9 @@ public final class Phrasebook {
     /** Where the JSON lives. {@code <gamedir>/config/voicespells/phrasebook.json}. */
     private static final Path FILE = Path.of("config", VoiceSpells.MOD_ID, "phrasebook.json");
 
+    /** Sibling temp path used by {@link #rewrite} for the atomic write-then-rename dance. */
+    private static final Path TMP_FILE = Path.of("config", VoiceSpells.MOD_ID, "phrasebook.json.tmp");
+
     private static final Gson GSON = new GsonBuilder()
         .setPrettyPrinting()
         .disableHtmlEscaping()
@@ -59,8 +63,19 @@ public final class Phrasebook {
      *  the default. Lazily loaded from disk on first access. */
     private static volatile Map<String, String> overrides = Map.of();
 
+    /** spellId → the {@code default} value we read from the file last time. Lets us preserve the
+     *  English default for spells that are temporarily uninstalled, so when their addon is
+     *  reinstalled the user's file still shows the original English alongside their translation. */
+    private static volatile Map<String, String> defaultsFromFile = Map.of();
+
     /** True once {@link #load()} has run at least once this JVM. */
     private static volatile boolean loaded = false;
+
+    /** Set when the most recent {@link #load()} hit an unreadable / malformed file. While true,
+     *  {@link #rewrite} is a no-op — we never overwrite a file we couldn't parse, because the user
+     *  may be mid-edit and a parse error here would mean we'd otherwise stomp their in-progress
+     *  translation work with an empty-override rewrite. Cleared on the next successful load. */
+    private static volatile boolean loadFailed = false;
 
     private Phrasebook() {}
 
@@ -71,39 +86,52 @@ public final class Phrasebook {
         loaded = true;
         if (!Files.exists(FILE)) {
             overrides = new LinkedHashMap<>();
+            defaultsFromFile = new LinkedHashMap<>();
+            loadFailed = false;
             return;
         }
         try (Reader r = Files.newBufferedReader(FILE, StandardCharsets.UTF_8)) {
             JsonElement root = JsonParser.parseReader(r);
             if (!root.isJsonObject()) {
-                VoiceSpells.LOGGER.warn("phrasebook.json root is not an object — ignoring");
-                overrides = new LinkedHashMap<>();
+                VoiceSpells.LOGGER.warn("phrasebook.json root is not an object — ignoring (file left untouched)");
+                loadFailed = true;
                 return;
             }
             JsonObject spells = root.getAsJsonObject().getAsJsonObject("spells");
             if (spells == null) {
+                // Valid JSON, just no "spells" object yet (e.g. user wiped the file to bootstrap fresh).
                 overrides = new LinkedHashMap<>();
+                defaultsFromFile = new LinkedHashMap<>();
+                loadFailed = false;
                 return;
             }
-            Map<String, String> fresh = new LinkedHashMap<>();
+            Map<String, String> freshOverrides = new LinkedHashMap<>();
+            Map<String, String> freshDefaults  = new LinkedHashMap<>();
             for (Map.Entry<String, JsonElement> e : spells.entrySet()) {
                 if (!e.getValue().isJsonObject()) continue;
-                JsonElement ov = e.getValue().getAsJsonObject().get("override");
-                if (ov != null && ov.isJsonPrimitive()) {
-                    fresh.put(e.getKey(), ov.getAsString());
-                } else {
-                    fresh.put(e.getKey(), "");
+                JsonObject entry = e.getValue().getAsJsonObject();
+                JsonElement ov   = entry.get("override");
+                JsonElement def  = entry.get("default");
+                freshOverrides.put(e.getKey(),
+                    (ov != null && ov.isJsonPrimitive()) ? ov.getAsString() : "");
+                if (def != null && def.isJsonPrimitive()) {
+                    freshDefaults.put(e.getKey(), def.getAsString());
                 }
             }
-            overrides = fresh;
-            int customised = (int) fresh.values().stream().filter(s -> s != null && !s.isBlank()).count();
+            overrides = freshOverrides;
+            defaultsFromFile = freshDefaults;
+            loadFailed = false;
+            int customised = (int) freshOverrides.values().stream().filter(s -> s != null && !s.isBlank()).count();
             if (customised > 0) {
                 VoiceSpells.LOGGER.info("Loaded phrasebook ({} spells, {} custom override(s))",
-                    fresh.size(), customised);
+                    freshOverrides.size(), customised);
             }
         } catch (IOException | RuntimeException ex) {
-            VoiceSpells.LOGGER.warn("Failed to read phrasebook.json: {} — using defaults", ex.toString());
-            overrides = new LinkedHashMap<>();
+            // Don't clobber the in-memory state — keep whatever was last successfully loaded.
+            // Set loadFailed so the next rewrite() skips and the user's file is preserved as-is.
+            VoiceSpells.LOGGER.warn("Failed to read phrasebook.json: {} — file left untouched, "
+                + "in-memory overrides preserved from the last successful load", ex.toString());
+            loadFailed = true;
         }
     }
 
@@ -124,11 +152,20 @@ public final class Phrasebook {
      * appending entries for spells that weren't there before. Called by {@link SpellIndex} after
      * a successful index so the file always mirrors the actual installed spell set.
      *
+     * <p>If the most recent {@link #load()} failed to parse the file (e.g. the user is mid-edit
+     * and saved a half-finished version), this method is a no-op — we never overwrite a file we
+     * couldn't read, because doing so would silently destroy the user's translation work.
+     *
      * @param spellIdToDefault ordered map of spell id → default English phrase, in the order
      *                         spells were discovered (so the file groups by namespace)
      */
     public static synchronized void rewrite(Map<String, String> spellIdToDefault) {
         if (!loaded) load(); // ensure we don't blow away an unread file
+        if (loadFailed) {
+            VoiceSpells.LOGGER.debug("Skipping phrasebook rewrite — last load failed, "
+                + "file is being preserved as-is");
+            return;
+        }
         Map<String, String> merged = new LinkedHashMap<>();
         // 1. Every currently-installed spell, in registry order — fresh entries get the existing
         //    user override if there was one, else empty.
@@ -155,17 +192,35 @@ public final class Phrasebook {
             JsonObject spellsObj = new JsonObject();
             for (Map.Entry<String, String> e : merged.entrySet()) {
                 JsonObject entry = new JsonObject();
-                String def = spellIdToDefault.getOrDefault(e.getKey(), "");
+                // Default phrase priority: current-installed > remembered-from-last-load > "".
+                // The middle tier keeps stale entries (uninstalled addons) showing their original
+                // English phrase so the file remains useful documentation across addon swaps.
+                String def = spellIdToDefault.get(e.getKey());
+                if (def == null) def = defaultsFromFile.getOrDefault(e.getKey(), "");
                 entry.addProperty("default", def);
                 entry.addProperty("override", e.getValue() == null ? "" : e.getValue());
                 spellsObj.add(e.getKey(), entry);
             }
             root.add("spells", spellsObj);
-            try (Writer w = Files.newBufferedWriter(FILE, StandardCharsets.UTF_8)) {
+            // Write to a sibling .tmp file then atomic-rename onto the real path so the file is
+            // either the old or the new content — never half-written. Important when the user is
+            // tailing/watching the file or has it open in an editor.
+            try (Writer w = Files.newBufferedWriter(TMP_FILE, StandardCharsets.UTF_8)) {
                 GSON.toJson(root, w);
+            }
+            try {
+                Files.move(TMP_FILE, FILE,
+                    StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (IOException atomicFailed) {
+                // Some filesystems / OSes don't support atomic move across the rename — fall back
+                // to a plain replace. Still safer than writing into FILE directly because we
+                // wrote the whole payload to TMP first.
+                Files.move(TMP_FILE, FILE, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException ex) {
             VoiceSpells.LOGGER.warn("Failed to write phrasebook.json: {}", ex.toString());
+            // Best-effort temp cleanup so a stale .tmp doesn't linger.
+            try { Files.deleteIfExists(TMP_FILE); } catch (IOException ignored) {}
         }
     }
 
