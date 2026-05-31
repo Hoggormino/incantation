@@ -30,8 +30,11 @@ import java.util.Locale;
  */
 public final class VoiceSpellsSpellListScreen extends Screen {
 
-    private static final int PANEL_W  = 444;
-    private static final int PANEL_H  = 308;
+    // Preferred dimensions — clamped at init() time so the panel stays inside the screen
+    // at every Minecraft GUI Scale. Layout math uses the runtime {@code panelW} / {@code panelH}
+    // fields, not these constants.
+    private static final int PANEL_W_PREF = 444;
+    private static final int PANEL_H_PREF = 308;
     private static final int ROW_H    = 14;
 
     /** Sort modes are fixed — they don't depend on what's indexed. */
@@ -62,7 +65,8 @@ public final class VoiceSpellsSpellListScreen extends Screen {
      *  "Add alias..." button (which is disabled until something is selected). */
     private String selectedId = "";
 
-    private int px, py;
+    /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
+    private int px, py, panelW, panelH;
 
     public VoiceSpellsSpellListScreen(Screen parent) {
         super(Component.translatable("voicespells.spelllist.title"));
@@ -71,11 +75,15 @@ public final class VoiceSpellsSpellListScreen extends Screen {
 
     @Override
     protected void init() {
-        px = (width - PANEL_W) / 2;
-        py = (height - PANEL_H) / 2;
+        // Clamp to fit the current screen so large GUI Scale settings don't push buttons off
+        // the bottom or sides. The preferred dimensions still apply when there's enough room.
+        panelW = Theme.fit(PANEL_W_PREF, width);
+        panelH = Theme.fit(PANEL_H_PREF, height);
+        px = (width - panelW) / 2;
+        py = (height - panelH) / 2;
 
         StringWidget titleW = new StringWidget(px, py + (Theme.HEADER_H - 9) / 2,
-            PANEL_W, 9, title, font);
+            panelW, 9, title, font);
         titleW.alignCenter();
         titleW.setColor(Theme.C_ACCENT);
         addRenderableWidget(titleW);
@@ -83,7 +91,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         int controlsY = py + Theme.HEADER_H + Theme.GAP_MD;
         int schoolW = 96;
         int sortW   = 76;
-        int searchW = (PANEL_W - Theme.PAD * 2) - schoolW - sortW - 8;
+        int searchW = (panelW - Theme.PAD * 2) - schoolW - sortW - 8;
 
         // Rebuild the school list from the actually-indexed spells. Sorted alphabetically,
         // with "All" pinned to the front so the chip always has the no-filter option first.
@@ -128,14 +136,14 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         addRenderableWidget(search);
         setInitialFocus(search);
 
-        // Layout bottom-up: buttons at PANEL_H-28, footer just above the buttons, list fills
+        // Layout bottom-up: buttons at panelH-28, footer just above the buttons, list fills
         // the remaining space above the footer. Keeps the footer text from being clipped by
         // the action buttons sitting at the same y-row.
-        int buttonsY = py + PANEL_H - 28;
+        int buttonsY = py + panelH - 28;
         int footerY  = buttonsY - 12;            // 9px text + 3px gap above buttons
         int listX = px + Theme.PAD;
         int listY = searchY + 18 + Theme.GAP_MD;
-        int listW = PANEL_W - Theme.PAD * 2;
+        int listW = panelW - Theme.PAD * 2;
         int listH = (footerY - Theme.GAP_SM) - listY;
         list = new ListWidget(listX, listY, listW, listH);
         addRenderableWidget(list);
@@ -143,16 +151,16 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         // Custom footer widget — draws the current footerText() fresh every frame inside the
         // widget pass so there's no stale-message risk and no overdraw on state transitions.
         addRenderableWidget(new FooterWidget(px + Theme.PAD, footerY,
-            PANEL_W - Theme.PAD * 2, 9));
+            panelW - Theme.PAD * 2, 9));
 
         // "Add alias..." pops the inline editor for the selected row. Disabled while nothing
         // is selected so the affordance points at the click-a-row UX.
-        aliasButton = NeonButton.of(px + Theme.PAD, py + PANEL_H - 28, 110, 20,
+        aliasButton = NeonButton.of(px + Theme.PAD, py + panelH - 28, 110, 20,
             Component.literal("Add alias..."), b -> openAliasEditor());
         aliasButton.active = !selectedId.isEmpty();
         addRenderableWidget(aliasButton);
 
-        addRenderableWidget(NeonButton.of(px + PANEL_W - Theme.PAD - 80, py + PANEL_H - 28, 80, 20,
+        addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 80, py + panelH - 28, 80, 20,
             CommonComponents.GUI_BACK, b -> onClose()));
 
         // Re-apply filter/sort so the list reflects the persisted SchoolFilter / SortMode after
@@ -234,15 +242,15 @@ public final class VoiceSpellsSpellListScreen extends Screen {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         // Midnight scrim + panel + gradient header band BEFORE widgets.
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        g.fill(px, py, px + PANEL_W, py + PANEL_H, Theme.C_PANEL);
-        Theme.headerBand(g, px, py, PANEL_W, Theme.HEADER_H);
+        g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
+        Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
 
         super.render(g, mouseX, mouseY, partial);
 
         // Soft rounded frame + glowing neon rule under the header.
-        Theme.roundedFrame(g, px, py, PANEL_W, PANEL_H, Theme.C_BORDER);
+        Theme.roundedFrame(g, px, py, panelW, panelH, Theme.C_BORDER);
         Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H,
-            PANEL_W - Theme.PAD * 2);
+            panelW - Theme.PAD * 2);
     }
 
     /**

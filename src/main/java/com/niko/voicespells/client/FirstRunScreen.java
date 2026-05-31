@@ -26,13 +26,17 @@ import java.util.concurrent.TimeUnit;
  */
 public final class FirstRunScreen extends Screen {
 
-    private static final int PANEL_W = 360;
-    private static final int PANEL_H = 230;
-    private static final int STEPS   = 3;
+    // Preferred dimensions — clamped at init() time so the panel stays inside the screen
+    // at every Minecraft GUI Scale. Layout math uses the runtime {@code panelW} / {@code panelH}
+    // fields, not these constants.
+    private static final int PANEL_W_PREF = 360;
+    private static final int PANEL_H_PREF = 230;
+    private static final int STEPS        = 3;
 
     private final Screen parent;
     private int step = 0;
-    private int px, py;
+    /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
+    private int px, py, panelW, panelH;
 
     /** Set once we ever see a non-trivial audio level during this screen's lifetime — used to
      *  brighten the Next button on the mic-check step so the player has a clear "I demonstrated
@@ -51,16 +55,20 @@ public final class FirstRunScreen extends Screen {
 
     @Override
     protected void init() {
-        px = (width  - PANEL_W) / 2;
-        py = (height - PANEL_H) / 2;
+        // Clamp the panel to the available screen so a large GUI Scale doesn't push the Next /
+        // Skip buttons off the bottom or the title off the right edge.
+        panelW = Theme.fit(PANEL_W_PREF, width);
+        panelH = Theme.fit(PANEL_H_PREF, height);
+        px = (width  - panelW) / 2;
+        py = (height - panelH) / 2;
 
         StringWidget titleW = new StringWidget(px, py + (Theme.HEADER_H - 9) / 2,
-            PANEL_W, 9, title, font);
+            panelW, 9, title, font);
         titleW.alignCenter();
         titleW.setColor(Theme.C_ACCENT);
         addRenderableWidget(titleW);
 
-        int btnY = py + PANEL_H - 28;
+        int btnY = py + panelH - 28;
         int btnW = 96;
 
         if (step > 0) {
@@ -68,13 +76,13 @@ public final class FirstRunScreen extends Screen {
                 Component.literal("Back"), b -> { step--; rebuildWidgets(); }));
         }
         if (step < STEPS - 1) {
-            addRenderableWidget(NeonButton.of(px + PANEL_W / 2 - btnW / 2, btnY, btnW, 20,
+            addRenderableWidget(NeonButton.of(px + panelW / 2 - btnW / 2, btnY, btnW, 20,
                 Component.literal("Skip"), b -> finish()));
         }
         // On step 2 (Try a spell), offer a direct shortcut into the spell list since it's
         // the natural next destination.
         if (step == 2) {
-            addRenderableWidget(NeonButton.of(px + PANEL_W / 2 - btnW / 2, btnY, btnW, 20,
+            addRenderableWidget(NeonButton.of(px + panelW / 2 - btnW / 2, btnY, btnW, 20,
                 Component.literal("Open Spell List"),
                 b -> {
                     if (minecraft != null) minecraft.setScreen(
@@ -82,7 +90,7 @@ public final class FirstRunScreen extends Screen {
                 }));
         }
         String nextLabel = (step == STEPS - 1) ? "Done" : "Next";
-        nextBtn = NeonButton.of(px + PANEL_W - Theme.PAD - btnW, btnY, btnW, 20,
+        nextBtn = NeonButton.of(px + panelW - Theme.PAD - btnW, btnY, btnW, 20,
             Component.literal(nextLabel), b -> {
                 if (step == STEPS - 1) finish();
                 else { step++; rebuildWidgets(); }
@@ -126,18 +134,18 @@ public final class FirstRunScreen extends Screen {
         }
 
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        g.fill(px, py, px + PANEL_W, py + PANEL_H, Theme.C_PANEL);
-        Theme.headerBand(g, px, py, PANEL_W, Theme.HEADER_H);
+        g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
+        Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
 
         super.render(g, mouseX, mouseY, partial);
 
-        Theme.roundedFrame(g, px, py, PANEL_W, PANEL_H, Theme.C_BORDER);
-        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, PANEL_W - Theme.PAD * 2);
+        Theme.roundedFrame(g, px, py, panelW, panelH, Theme.C_BORDER);
+        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
 
         // Step indicator dots just below the accent rule.
         int dotsY = py + Theme.HEADER_H + 10;
         int spacing = 14, dotW = 8, dotH = 2;
-        int dotsX = px + PANEL_W / 2 - (STEPS * spacing - (spacing - dotW)) / 2;
+        int dotsX = px + panelW / 2 - (STEPS * spacing - (spacing - dotW)) / 2;
         for (int i = 0; i < STEPS; i++) {
             int dx = dotsX + i * spacing;
             int color = (i == step) ? Theme.C_ACCENT_BRIGHT
@@ -182,7 +190,7 @@ public final class FirstRunScreen extends Screen {
         boolean modelReady = "READY".equals(modelStatus);
         boolean micLive    = VoiceController.isHearingNow();
 
-        int pillW = (PANEL_W - Theme.PAD * 2 - 8 * 2) / 3;
+        int pillW = (panelW - Theme.PAD * 2 - 8 * 2) / 3;
         int pillY = y;
         drawPill(g, x,                       pillY, pillW, "Model",
             modelReady ? modelStatus : modelStatus + "…", modelReady);
@@ -201,7 +209,7 @@ public final class FirstRunScreen extends Screen {
         // Big live audio meter. Reads VoiceController.audioLevel() each frame so this is
         // the canonical "is the mic actually reaching us" indicator.
         int meterH = 14;
-        int meterW = PANEL_W - Theme.PAD * 2;
+        int meterW = panelW - Theme.PAD * 2;
         drawAudioMeter(g, x, y, meterW, meterH);
         y += meterH + 8;
 
@@ -211,7 +219,7 @@ public final class FirstRunScreen extends Screen {
         String last = VoiceController.lastHeard();
         boolean empty = (last == null || last.isEmpty());
         String prefix = "Last heard: ";
-        int availW = PANEL_W - Theme.PAD * 2 - font.width(prefix) - font.width("\"\"");
+        int availW = panelW - Theme.PAD * 2 - font.width(prefix) - font.width("\"\"");
         String shown = empty ? "(nothing yet)" : "\"" + fitFromRight(last, availW) + "\"";
         g.drawString(font, Component.literal(prefix + shown), x, y,
             empty ? Theme.C_FAINT : Theme.C_TEXT, false);
@@ -242,8 +250,8 @@ public final class FirstRunScreen extends Screen {
         int feedX = x;
         int bodyBottom = y + 14 + body.length * 11;
         int feedY = bodyBottom + 10;
-        int feedW = PANEL_W - Theme.PAD * 2;
-        int feedH = PANEL_H - (feedY - py) - 40; // leave room for buttons + a real gap
+        int feedW = panelW - Theme.PAD * 2;
+        int feedH = panelH - (feedY - py) - 40; // leave room for buttons + a real gap
         if (feedH > 30) {
             g.drawString(font, Component.literal("Recent recognitions:"), feedX, feedY,
                 Theme.C_MUTED, false);

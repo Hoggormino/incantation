@@ -27,7 +27,11 @@ import java.util.concurrent.TimeUnit;
  */
 public final class VoiceSpellsConfigScreen extends Screen {
 
-    private static final int PANEL_W       = 384;
+    // Preferred dimensions — the panel uses these when there's enough room. When the player
+    // turns Minecraft's GUI Scale up far enough that the available screen is smaller, the
+    // runtime {@code panelW} / {@code panelH} fields below get clamped via {@link Theme#fit}
+    // so the panel always fits within the screen instead of being cut off.
+    private static final int PANEL_W_PREF  = 384;
     private static final int PANEL_BASE_H  = 254;   // header + tabs + 6 rows + buttons
     private static final int MONITOR_H     = 156;   // extra height when the monitor is shown
     private static final int TAB_H         = 22;
@@ -53,7 +57,9 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private boolean initializedOnce = false;
     private Tab currentTab = Tab.RECOGNITION;
 
-    private int panelX, panelY, panelH;
+    /** Runtime panel size — clamped to fit within the screen so the layout doesn't get cut off
+     *  when the player picks a large Minecraft GUI Scale. Recomputed every {@link #init()}. */
+    private int panelX, panelY, panelW, panelH;
 
     public VoiceSpellsConfigScreen(Screen parent) {
         super(Component.translatable("voicespells.config.title"));
@@ -80,20 +86,23 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
         // Monitor only renders on the Recognition tab so the HUD tab stays compact.
         boolean showMonitor = currentTab == Tab.RECOGNITION && workDebug;
-        panelH = PANEL_BASE_H + (showMonitor ? MONITOR_H : 0);
-        panelX = (width  - PANEL_W) / 2;
+        // Clamp to fit the current screen so large GUI Scale settings don't push buttons off
+        // the bottom or sides. The preferred dimensions still apply when there's enough room.
+        panelW = Theme.fit(PANEL_W_PREF, width);
+        panelH = Theme.fit(PANEL_BASE_H + (showMonitor ? MONITOR_H : 0), height);
+        panelX = (width  - panelW) / 2;
         panelY = (height - panelH) / 2;
 
         // --- Title centered in the header band (StringWidget so it renders bright) ---
         StringWidget titleW = new StringWidget(panelX, panelY + (Theme.HEADER_H - 9) / 2,
-            PANEL_W, 9, title, font);
+            panelW, 9, title, font);
         titleW.alignCenter();
         titleW.setColor(Theme.C_ACCENT);
         addRenderableWidget(titleW);
 
         // --- Tab bar under the accent rule ---
         int tabsY = panelY + Theme.HEADER_H + 4;
-        int tabW = (PANEL_W - Theme.PAD * 2) / 2;
+        int tabW = (panelW - Theme.PAD * 2) / 2;
         addRenderableWidget(new TabButton(panelX + Theme.PAD,            tabsY, tabW, TAB_H,
             "Recognition", Tab.RECOGNITION));
         addRenderableWidget(new TabButton(panelX + Theme.PAD + tabW,     tabsY, tabW, TAB_H,
@@ -102,8 +111,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // --- Tab content ---
         int contentY = tabsY + TAB_H + Theme.GAP_MD;
         int x = panelX + Theme.PAD;
-        int ctrlX = panelX + PANEL_W / 2;
-        int ctrlW = PANEL_W / 2 - Theme.PAD;
+        int ctrlX = panelX + panelW / 2;
+        int ctrlW = panelW / 2 - Theme.PAD;
 
         switch (currentTab) {
             case RECOGNITION -> buildRecognitionTab(x, ctrlX, ctrlW, contentY);
@@ -123,9 +132,9 @@ public final class VoiceSpellsConfigScreen extends Screen {
         addRenderableWidget(NeonButton.of(x + btnW + 6 + spellsW + 6, btnY, moreW, 20,
             Component.literal("More..."),
             b -> { if (minecraft != null) minecraft.setScreen(new ConfigMoreScreen(this)); }));
-        addRenderableWidget(NeonButton.of(panelX + PANEL_W - Theme.PAD - btnW * 2 - 6, btnY, btnW, 20,
+        addRenderableWidget(NeonButton.of(panelX + panelW - Theme.PAD - btnW * 2 - 6, btnY, btnW, 20,
             CommonComponents.GUI_CANCEL, b -> onClose()));
-        addRenderableWidget(NeonButton.of(panelX + PANEL_W - Theme.PAD - btnW, btnY, btnW, 20,
+        addRenderableWidget(NeonButton.of(panelX + panelW - Theme.PAD - btnW, btnY, btnW, 20,
             CommonComponents.GUI_DONE, b -> save()));
     }
 
@@ -303,18 +312,18 @@ public final class VoiceSpellsConfigScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        g.fill(panelX, panelY, panelX + PANEL_W, panelY + panelH, Theme.C_PANEL);
-        Theme.headerBand(g, panelX, panelY, PANEL_W, Theme.HEADER_H);
+        g.fill(panelX, panelY, panelX + panelW, panelY + panelH, Theme.C_PANEL);
+        Theme.headerBand(g, panelX, panelY, panelW, Theme.HEADER_H);
 
         super.render(g, mouseX, mouseY, partial);
 
-        Theme.roundedFrame(g, panelX, panelY, PANEL_W, panelH, Theme.C_BORDER);
+        Theme.roundedFrame(g, panelX, panelY, panelW, panelH, Theme.C_BORDER);
         Theme.accentGlow(g, panelX + Theme.PAD, panelY + Theme.HEADER_H,
-            PANEL_W - Theme.PAD * 2);
+            panelW - Theme.PAD * 2);
         // Thin divider just under the tab bar to separate tabs from content.
         Theme.divider(g, panelX + Theme.PAD,
             panelY + Theme.HEADER_H + 4 + TAB_H + 1,
-            PANEL_W - Theme.PAD * 2);
+            panelW - Theme.PAD * 2);
 
         if (currentTab == Tab.RECOGNITION && workDebug) renderMonitor(g);
     }
@@ -325,7 +334,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // 5 rows there (added "Only owned spells"), so step down by ROW_H*5 plus the tab-bar
         // and gap offsets.
         int my = panelY + Theme.HEADER_H + 4 + TAB_H + Theme.GAP_MD + Theme.ROW_H * 5 + 6;
-        int mw = PANEL_W - Theme.PAD * 2;
+        int mw = panelW - Theme.PAD * 2;
         int mh = MONITOR_H - 16;
 
         // Live JVM heap stat — gives the user a sanity check on whether the recogniser is

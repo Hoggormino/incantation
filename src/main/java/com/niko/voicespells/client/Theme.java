@@ -24,6 +24,27 @@ public final class Theme {
     public static final int GAP_MD    = 10;
     public static final int GAP_LG    = 14;
 
+    /** Minimum screen margin we keep around a centred panel before it starts overflowing —
+     *  picked to match vanilla Minecraft's own screens (the title screen / pause menu use
+     *  ~8 px of vertical breathing room at small GUI scales). */
+    public static final int PANEL_MARGIN = 8;
+
+    /**
+     * Fit a panel dimension to the available screen dimension so the user can see everything at
+     * any Minecraft GUI scale. Returns the preferred size when it fits with a small margin, or
+     * shrinks down to {@code (available - 2*PANEL_MARGIN)} when the screen is tighter (e.g.
+     * Video Settings → GUI Scale = 4 on a small window). Never returns a negative or zero size —
+     * caps at a sensible floor so the panel doesn't collapse to invisibility on absurd configs.
+     *
+     * <p>Use this in every {@code Screen#init} when computing {@code panelW} / {@code panelH}.
+     * Layout math elsewhere in the screen should reference those runtime values, not the
+     * compile-time preferred constants, so big GUI scales don't push controls off-screen.
+     */
+    public static int fit(int preferred, int available) {
+        int max = Math.max(80, available - 2 * PANEL_MARGIN);
+        return Math.min(preferred, max);
+    }
+
     // ---- Surfaces (driven by UiPalette — defaults to DARK) ----------------
     public static int C_SCRIM;
     public static int C_PANEL;

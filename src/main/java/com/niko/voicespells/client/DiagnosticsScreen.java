@@ -20,12 +20,16 @@ import java.util.List;
  */
 public final class DiagnosticsScreen extends Screen {
 
-    private static final int PANEL_W = 480;
-    private static final int PANEL_H = 320;
+    // Preferred dimensions — clamped at init() time so the panel stays inside the screen
+    // at every Minecraft GUI Scale. Layout math uses the runtime {@code panelW} / {@code panelH}
+    // fields, not these constants.
+    private static final int PANEL_W_PREF = 480;
+    private static final int PANEL_H_PREF = 320;
     private static final int ROW_H   = 28;
 
     private final Screen parent;
-    private int px, py;
+    /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
+    private int px, py, panelW, panelH;
     private List<Diagnostics.Result> results = List.of();
     private DiagList list;
     private StringWidget summaryLabel;
@@ -38,11 +42,15 @@ public final class DiagnosticsScreen extends Screen {
 
     @Override
     protected void init() {
-        px = (width - PANEL_W) / 2;
-        py = (height - PANEL_H) / 2;
+        // Clamp to fit the current screen so large GUI Scale settings don't push buttons off
+        // the bottom or sides. The preferred dimensions still apply when there's enough room.
+        panelW = Theme.fit(PANEL_W_PREF, width);
+        panelH = Theme.fit(PANEL_H_PREF, height);
+        px = (width - panelW) / 2;
+        py = (height - panelH) / 2;
 
         StringWidget titleW = new StringWidget(px, py + (Theme.HEADER_H - 9) / 2,
-            PANEL_W, 9, title, font);
+            panelW, 9, title, font);
         titleW.alignCenter();
         titleW.setColor(Theme.C_ACCENT);
         addRenderableWidget(titleW);
@@ -51,7 +59,7 @@ public final class DiagnosticsScreen extends Screen {
 
         // Summary chip just under the accent rule — green when everything's OK, gold/red when not.
         int sumY = py + Theme.HEADER_H + Theme.GAP_MD;
-        summaryLabel = new StringWidget(px + Theme.PAD, sumY, PANEL_W - Theme.PAD * 2, 11,
+        summaryLabel = new StringWidget(px + Theme.PAD, sumY, panelW - Theme.PAD * 2, 11,
             Component.literal(Diagnostics.shortSummary(results)), font);
         summaryLabel.alignLeft();
         summaryLabel.setColor(summaryColor());
@@ -59,18 +67,18 @@ public final class DiagnosticsScreen extends Screen {
 
         int listX = px + Theme.PAD;
         int listY = sumY + 14;
-        int listW = PANEL_W - Theme.PAD * 2;
-        int listH = (py + PANEL_H - 28) - listY - Theme.GAP_MD;
+        int listW = panelW - Theme.PAD * 2;
+        int listH = (py + panelH - 28) - listY - Theme.GAP_MD;
         list = new DiagList(listX, listY, listW, listH);
         addRenderableWidget(list);
 
-        int btnY = py + PANEL_H - 28;
+        int btnY = py + panelH - 28;
         int btnW = 90;
         addRenderableWidget(NeonButton.of(px + Theme.PAD, btnY, btnW, 20,
             Component.literal("Re-run"), b -> rerun()));
         addRenderableWidget(NeonButton.of(px + Theme.PAD + btnW + 6, btnY, btnW + 18, 20,
             Component.literal("Copy report"), b -> copyReport()));
-        addRenderableWidget(NeonButton.of(px + PANEL_W - Theme.PAD - 80, btnY, 80, 20,
+        addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 80, btnY, 80, 20,
             CommonComponents.GUI_BACK, b -> onClose()));
     }
 
@@ -117,11 +125,11 @@ public final class DiagnosticsScreen extends Screen {
             summaryLabel.setColor(Theme.F_MATCH);
         }
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        g.fill(px, py, px + PANEL_W, py + PANEL_H, Theme.C_PANEL);
-        Theme.headerBand(g, px, py, PANEL_W, Theme.HEADER_H);
+        g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
+        Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
         super.render(g, mouseX, mouseY, partial);
-        Theme.roundedFrame(g, px, py, PANEL_W, PANEL_H, Theme.C_BORDER);
-        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, PANEL_W - Theme.PAD * 2);
+        Theme.roundedFrame(g, px, py, panelW, panelH, Theme.C_BORDER);
+        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
     }
 
     /** Scrollable list of diagnostic rows. Each row: status pill + name + detail line. */

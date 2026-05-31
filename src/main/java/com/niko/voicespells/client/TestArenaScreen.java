@@ -27,12 +27,16 @@ import java.util.concurrent.TimeUnit;
  */
 public final class TestArenaScreen extends Screen {
 
-    private static final int PANEL_W = 460;
-    private static final int PANEL_H = 308;
+    // Preferred dimensions — clamped at init() time so the panel stays inside the screen
+    // at every Minecraft GUI Scale. Layout math uses the runtime {@code panelW} / {@code panelH}
+    // fields, not these constants.
+    private static final int PANEL_W_PREF = 460;
+    private static final int PANEL_H_PREF = 308;
     private static final int ROW_H   = 12;
 
     private final Screen parent;
-    private int px, py;
+    /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
+    private int px, py, panelW, panelH;
     private final long openedAtNanos = System.nanoTime();
 
     public TestArenaScreen(Screen parent) {
@@ -42,16 +46,20 @@ public final class TestArenaScreen extends Screen {
 
     @Override
     protected void init() {
-        px = (width - PANEL_W) / 2;
-        py = (height - PANEL_H) / 2;
+        // Clamp to fit the current screen so large GUI Scale settings don't push buttons off
+        // the bottom or sides. The preferred dimensions still apply when there's enough room.
+        panelW = Theme.fit(PANEL_W_PREF, width);
+        panelH = Theme.fit(PANEL_H_PREF, height);
+        px = (width - panelW) / 2;
+        py = (height - panelH) / 2;
 
         StringWidget titleW = new StringWidget(px, py + (Theme.HEADER_H - 9) / 2,
-            PANEL_W, 9, title, font);
+            panelW, 9, title, font);
         titleW.alignCenter();
         titleW.setColor(Theme.C_ACCENT);
         addRenderableWidget(titleW);
 
-        addRenderableWidget(NeonButton.of(px + PANEL_W - Theme.PAD - 80, py + PANEL_H - 28,
+        addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 80, py + panelH - 28,
             80, 20, CommonComponents.GUI_BACK, b -> onClose()));
     }
 
@@ -63,13 +71,13 @@ public final class TestArenaScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        g.fill(px, py, px + PANEL_W, py + PANEL_H, Theme.C_PANEL);
-        Theme.headerBand(g, px, py, PANEL_W, Theme.HEADER_H);
+        g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
+        Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
 
         super.render(g, mouseX, mouseY, partial);
 
-        Theme.roundedFrame(g, px, py, PANEL_W, PANEL_H, Theme.C_BORDER);
-        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, PANEL_W - Theme.PAD * 2);
+        Theme.roundedFrame(g, px, py, panelW, panelH, Theme.C_BORDER);
+        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
 
         int x = px + Theme.PAD;
         int y = py + Theme.HEADER_H + Theme.GAP_MD;
@@ -77,7 +85,7 @@ public final class TestArenaScreen extends Screen {
         // Loud disclaimer banner — players were closing the arena and reporting "spells don't
         // cast" because they didn't read the intro. Promote it to a bordered banner with a
         // distinct color so it's hard to miss.
-        int discW = PANEL_W - Theme.PAD * 2;
+        int discW = panelW - Theme.PAD * 2;
         int discH = 22;
         g.fill(x, y, x + discW, y + discH, Theme.C_INSET);
         Theme.roundedFrame(g, x, y, discW, discH, Theme.C_ACCENT_SOFT);
@@ -92,7 +100,7 @@ public final class TestArenaScreen extends Screen {
         // this screen will move. Without this banner the screen looks broken.
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) {
-            int bannerW = PANEL_W - Theme.PAD * 2;
+            int bannerW = panelW - Theme.PAD * 2;
             int bannerH = 24;
             g.fill(x, y, x + bannerW, y + bannerH, Theme.C_INSET);
             Theme.roundedFrame(g, x, y, bannerW, bannerH, Theme.C_DANGER);
@@ -105,7 +113,7 @@ public final class TestArenaScreen extends Screen {
         }
 
         // Big audio meter so the player can confirm their mic is being heard.
-        int meterW = PANEL_W - Theme.PAD * 2;
+        int meterW = panelW - Theme.PAD * 2;
         int meterH = 12;
         g.fill(x, y, x + meterW, y + meterH, Theme.C_INSET);
         Theme.roundedFrame(g, x, y, meterW, meterH, Theme.C_DIVIDER);
@@ -134,7 +142,7 @@ public final class TestArenaScreen extends Screen {
         String last = VoiceController.lastHeard();
         if (last == null || last.isEmpty()) last = "(say something)";
         int labelW = font.width("Last heard:  ");
-        int availW = PANEL_W - Theme.PAD * 2 - labelW;
+        int availW = panelW - Theme.PAD * 2 - labelW;
         last = fitToWidth(last, availW);
         g.drawString(font, Component.literal("Last heard:  "), x, y, Theme.C_FAINT, false);
         g.drawString(font, Component.literal(last),
@@ -154,7 +162,7 @@ public final class TestArenaScreen extends Screen {
         g.drawString(font, Component.literal("RECENT — would have cast:"), x, y,
             Theme.C_MUTED, false);
         y += 12;
-        int listH = PANEL_H - (y - py) - 36;
+        int listH = panelH - (y - py) - 36;
         g.fill(x, y, x + meterW, y + listH, Theme.C_INSET);
         Theme.insetShadow(g, x, y, meterW);
         Theme.roundedFrame(g, x, y, meterW, listH, Theme.C_DIVIDER);

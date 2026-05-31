@@ -16,12 +16,16 @@ import net.minecraft.network.chat.Component;
  */
 public final class HelpScreen extends Screen {
 
-    private static final int PANEL_W = 460;
-    private static final int PANEL_H = 320;
+    // Preferred dimensions — clamped at init() time so the panel stays inside the screen
+    // at every Minecraft GUI Scale. Layout math uses the runtime {@code panelW} / {@code panelH}
+    // fields, not these constants.
+    private static final int PANEL_W_PREF = 460;
+    private static final int PANEL_H_PREF = 320;
 
     private final Screen parent;
     private int page = 0;
-    private int px, py;
+    /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
+    private int px, py, panelW, panelH;
 
     /** Page content. Each page is a heading + body lines. Empty string lines = blank rows. */
     private static final String[][] PAGES = {
@@ -112,16 +116,20 @@ public final class HelpScreen extends Screen {
 
     @Override
     protected void init() {
-        px = (width - PANEL_W) / 2;
-        py = (height - PANEL_H) / 2;
+        // Clamp to fit the current screen so large GUI Scale settings don't push buttons off
+        // the bottom or sides. The preferred dimensions still apply when there's enough room.
+        panelW = Theme.fit(PANEL_W_PREF, width);
+        panelH = Theme.fit(PANEL_H_PREF, height);
+        px = (width - panelW) / 2;
+        py = (height - panelH) / 2;
 
         StringWidget titleW = new StringWidget(px, py + (Theme.HEADER_H - 9) / 2,
-            PANEL_W, 9, title, font);
+            panelW, 9, title, font);
         titleW.alignCenter();
         titleW.setColor(Theme.C_ACCENT);
         addRenderableWidget(titleW);
 
-        int btnY = py + PANEL_H - 28;
+        int btnY = py + panelH - 28;
         int btnW = 90;
 
         addRenderableWidget(NeonButton.of(px + Theme.PAD, btnY, btnW, 20,
@@ -130,7 +138,7 @@ public final class HelpScreen extends Screen {
         addRenderableWidget(NeonButton.of(px + Theme.PAD + btnW + 6, btnY, btnW, 20,
             Component.literal("Next →"), b -> { if (page < PAGES.length - 1) { page++; rebuildWidgets(); } }))
             .active = page < PAGES.length - 1;
-        addRenderableWidget(NeonButton.of(px + PANEL_W - Theme.PAD - 80, btnY, 80, 20,
+        addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 80, btnY, 80, 20,
             CommonComponents.GUI_BACK, b -> onClose()));
     }
 
@@ -142,18 +150,18 @@ public final class HelpScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        g.fill(px, py, px + PANEL_W, py + PANEL_H, Theme.C_PANEL);
-        Theme.headerBand(g, px, py, PANEL_W, Theme.HEADER_H);
+        g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
+        Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
 
         super.render(g, mouseX, mouseY, partial);
 
-        Theme.roundedFrame(g, px, py, PANEL_W, PANEL_H, Theme.C_BORDER);
-        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, PANEL_W - Theme.PAD * 2);
+        Theme.roundedFrame(g, px, py, panelW, panelH, Theme.C_BORDER);
+        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
 
         // Page indicator dots — same look as the first-run wizard, for visual consistency.
         int dotsY = py + Theme.HEADER_H + 10;
         int spacing = 12, dotW = 8, dotH = 2;
-        int dotsX = px + PANEL_W / 2 - (PAGES.length * spacing - (spacing - dotW)) / 2;
+        int dotsX = px + panelW / 2 - (PAGES.length * spacing - (spacing - dotW)) / 2;
         for (int i = 0; i < PAGES.length; i++) {
             int dx = dotsX + i * spacing;
             int color = (i == page) ? Theme.C_ACCENT_BRIGHT

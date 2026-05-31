@@ -21,12 +21,16 @@ import java.util.Map;
  */
 public final class VoiceCodexScreen extends Screen {
 
-    private static final int PANEL_W = 440;
-    private static final int PANEL_H = 280;
+    // Preferred dimensions — clamped at init() time so the panel stays inside the screen
+    // at every Minecraft GUI Scale. Layout math uses the runtime {@code panelW} / {@code panelH}
+    // fields, not these constants.
+    private static final int PANEL_W_PREF = 440;
+    private static final int PANEL_H_PREF = 280;
     private static final int ROW_H   = 13;
 
     private final Screen parent;
-    private int px, py;
+    /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
+    private int px, py, panelW, panelH;
     private TopList list;
 
     public VoiceCodexScreen(Screen parent) {
@@ -36,23 +40,27 @@ public final class VoiceCodexScreen extends Screen {
 
     @Override
     protected void init() {
-        px = (width - PANEL_W) / 2;
-        py = (height - PANEL_H) / 2;
+        // Clamp to fit the current screen so large GUI Scale settings don't push buttons off
+        // the bottom or sides. The preferred dimensions still apply when there's enough room.
+        panelW = Theme.fit(PANEL_W_PREF, width);
+        panelH = Theme.fit(PANEL_H_PREF, height);
+        px = (width - panelW) / 2;
+        py = (height - panelH) / 2;
 
         StringWidget titleW = new StringWidget(px, py + (Theme.HEADER_H - 9) / 2,
-            PANEL_W, 9, title, font);
+            panelW, 9, title, font);
         titleW.alignCenter();
         titleW.setColor(Theme.C_ACCENT);
         addRenderableWidget(titleW);
 
-        int listX = px + PANEL_W / 2 + 6;
+        int listX = px + panelW / 2 + 6;
         int listY = py + Theme.HEADER_H + Theme.GAP_MD;
-        int listW = PANEL_W / 2 - Theme.PAD - 6;
-        int listH = PANEL_H - Theme.HEADER_H - Theme.GAP_MD - 36;
+        int listW = panelW / 2 - Theme.PAD - 6;
+        int listH = panelH - Theme.HEADER_H - Theme.GAP_MD - 36;
         list = new TopList(listX, listY, listW, listH);
         addRenderableWidget(list);
 
-        addRenderableWidget(NeonButton.of(px + PANEL_W - Theme.PAD - 80, py + PANEL_H - 28,
+        addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 80, py + panelH - 28,
             80, 20, CommonComponents.GUI_BACK, b -> onClose()));
     }
 
@@ -64,13 +72,13 @@ public final class VoiceCodexScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        g.fill(px, py, px + PANEL_W, py + PANEL_H, Theme.C_PANEL);
-        Theme.headerBand(g, px, py, PANEL_W, Theme.HEADER_H);
+        g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
+        Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
 
         super.render(g, mouseX, mouseY, partial);
 
-        Theme.roundedFrame(g, px, py, PANEL_W, PANEL_H, Theme.C_BORDER);
-        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, PANEL_W - Theme.PAD * 2);
+        Theme.roundedFrame(g, px, py, panelW, panelH, Theme.C_BORDER);
+        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
 
         renderSummary(g);
     }
@@ -79,7 +87,7 @@ public final class VoiceCodexScreen extends Screen {
     private void renderSummary(GuiGraphics g) {
         int x = px + Theme.PAD;
         int y = py + Theme.HEADER_H + Theme.GAP_MD;
-        int colW = PANEL_W / 2 - Theme.PAD - 6;
+        int colW = panelW / 2 - Theme.PAD - 6;
 
         // Summary card. Three lines + badge row:
         //   1. "VOICE CASTING"  ............  "Tier: <name>"  (current rank)
@@ -176,7 +184,7 @@ public final class VoiceCodexScreen extends Screen {
 
     private void line(GuiGraphics g, int x, int y, String label, String value) {
         g.drawString(font, Component.literal(label), x, y, Theme.C_MUTED, false);
-        int colW = PANEL_W / 2 - Theme.PAD - 6;
+        int colW = panelW / 2 - Theme.PAD - 6;
         int vw = font.width(value);
         g.drawString(font, Component.literal(value), x + colW - vw, y, Theme.C_TEXT, false);
     }

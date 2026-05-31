@@ -25,8 +25,11 @@ import java.util.Locale;
  */
 public final class AddAliasScreen extends Screen {
 
-    private static final int PANEL_W = 340;
-    private static final int PANEL_H = 252;
+    // Preferred dimensions — clamped at init() time so the panel stays inside the screen
+    // at every Minecraft GUI Scale. Layout math uses the runtime {@code panelW} / {@code panelH}
+    // fields, not these constants.
+    private static final int PANEL_W_PREF = 340;
+    private static final int PANEL_H_PREF = 252;
     private static final int MAX_ROWS = 5;
 
     private final Screen parent;
@@ -38,7 +41,8 @@ public final class AddAliasScreen extends Screen {
     private EditBox phraseBox;
     private StringWidget infoLabel;
 
-    private int px, py;
+    /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
+    private int px, py, panelW, panelH;
 
     public AddAliasScreen(Screen parent, String spellId) {
         this(parent, spellId, null);
@@ -53,12 +57,16 @@ public final class AddAliasScreen extends Screen {
 
     @Override
     protected void init() {
-        px = (width - PANEL_W) / 2;
-        py = (height - PANEL_H) / 2;
+        // Clamp to fit the current screen so large GUI Scale settings don't push buttons off
+        // the bottom or sides. The preferred dimensions still apply when there's enough room.
+        panelW = Theme.fit(PANEL_W_PREF, width);
+        panelH = Theme.fit(PANEL_H_PREF, height);
+        px = (width - panelW) / 2;
+        py = (height - panelH) / 2;
 
         // Centered title in the gradient header band.
         StringWidget titleW = new StringWidget(px, py + (Theme.HEADER_H - 9) / 2,
-            PANEL_W, 9, title, font);
+            panelW, 9, title, font);
         titleW.alignCenter();
         titleW.setColor(Theme.C_ACCENT);
         addRenderableWidget(titleW);
@@ -67,7 +75,7 @@ public final class AddAliasScreen extends Screen {
 
         // "For: <spell_id>" label so the user knows what they're aliasing.
         StringWidget forLabel = new StringWidget(px + Theme.PAD, y,
-            PANEL_W - Theme.PAD * 2, 9,
+            panelW - Theme.PAD * 2, 9,
             Component.literal("For:  " + spellId), font);
         forLabel.alignLeft();
         forLabel.setColor(Theme.C_MUTED);
@@ -76,7 +84,7 @@ public final class AddAliasScreen extends Screen {
 
         // Alias text field.
         phraseBox = new EditBox(font, px + Theme.PAD, y,
-            PANEL_W - Theme.PAD * 2, 20, Component.literal("Alias phrase"));
+            panelW - Theme.PAD * 2, 20, Component.literal("Alias phrase"));
         phraseBox.setHint(Component.literal("e.g. abyss blast"));
         phraseBox.setMaxLength(80);
         if (prefillAlias != null && !prefillAlias.isBlank()) {
@@ -88,7 +96,7 @@ public final class AddAliasScreen extends Screen {
 
         // Inline info / error line. Starts empty; populated by validation in save().
         infoLabel = new StringWidget(px + Theme.PAD, y,
-            PANEL_W - Theme.PAD * 2, 9, Component.empty(), font);
+            panelW - Theme.PAD * 2, 9, Component.empty(), font);
         infoLabel.alignLeft();
         infoLabel.setColor(Theme.C_FAINT);
         addRenderableWidget(infoLabel);
@@ -96,7 +104,7 @@ public final class AddAliasScreen extends Screen {
 
         // Section header for existing aliases.
         StringWidget sectionLabel = new StringWidget(px + Theme.PAD, y,
-            PANEL_W - Theme.PAD * 2, 9, Component.literal("EXISTING ALIASES"), font);
+            panelW - Theme.PAD * 2, 9, Component.literal("EXISTING ALIASES"), font);
         sectionLabel.alignLeft();
         sectionLabel.setColor(Theme.C_MUTED);
         addRenderableWidget(sectionLabel);
@@ -107,7 +115,7 @@ public final class AddAliasScreen extends Screen {
         List<String> aliasRows = collectExistingAliases();
         if (aliasRows.isEmpty()) {
             StringWidget emptyLabel = new StringWidget(px + Theme.PAD, y,
-                PANEL_W - Theme.PAD * 2, 9,
+                panelW - Theme.PAD * 2, 9,
                 Component.literal("(none — add one above)"), font);
             emptyLabel.alignLeft();
             emptyLabel.setColor(Theme.C_FAINT);
@@ -120,19 +128,19 @@ public final class AddAliasScreen extends Screen {
                 String phrase = entry.substring(0, entry.indexOf('='));
                 // Phrase label on the left.
                 StringWidget row = new StringWidget(px + Theme.PAD, y + 4,
-                    PANEL_W - Theme.PAD * 2 - 24, 9,
+                    panelW - Theme.PAD * 2 - 24, 9,
                     Component.literal("•  " + phrase), font);
                 row.alignLeft();
                 row.setColor(Theme.C_TEXT);
                 addRenderableWidget(row);
                 // Tiny X button on the right.
-                addRenderableWidget(NeonButton.of(px + PANEL_W - Theme.PAD - 16, y, 16, rowH - 2,
+                addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 16, y, 16, rowH - 2,
                     Component.literal("×"), b -> removeAlias(entry)));
                 y += rowH;
             }
             if (aliasRows.size() > MAX_ROWS) {
                 StringWidget moreLabel = new StringWidget(px + Theme.PAD, y,
-                    PANEL_W - Theme.PAD * 2, 9,
+                    panelW - Theme.PAD * 2, 9,
                     Component.literal("...and " + (aliasRows.size() - MAX_ROWS) + " more (edit toml)"),
                     font);
                 moreLabel.alignLeft();
@@ -141,11 +149,11 @@ public final class AddAliasScreen extends Screen {
             }
         }
 
-        int btnY = py + PANEL_H - 28;
+        int btnY = py + panelH - 28;
         int btnW = 90;
         addRenderableWidget(NeonButton.of(px + Theme.PAD, btnY, btnW, 20,
             CommonComponents.GUI_CANCEL, b -> onClose()));
-        addRenderableWidget(NeonButton.of(px + PANEL_W - Theme.PAD - btnW, btnY, btnW, 20,
+        addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - btnW, btnY, btnW, 20,
             Component.literal("Save"), b -> save()));
     }
 
@@ -235,10 +243,10 @@ public final class AddAliasScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        g.fill(px, py, px + PANEL_W, py + PANEL_H, Theme.C_PANEL);
-        Theme.headerBand(g, px, py, PANEL_W, Theme.HEADER_H);
+        g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
+        Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
         super.render(g, mouseX, mouseY, partial);
-        Theme.roundedFrame(g, px, py, PANEL_W, PANEL_H, Theme.C_BORDER);
-        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, PANEL_W - Theme.PAD * 2);
+        Theme.roundedFrame(g, px, py, panelW, panelH, Theme.C_BORDER);
+        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
     }
 }

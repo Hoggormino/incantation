@@ -21,15 +21,19 @@ import java.util.Locale;
  */
 public final class ConfigMoreScreen extends Screen {
 
-    private static final int PANEL_W = 340;
-    private static final int PANEL_H = 340;
+    // Preferred dimensions — clamped at init() time so the panel stays inside the screen
+    // at every Minecraft GUI Scale. Layout math uses the runtime {@code panelW} / {@code panelH}
+    // fields, not these constants.
+    private static final int PANEL_W_PREF = 340;
+    private static final int PANEL_H_PREF = 340;
     private static final String PROFILE_HEADER = "voicespells-profile:1";
 
     private final Screen parent;
     private StringWidget statusLabel;
     private NeonButton calibBtn;
     private long statusFlashUntil = 0L;
-    private int px, py;
+    /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
+    private int px, py, panelW, panelH;
 
     public ConfigMoreScreen(Screen parent) {
         super(Component.literal("More"));
@@ -38,17 +42,21 @@ public final class ConfigMoreScreen extends Screen {
 
     @Override
     protected void init() {
-        px = (width - PANEL_W) / 2;
-        py = (height - PANEL_H) / 2;
+        // Clamp to fit the current screen so large GUI Scale settings don't push buttons off
+        // the bottom or sides. The preferred dimensions still apply when there's enough room.
+        panelW = Theme.fit(PANEL_W_PREF, width);
+        panelH = Theme.fit(PANEL_H_PREF, height);
+        px = (width - panelW) / 2;
+        py = (height - panelH) / 2;
 
         StringWidget titleW = new StringWidget(px, py + (Theme.HEADER_H - 9) / 2,
-            PANEL_W, 9, title, font);
+            panelW, 9, title, font);
         titleW.alignCenter();
         titleW.setColor(Theme.C_ACCENT);
         addRenderableWidget(titleW);
 
         int y = py + Theme.HEADER_H + Theme.GAP_MD;
-        int btnW = PANEL_W - Theme.PAD * 2;
+        int btnW = panelW - Theme.PAD * 2;
 
         addRenderableWidget(NeonButton.of(px + Theme.PAD, y, btnW, 20,
             Component.literal("Open Welcome Wizard"),
@@ -122,14 +130,14 @@ public final class ConfigMoreScreen extends Screen {
         // unfamiliar spells. Sits at the bottom of the panel as a quiet hint.
         String suggestion = spellOfTheDay();
         if (!suggestion.isEmpty()) {
-            StringWidget sotd = new StringWidget(px + Theme.PAD, py + PANEL_H - 50,
+            StringWidget sotd = new StringWidget(px + Theme.PAD, py + panelH - 50,
                 btnW, 9, Component.literal("Today's spell: " + suggestion), font);
             sotd.alignLeft();
             sotd.setColor(Theme.C_FAINT);
             addRenderableWidget(sotd);
         }
 
-        addRenderableWidget(NeonButton.of(px + PANEL_W - Theme.PAD - 80, py + PANEL_H - 28,
+        addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 80, py + panelH - 28,
             80, 20, CommonComponents.GUI_BACK, b -> onClose()));
     }
 
@@ -310,10 +318,10 @@ public final class ConfigMoreScreen extends Screen {
             }
         }
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        g.fill(px, py, px + PANEL_W, py + PANEL_H, Theme.C_PANEL);
-        Theme.headerBand(g, px, py, PANEL_W, Theme.HEADER_H);
+        g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
+        Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
         super.render(g, mouseX, mouseY, partial);
-        Theme.roundedFrame(g, px, py, PANEL_W, PANEL_H, Theme.C_BORDER);
-        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, PANEL_W - Theme.PAD * 2);
+        Theme.roundedFrame(g, px, py, panelW, panelH, Theme.C_BORDER);
+        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
     }
 }
