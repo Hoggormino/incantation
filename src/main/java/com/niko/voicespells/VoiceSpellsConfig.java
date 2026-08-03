@@ -116,16 +116,8 @@ public final class VoiceSpellsConfig {
         // --- colours (ARGB hex strings) ---
         public final ModConfigSpec.ConfigValue<String> bgColor;
         public final ModConfigSpec.ConfigValue<String> borderColor;
-        public final ModConfigSpec.ConfigValue<String> textPrimary;
         public final ModConfigSpec.ConfigValue<String> textMuted;
         public final ModConfigSpec.ConfigValue<String> textToast;
-        public final ModConfigSpec.ConfigValue<String> dotReady;
-        public final ModConfigSpec.ConfigValue<String> dotListen;
-        public final ModConfigSpec.ConfigValue<String> dotLoad;
-        public final ModConfigSpec.ConfigValue<String> dotError;
-        public final ModConfigSpec.ConfigValue<String> dotOff;
-        public final ModConfigSpec.ConfigValue<String> meterBg;
-        public final ModConfigSpec.ConfigValue<String> meterFill;
 
         // --- recognition tuning ---
         public final ModConfigSpec.BooleanValue debugMonitor;
@@ -182,16 +174,8 @@ public final class VoiceSpellsConfig {
                       "treated as fully opaque. The leading '#' is optional.");
             bgColor      = b.define("background",   "CC0A0A0A");
             borderColor  = b.define("border",       "FF1F1F1F");
-            textPrimary  = b.define("text",         "FFE8E8E8");
             textMuted    = b.define("textMuted",    "FF8A8A8A");
             textToast    = b.define("toast",        "FFFFD75A");
-            dotReady     = b.define("dotReady",     "FF7A7A7A");
-            dotListen    = b.define("dotListen",    "FF6BE57F");
-            dotLoad      = b.define("dotLoad",      "FFFFB347");
-            dotError     = b.define("dotError",     "FFFF6166");
-            dotOff       = b.define("dotOff",       "FF4A4A4A");
-            meterBg      = b.define("meterBg",      "FF1F1F1F");
-            meterFill    = b.define("meterFill",    "FF6BE57F");
             b.pop();
 
             b.push("recognition");
@@ -205,11 +189,12 @@ public final class VoiceSpellsConfig {
             dedupMillis = b.defineInRange("dedupMillis", 800, 0, 5000);
             b.comment("Echo lockout window (ms) — hard absolute window where a same-spell repeat",
                       "is dropped regardless of inter-event gap. Catches slow Vosk emissions",
-                      "where partial -> final spans longer than dedupMillis. Set to 0 to disable.",
-                      "Utterance-id dedup is the primary anti-double-cast — this is a backstop,",
-                      "so keep it small (default 800ms) or repeated 'fireball fireball' chants",
-                      "feel laggy.");
-            echoLockoutMillis = b.defineInRange("echoLockoutMillis", 800, 0, 10000);
+                      "where partial -> final spans longer than dedupMillis AND the tail-audio",
+                      "case where SVC's voice-activation hangover gets grammar-forced into the",
+                      "just-cast spell. Set to 0 to disable. Lower this to ~600 if rapid-fire",
+                      "incantation chants feel laggy; raise if same-spell double-casts still",
+                      "slip through.");
+            echoLockoutMillis = b.defineInRange("echoLockoutMillis", 1500, 0, 10000);
             b.comment("Max number of voice-recognized spells that can stack in the cast queue",
                       "while you're already casting. FIFO — oldest queued fires first.");
             castQueueSize = b.defineInRange("castQueueSize", 3, 1, 5);
@@ -340,9 +325,7 @@ public final class VoiceSpellsConfig {
     // The HUD render runs every frame so we precompute parsed ints once per config reload
     // rather than parsing hex on each draw.
 
-    public static volatile int cBg, cBorder, cTextPrimary, cTextMuted, cTextToast;
-    public static volatile int cDotReady, cDotListen, cDotLoad, cDotError, cDotOff;
-    public static volatile int cMeterBg, cMeterFill;
+    public static volatile int cBg, cBorder, cTextMuted, cTextToast;
     public static volatile float cOpacity = 1f;
 
     // Recognition tuning — read on the mic thread per recognized phrase, so cache it rather
@@ -351,7 +334,7 @@ public final class VoiceSpellsConfig {
     public static volatile int     cFuzzyMaxDistance = 1;
     public static volatile boolean cSubstringMatch  = true;
     public static volatile long    cDedupNanos        = 800L * 1_000_000L;
-    public static volatile long    cEchoLockoutNanos  = 800L * 1_000_000L;
+    public static volatile long    cEchoLockoutNanos  = 1500L * 1_000_000L;
     public static volatile int     cCastQueueSize     = 3;
     public static volatile boolean cClientPreflight   = true;
     public static volatile double  cMinConfidence   = 0.55;
@@ -434,16 +417,8 @@ public final class VoiceSpellsConfig {
         cOpacity     = (float) Math.max(0.0, Math.min(1.0, c.globalOpacity.get()));
         cBg          = applyOpacity(parseHex(c.bgColor.get(),     0xCC0A0A0A), cOpacity);
         cBorder      = applyOpacity(parseHex(c.borderColor.get(), 0xFF1F1F1F), cOpacity);
-        cTextPrimary = applyOpacity(parseHex(c.textPrimary.get(), 0xFFE8E8E8), cOpacity);
         cTextMuted   = applyOpacity(parseHex(c.textMuted.get(),   0xFF8A8A8A), cOpacity);
         cTextToast   = applyOpacity(parseHex(c.textToast.get(),   0xFFFFD75A), cOpacity);
-        cDotReady    = applyOpacity(parseHex(c.dotReady.get(),    0xFF7A7A7A), cOpacity);
-        cDotListen   = applyOpacity(parseHex(c.dotListen.get(),   0xFF6BE57F), cOpacity);
-        cDotLoad     = applyOpacity(parseHex(c.dotLoad.get(),     0xFFFFB347), cOpacity);
-        cDotError    = applyOpacity(parseHex(c.dotError.get(),    0xFFFF6166), cOpacity);
-        cDotOff      = applyOpacity(parseHex(c.dotOff.get(),      0xFF4A4A4A), cOpacity);
-        cMeterBg     = applyOpacity(parseHex(c.meterBg.get(),     0xFF1F1F1F), cOpacity);
-        cMeterFill   = applyOpacity(parseHex(c.meterFill.get(),   0xFF6BE57F), cOpacity);
     }
 
     public static int parseHex(String hex, int fallback) {

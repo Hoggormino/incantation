@@ -37,12 +37,15 @@ public final class VoiceSpells {
             modBus.addListener(VoiceSpellsConfig::onConfigLoad);
             modBus.addListener(VoiceSpellsConfig::onConfigReload);
 
-            // "Config" button in Mods → Voice Spells opens our screen.
-            container.registerExtensionPoint(
-                net.neoforged.neoforge.client.gui.IConfigScreenFactory.class,
-                (c, parent) -> new com.niko.voicespells.client.VoiceSpellsConfigScreen(parent));
-
-            com.niko.voicespells.client.ClientEvents.bootstrap(modBus);
+            // Everything else client-side — including the Mods-screen config extension point —
+            // is wired inside ClientEvents. Nothing in this constructor may name a client-only
+            // type, not even inside this dist check: NeoForge resolves the types a method
+            // references when the method is prepared, which happens before the check runs. A
+            // lambda for IConfigScreenFactory used to live here and killed dedicated servers
+            // with "Attempted to load class net/minecraft/client/gui/screens/Screen for invalid
+            // dist DEDICATED_SERVER". This plain static call is safe because its descriptor
+            // mentions only IEventBus and ModContainer.
+            com.niko.voicespells.client.ClientEvents.bootstrap(modBus, container);
         }
     }
 

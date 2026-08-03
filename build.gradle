@@ -24,6 +24,14 @@ neoForge {
 			client()
 			systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
 		}
+		// A dedicated-server run. This mod ships client-only UI but must load on a headless
+		// server, and the "client GUI class on a dedicated server" crash has now regressed
+		// twice (0.9.0, and again in 0.9.3) purely because there was no way to test for it
+		// locally. `./gradlew runServer` is that test — run it before every release.
+		server {
+			server()
+			systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+		}
 		data {
 			data()
 			programArguments.addAll '--mod', project.mod_id, '--all',

@@ -7,19 +7,20 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
 import java.lang.reflect.Method;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 
 /**
- * Client-side scan of the local player's inventory for spell containers.
+ * Client-side scan of the local player's actively-equipped spell containers.
  *
- * <p>Used by the "restrict to owned" feature: instead of letting Vosk consider every spell in
- * Iron's Spells' registry, we narrow the grammar to spells the player actually has on them
- * — Curios spellbook slot, both hands, and the hotbar. Imbued weapons (ISpellContainer but
- * not ISpellbook) count too, mirroring the server-side cast path.
+ * <p>Used by the "restrict to owned" feature: the controller's dispatch-time gate only lets a
+ * voice cast through if its spell is in this set, so unequipped spells can't leak onto the HUD
+ * as ghost casts. Only the actively-equipped slots count — main hand, off hand, and Curios —
+ * mirroring Iron's Spells' own cast-time check. Imbued weapons (ISpellContainer but not
+ * ISpellbook) count too. (This no longer narrows the Vosk grammar; the grammar stays broad and
+ * enforcement happens at dispatch.)
  *
  * <p>All Iron's Spells / Curios access is reflective so the mod compiles and loads without
  * those mods on the classpath. Reflection resolution is cached statically; the scan itself
@@ -46,6 +47,8 @@ public final class OwnedSpells {
     private static volatile Method   getAtIndex;      // (int)        -> SpellData
     private static volatile Method   getSpellFromData;// (SpellData)  -> AbstractSpell
     private static volatile Method   getSpellId;      // (AbstractSpell) -> String
+    private static volatile Class<?> spellSlotClass;  // SpellSlot — getAllSpells() element type on current builds (may be null)
+    private static volatile Method   spellSlotGetData;// SpellSlot.spellData()/getSpellData() -> SpellData
 
     private static volatile boolean curiosAvailable = false;
     private static volatile Method  curiosGetInventory;       // (LivingEntity) -> Optional<handler>
@@ -81,6 +84,19 @@ public final class OwnedSpells {
             reflectionReady = true;
             return;
         }
+        // Current Iron's builds return SpellSlot[] from getAllSpells() — a record wrapping a
+        // SpellData (+ slot index) — rather than SpellData[] directly. Resolve the unwrap
+        // accessor (record component spellData(), or legacy getSpellData()) so addFromData can
+        // peel the SpellData out. Best-effort: older builds that hand back SpellData[] leave
+        // these null and addFromData uses the element as-is.
+        try {
+            spellSlotClass = Class.forName("io.redspace.ironsspellbooks.api.spells.SpellSlot");
+            try { spellSlotGetData = spellSlotClass.getMethod("spellData"); }
+            catch (NoSuchMethodException e) { spellSlotGetData = spellSlotClass.getMethod("getSpellData"); }
+        } catch (Throwable t) {
+            spellSlotClass = null;
+            spellSlotGetData = null;
+        }
         // Optional Curios resolution — we degrade to hand-only when Curios is missing.
         try {
             Class<?> capiCls   = Class.forName(CURIOS_API);
@@ -96,26 +112,38 @@ public final class OwnedSpells {
         reflectionReady = true;
     }
 
-    /** Scan the local player's reachable spell containers and collect the namespaced ids of
-     *  every spell present. Empty set on any failure — caller treats that as "no restriction
-     *  data available" so listening doesn't silently break. */
-    public static Set<String> scan() {
+    /** Scan the local player's actively-equipped spell containers and collect the namespaced
+     *  ids of every spell present.
+     *
+     *  <p>Returns {@link Optional#empty()} when the scan could not run <i>reliably</i> — Iron's
+     *  reflection unavailable, no local player yet, or a reflection call threw mid-scan. The
+     *  caller treats that as "no trustworthy data" and fails OPEN: a permanent reflection break
+     *  (e.g. an Iron's/MC update shifting the API) must not silently block every voice cast. A
+     *  present-but-<i>empty</i> set is different — it means the scan ran fine and the player
+     *  genuinely has nothing castable equipped, which the caller fails CLOSED on.
+     *
+     *  <p>"Actively equipped" matches Iron's Spells' own cast-time check: only main hand,
+     *  off hand, and Curios slots count. A spellbook sitting in the backpack (or even an
+     *  unselected hotbar slot) does NOT count — casting it would fail server-side with
+     *  "No spellbook or imbued weapon with X equipped," which would then leak through as a
+     *  ghost cast on the HUD streak/history. */
+    public static Optional<Set<String>> scan() {
         ensureReflection();
-        if (ironsAbsent) return Collections.emptySet();
+        if (ironsAbsent) return Optional.empty();
         Player p = Minecraft.getInstance().player;
-        if (p == null) return Collections.emptySet();
+        if (p == null) return Optional.empty();
         Set<String> out = new HashSet<>();
+        boolean reliable = true;
 
-        // Main hand, off hand, full hotbar + inventory. We scan everything reachable so a
-        // spellbook in slot 12 is still considered "owned" — matches server-side intent.
+        // Only the actively-held slots — main hand (current hotbar selection) + off hand.
+        // The rest of the hotbar / inventory is excluded so unequipped spellbooks can't
+        // trick the recognizer into dispatching a cast the server will reject.
         try {
-            for (int i = 0; i < p.getInventory().getContainerSize(); i++) {
-                ItemStack s = p.getInventory().getItem(i);
-                addSpellsFrom(s, out);
-            }
-            addSpellsFrom(p.getOffhandItem(), out);
+            addSpellsFrom(p.getMainHandItem(), out);
+            addSpellsFrom(p.getOffhandItem(),  out);
         } catch (Throwable t) {
-            VoiceSpells.LOGGER.debug("Inventory scan failed: {}", t.toString());
+            VoiceSpells.LOGGER.debug("Hand scan failed: {}", t.toString());
+            reliable = false;
         }
 
         // Curios slots (typically the dedicated spellbook slot).
@@ -141,9 +169,13 @@ public final class OwnedSpells {
                 }
             } catch (Throwable t) {
                 VoiceSpells.LOGGER.debug("Curios scan failed: {}", t.toString());
+                reliable = false;
             }
         }
-        return out;
+        // A reflection failure mid-scan means `out` may be missing a spellbook the player
+        // actually has equipped — treat the whole result as untrustworthy and fail open
+        // rather than risk rejecting a spell they own.
+        return reliable ? Optional.of(out) : Optional.empty();
     }
 
     private static void addSpellsFrom(ItemStack stack, Set<String> sink) {
@@ -179,7 +211,16 @@ public final class OwnedSpells {
     private static void addFromData(Object data, Set<String> sink) {
         if (data == null) return;
         try {
-            Object spell = getSpellFromData.invoke(data);
+            // getAllSpells() yields SpellSlot[] on current Iron's builds — a record wrapping a
+            // SpellData (+ slot index) — whereas getSpellAtIndex() hands back a SpellData directly.
+            // Peel the SpellData out of a SpellSlot before reading the spell; tolerate both shapes
+            // (older builds returning SpellData[] leave spellSlotClass null and fall straight through).
+            Object spellData = data;
+            if (spellSlotClass != null && spellSlotGetData != null && spellSlotClass.isInstance(data)) {
+                spellData = spellSlotGetData.invoke(data);
+                if (spellData == null) return; // empty slot
+            }
+            Object spell = getSpellFromData.invoke(spellData);
             if (spell == null) return;
             Object id = getSpellId.invoke(spell);
             if (id != null) {

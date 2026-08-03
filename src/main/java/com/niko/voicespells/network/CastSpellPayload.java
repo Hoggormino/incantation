@@ -34,14 +34,6 @@ public record CastSpellPayload(ResourceLocation spellId, float volumeScale,
         (s, v, total, streak) -> new CastSpellPayload(ResourceLocation.parse(s), v, total, streak)
     );
 
-    /** Convenience constructor for callers that don't care about the metric fields. */
-    public CastSpellPayload(ResourceLocation spellId) {
-        this(spellId, 1.0f, 0, 0);
-    }
-    public CastSpellPayload(ResourceLocation spellId, float volumeScale) {
-        this(spellId, volumeScale, 0, 0);
-    }
-
     @Override
     public Type<? extends CustomPacketPayload> type() {
         return TYPE;

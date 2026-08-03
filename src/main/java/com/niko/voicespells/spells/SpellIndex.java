@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * every enabled spell, derive a spoken phrase from each spell's resource path
  * (underscores become spaces), and expose:
  *   - {@link #getPhrases()} for building the Vosk grammar
- *   - {@link #lookup(String)} for resolving a heard phrase to a spell's
+ *   - {@link #lookupWithTier(String)} for resolving a heard phrase to a spell's
  *     ResourceLocation, which the server side then casts.
  *
  * Reflection lets us avoid compile-time coupling to Iron's Spells — convenient
@@ -55,6 +55,10 @@ public final class SpellIndex {
         // Words the small Vosk lexicon can't pronounce — give the recognizer something it can.
         ALIASES.put("wololo",       List.of("wo lo lo", "convert", "convert spell"));
         ALIASES.put("sculk",        List.of("skulk", "scull"));
+        // sculk_tentacles' path-derived phrase is the TWO-word "sculk tentacles", and the lookup
+        // is ALIASES.get(defaultPhrase) — so the bare "sculk" key above never fires for it. Key
+        // the alias by the full phrase. ("tentacles" is in-vocab; only "sculk" is the OOV word.)
+        ALIASES.put("sculk tentacles", List.of("skulk tentacles", "scull tentacles"));
         ALIASES.put("nullflare",    List.of("null flare", "no flare"));
     }
 
@@ -80,6 +84,36 @@ public final class SpellIndex {
     /** Re-index after a config change (customPhrases edited). Terse: one summary line. */
     public static void reindex() {
         index(false);
+    }
+
+    /**
+     * Read one of the client-only config lists, tolerating its absence.
+     *
+     * <p>{@code buildIndex} runs from {@code FMLCommonSetupEvent}, i.e. on both sides, but the
+     * CLIENT config spec is only registered when {@code FMLEnvironment.dist == Dist.CLIENT}.
+     * Calling {@code .get()} on a spec that was never registered throws
+     * {@code IllegalStateException: Cannot get config value before config is loaded}, which used
+     * to abort the whole index and leave every dedicated server with zero indexed spells plus an
+     * ERROR on each boot. These four lists (custom phrases, incantations, loadouts, blocked
+     * spells) are per-player personalisation with no server-side meaning, so an empty list is the
+     * correct answer on a server rather than a failure.
+     */
+    private static List<? extends String> clientList(
+            java.util.function.Function<com.niko.voicespells.VoiceSpellsConfig.Client,
+                                        List<? extends String>> getter) {
+        try {
+            com.niko.voicespells.VoiceSpellsConfig.Client c =
+                com.niko.voicespells.VoiceSpellsConfig.CLIENT;
+            if (c == null) return List.of();
+            List<? extends String> v = getter.apply(c);
+            return v == null ? List.of() : v;
+        } catch (IllegalStateException notLoaded) {
+            // Dedicated server (spec never registered), or called before config load.
+            return List.of();
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.debug("Client config list unavailable: {}", t.toString());
+            return List.of();
+        }
     }
 
     private static void index(boolean verbose) {
@@ -115,30 +149,15 @@ public final class SpellIndex {
         }
     }
 
-    /** Wired client-side at startup so {@link #getPhrases()} can ask "which spells does the
-     *  local player have?". Stays {@code null} on a dedicated server so this class can be
-     *  loaded without dragging in the client-only VoiceController chain. */
-    public static volatile java.util.function.Supplier<java.util.Set<String>> ownedSpellsSupplier;
-
     public static List<String> getPhrases() {
         Map<String, ResourceLocation> all = STATE.get().phraseToId;
-        // Optional restriction: only include phrases whose target spell id is in the
-        // currently-owned set. Supplier is wired on client init; on a dedicated server it stays
-        // null and we fall through to the full phrase set, which is the safe default.
-        java.util.Set<String> ownedFilter = null;
-        if (com.niko.voicespells.VoiceSpellsConfig.cRestrictToOwned && ownedSpellsSupplier != null) {
-            java.util.Set<String> owned = ownedSpellsSupplier.get();
-            if (owned != null && !owned.isEmpty()) ownedFilter = owned;
-        }
-        List<String> base;
-        if (ownedFilter == null) {
-            base = List.copyOf(all.keySet());
-        } else {
-            base = new java.util.ArrayList<>();
-            for (Map.Entry<String, ResourceLocation> e : all.entrySet()) {
-                if (ownedFilter.contains(e.getValue().toString())) base.add(e.getKey());
-            }
-        }
+        // The grammar stays BROAD — every registered spell phrase is in the Vosk grammar
+        // regardless of what the player has equipped. Narrowing to "owned" sounded sensible
+        // but in practice it makes Vosk grammar-force background noise into the few remaining
+        // phrases far too aggressively (1-2 spells in the grammar = ANY audio becomes one of
+        // them). The equipped-only restriction is enforced at dispatch time in VoiceController
+        // instead, so unowned spells still can't cast.
+        List<String> base = List.copyOf(all.keySet());
         boolean needsHF = com.niko.voicespells.VoiceSpellsConfig.cHandsFreeConfirm;
         boolean needsHotbar = com.niko.voicespells.VoiceSpellsConfig.cVoiceHotbarSelect;
         if (!needsHF && !needsHotbar) return base;
@@ -207,12 +226,8 @@ public final class SpellIndex {
 
     public record SpellRow(String id, String phrases) {}
 
-    public static Optional<ResourceLocation> lookup(String phrase) {
-        return lookupWithTier(phrase).map(LookupResult::id);
-    }
-
-    /** Same as {@link #lookup(String)} but reports the matching tier so callers can
-     *  surface "why it matched" diagnostics. */
+    /** Full resolution chain (exact → fuzzy → substring → phonetic), reporting the matching
+     *  tier so callers can surface "why it matched" diagnostics. */
     public static Optional<LookupResult> lookupWithTier(String phrase) {
         if (phrase == null) return Optional.empty();
         String norm = normalize(phrase);
@@ -301,25 +316,37 @@ public final class SpellIndex {
     }
 
     /**
-     * Find the longest grammar phrase that occurs as a whitespace-bounded substring of
-     * {@code input}. "Longest wins" protects against incidental short matches (e.g. picking
-     * "fire" when "fire ball" is also present).
+     * Find the spell phrase that occurs EARLIEST as a whitespace-bounded substring of
+     * {@code input}. Ties on start position resolve to the longer phrase, so "fire ball" still
+     * beats "fire" when both anchor at position 0.
+     *
+     * Earliest-wins matters because Vosk's grammar mode keeps producing tokens until the
+     * utterance ends — if the user says "sunbeam" and Vosk grammar-forces the tail audio
+     * into "thunderstorm", the heard text becomes "sunbeam ... thunderstorm". A longest-wins
+     * policy would pick the hallucinated "thunderstorm"; earliest-wins picks the real
+     * "sunbeam" the user actually said.
      */
     private static Optional<ResourceLocation> substringLookup(String input,
             Map<String, ResourceLocation> phrases) {
         String padded = " " + input + " ";
         ResourceLocation best = null;
+        int bestStart = Integer.MAX_VALUE;
         int bestLen = 0;
         for (Map.Entry<String, ResourceLocation> e : phrases.entrySet()) {
             String phrase = e.getKey();
-            if (phrase.length() <= bestLen) continue; // can only be better if longer
-            if (padded.contains(" " + phrase + " ")) {
+            int start = padded.indexOf(" " + phrase + " ");
+            if (start < 0) continue;
+            // Strictly earlier wins; same start → longer phrase wins (keeps "fire ball" >
+            // "fire" disambiguation when both anchor at the same position).
+            if (start < bestStart || (start == bestStart && phrase.length() > bestLen)) {
                 best = e.getValue();
+                bestStart = start;
                 bestLen = phrase.length();
             }
         }
         if (best != null) {
-            VoiceSpells.LOGGER.debug("Substring match in \"{}\" -> {}", input, best);
+            VoiceSpells.LOGGER.debug("Substring match in \"{}\" -> {} (at offset {})",
+                input, best, bestStart);
             return Optional.of(best);
         }
         return Optional.empty();
@@ -457,15 +484,11 @@ public final class SpellIndex {
         // (put, not putIfAbsent) so a user can re-point a phrase if they want. They're added to
         // the grammar like any other phrase, so Vosk will actively listen for them — the whole
         // point is to pick words the model can reliably hear for spells it otherwise can't.
-        applyPhraseList(phraseToId,
-            com.niko.voicespells.VoiceSpellsConfig.CLIENT.customPhrases.get(),
-            "custom phrase");
+        applyPhraseList(phraseToId, clientList(c -> c.customPhrases.get()), "custom phrase");
         // Flavor incantations use the same mechanism but a separate config list so users can
         // keep theatrical phrases ("by the power of fire") tidy and separate from technical
         // pronunciation aliases.
-        applyPhraseList(phraseToId,
-            com.niko.voicespells.VoiceSpellsConfig.CLIENT.incantations.get(),
-            "incantation");
+        applyPhraseList(phraseToId, clientList(c -> c.incantations.get()), "incantation");
         // Loadouts come after phrase overrides so loadout names land in the grammar; they're
         // resolved separately (LOADOUTS map) to pick the first castable spell at recognition time.
         applyLoadouts(phraseToId);
@@ -608,13 +631,6 @@ public final class SpellIndex {
         return path.replace('_', ' ').trim();
     }
 
-    /** Exact-only resolution: normalized phrase straight to the map, no fuzzy/substring. Used
-     *  for partial (mid-utterance) results, which are too noisy to run the lenient fallbacks
-     *  against without misfiring. */
-    public static Optional<ResourceLocation> lookupExact(String phrase) {
-        return lookupExactWithTier(phrase).map(LookupResult::id);
-    }
-
     /**
      * "Best guess" lookup for the alias-suggestion path — runs the full matcher chain with
      * relaxed thresholds regardless of the user's config knobs. Exists so the "Did you mean
@@ -639,17 +655,6 @@ public final class SpellIndex {
         if (phrase == null) return Optional.empty();
         ResourceLocation id = STATE.get().phraseToId.get(normalize(phrase));
         return id == null ? Optional.empty() : Optional.of(new LookupResult(id, 'E'));
-    }
-
-    /** Substring-only resolution with tier reporting ({@code S} on success). Skips fuzzy and
-     *  phonetic — they're too lenient for in-flight partials, where a half-spoken syllable
-     *  could falsely resolve to a different spell. Caller is responsible for honouring the
-     *  user's {@code substringMatch} toggle. */
-    public static Optional<LookupResult> lookupSubstringWithTier(String phrase) {
-        if (phrase == null) return Optional.empty();
-        String norm = normalize(phrase);
-        Map<String, ResourceLocation> phrases = STATE.get().phraseToId;
-        return substringLookup(norm, phrases).map(rid -> new LookupResult(rid, 'S'));
     }
 
     /** Trailing-suffix resolution for partials. Matches only if a known spell phrase is the

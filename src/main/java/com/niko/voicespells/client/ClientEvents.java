@@ -11,7 +11,9 @@ import net.minecraft.client.gui.LayeredDraw;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
@@ -47,26 +49,6 @@ public final class ClientEvents {
         "key.categories.voicespells"
     );
 
-    /** Toggle voice-macro recording. While recording, every dispatched cast is appended to
-     *  the macro buffer along with its relative timestamp. */
-    private static final KeyMapping TOGGLE_MACRO = new KeyMapping(
-        "key.voicespells.toggle_macro",
-        KeyConflictContext.IN_GAME,
-        InputConstants.Type.KEYSYM,
-        GLFW.GLFW_KEY_J,
-        "key.categories.voicespells"
-    );
-
-    /** Play the most recently recorded macro. Each step fires through the normal network
-     *  path, with the original inter-step delays preserved on a daemon thread. */
-    private static final KeyMapping PLAY_MACRO = new KeyMapping(
-        "key.voicespells.play_macro",
-        KeyConflictContext.IN_GAME,
-        InputConstants.Type.KEYSYM,
-        GLFW.GLFW_KEY_K,
-        "key.categories.voicespells"
-    );
-
     /** Quick-recast the most recently voice-cast spell. Lets the player chain a repeat cast
      *  without speaking the phrase a second time — useful for fast-cast spells where speech
      *  recognition latency would otherwise be a bottleneck. */
@@ -81,7 +63,26 @@ public final class ClientEvents {
     private ClientEvents() {}
 
     /** Called from {@link VoiceSpells} constructor on the client. */
-    public static void bootstrap(IEventBus modBus) {
+    /**
+     * Client-side wiring. Takes the {@link ModContainer} so the config-screen extension point is
+     * registered <i>here</i> rather than in the mod constructor.
+     *
+     * <p>That placement is load-bearing, not stylistic. {@code IConfigScreenFactory} is a
+     * functional interface whose method takes a {@code Screen}, so a lambda implementing it
+     * desugars into a synthetic method whose descriptor names {@code Screen}. If that lambda sits
+     * in the mod constructor, NeoForge's dist-aware class loader tries to resolve {@code Screen}
+     * while the constructor is being prepared — before any {@code FMLEnvironment.dist} check
+     * inside the body can run — and a dedicated server dies with "Attempted to load class
+     * net/minecraft/client/gui/screens/Screen for invalid dist DEDICATED_SERVER". A runtime
+     * {@code if} cannot guard a class-loading event that happens at method preparation time; only
+     * moving the reference into a class the server never touches can. This whole class is
+     * client-only and is reached from exactly one dist-guarded static call, so it is safe here.
+     */
+    public static void bootstrap(IEventBus modBus, ModContainer container) {
+        // "Config" button in Mods → Incantation opens our screen.
+        container.registerExtensionPoint(IConfigScreenFactory.class,
+            (c, parent) -> new VoiceSpellsConfigScreen(parent));
+
         modBus.addListener(ClientEvents::onClientSetup);
         modBus.addListener(ClientEvents::onRegisterGuiLayers);
         modBus.addListener(ClientEvents::onRegisterKeys);
@@ -93,7 +94,6 @@ public final class ClientEvents {
         // import graph so common/server code can be loaded on a dedicated server without
         // dragging in the client-only Minecraft GUI chain (fixes the 0.9.0 server crash).
         com.niko.voicespells.svc.VoiceSpellsVoicechatPlugin.micFrameSink = VoiceController::onMicFrame;
-        com.niko.voicespells.spells.SpellIndex.ownedSpellsSupplier = VoiceController::ownedSpellIds;
         com.niko.voicespells.VoiceSpellsConfig.themeApplier = () -> {
             com.niko.voicespells.VoiceSpellsConfig.Client c = com.niko.voicespells.VoiceSpellsConfig.CLIENT;
             Theme.applyPalette(c.uiPalette.get());
@@ -113,8 +113,6 @@ public final class ClientEvents {
         event.register(TOGGLE_LISTENING);
         event.register(TOGGLE_HUD);
         event.register(ACCEPT_SUGGESTION);
-        event.register(TOGGLE_MACRO);
-        event.register(PLAY_MACRO);
         event.register(QUICK_RECAST);
     }
 
@@ -202,27 +200,6 @@ public final class ClientEvents {
                                           : "text.voicespells.hud_off"),
                 true);
         }
-        while (TOGGLE_MACRO.consumeClick()) {
-            boolean nowRec = VoiceController.toggleMacroRecording();
-            mc.player.displayClientMessage(
-                Component.literal(nowRec
-                    ? "Voice macro: recording (cast spells, press J to stop)"
-                    : "Voice macro: stopped, " + VoiceController.macroStepCount()
-                        + " step(s) — press K to play"),
-                true);
-        }
-        while (PLAY_MACRO.consumeClick()) {
-            int n = VoiceController.macroStepCount();
-            if (n == 0) {
-                mc.player.displayClientMessage(
-                    Component.literal("Voice macro: empty (record one with J first)"),
-                    true);
-            } else {
-                VoiceController.playMacro();
-                mc.player.displayClientMessage(
-                    Component.literal("Voice macro: playing " + n + " step(s)"), true);
-            }
-        }
         while (QUICK_RECAST.consumeClick()) {
             String last = VoiceController.lastDispatchedSpellId();
             if (last == null || last.isEmpty()) {
@@ -259,7 +236,6 @@ public final class ClientEvents {
         static final Class<?> CMD;                // ClientMagicData
         static final java.lang.reflect.Method GET_COOLDOWNS;
         static final java.lang.reflect.Method IS_CASTING;
-        static volatile Class<?> COOLDOWNS_CLS;   // resolved lazily — depends on getPlayerCooldowns return
         static volatile java.lang.reflect.Method GET_PCT;        // (String) -> float
         static volatile java.lang.reflect.Method IS_ON_COOLDOWN; // (String) -> boolean fallback
         static volatile boolean cooldownReady = false;
@@ -339,7 +315,6 @@ public final class ClientEvents {
                     synchronized (IronsSpellsRefl.class) {
                         if (!IronsSpellsRefl.cooldownReady) {
                             Class<?> cls = cooldowns.getClass();
-                            IronsSpellsRefl.COOLDOWNS_CLS = cls;
                             for (String m : new String[]{ "getCooldownPercent", "getCurrentCooldownPercent" }) {
                                 try { IronsSpellsRefl.GET_PCT = cls.getMethod(m, String.class); break; }
                                 catch (NoSuchMethodException ignored) {}
@@ -450,7 +425,7 @@ public final class ClientEvents {
             boolean isBottom = (corner == VoiceSpellsConfig.Corner.BOTTOM_LEFT
                              || corner == VoiceSpellsConfig.Corner.BOTTOM_RIGHT);
 
-            drawToastIfActive(g, font, anchorX, anchorY, isBottom);
+            drawToastIfActive(g, font, anchorX, anchorY);
 
             // History strip — older casts trail the most recent cast toast in a stack that
             // fades out individually. The freshest history entry is the same as the cast
@@ -525,8 +500,7 @@ public final class ClientEvents {
             }
         }
 
-        private static void drawToastIfActive(GuiGraphics g, Font font, int anchorX, int anchorY,
-                                              boolean placeAbove) {
+        private static void drawToastIfActive(GuiGraphics g, Font font, int anchorX, int anchorY) {
             String spell = VoiceController.lastCastDisplay();
             long castTime = VoiceController.lastCastNanos();
             if (spell == null || spell.isEmpty() || castTime == 0L) return;
@@ -553,9 +527,7 @@ public final class ClientEvents {
             if (streak >= 2) text += "  ×" + streak; // chained casts get a streak badge
             int textW = font.width(text);
             int toastW = PAD_X + textW + PAD_X;
-            // With no persistent chip beneath us, the toast can sit right at the anchor — no
-            // need to nudge it above or below. placeAbove is still respected for users who
-            // want a top-anchored layout to flow downward.
+            // With no persistent chip beneath us, the toast sits right at the anchor.
             int toastX = anchorX;
             int toastY = anchorY;
 
@@ -706,14 +678,6 @@ public final class ClientEvents {
             int origA = (argb >>> 24) & 0xFF;
             int newA = Math.max(0, Math.min(255, Math.round(origA * alpha)));
             return (newA << 24) | (argb & 0x00FFFFFF);
-        }
-
-        private static int scaleBrightness(int argb, float factor) {
-            int a = (argb >>> 24) & 0xFF;
-            int r = Math.max(0, Math.min(255, Math.round(((argb >> 16) & 0xFF) * factor)));
-            int gC = Math.max(0, Math.min(255, Math.round(((argb >> 8) & 0xFF) * factor)));
-            int b = Math.max(0, Math.min(255, Math.round((argb & 0xFF) * factor)));
-            return (a << 24) | (r << 16) | (gC << 8) | b;
         }
 
         /** Streamer-safe display: keep the word/letter count so the chip width feels stable,

@@ -219,16 +219,6 @@ public final class Theme {
         g.fill(x + w - 2, y + h - 2, x + w - 1, y + h - 1, color); // br
     }
 
-    /** Neon rounded frame — the border itself glows softly. Use for focused / important
-     *  panels. The outer halo pulses; the inner crisp line does not. */
-    public static void neonFrame(GuiGraphics g, int x, int y, int w, int h) {
-        // Outer halo (one pixel outside the frame), pulsed.
-        int halo = withPulsedAlpha((C_ACCENT & 0x00FFFFFF), 0.10f, 0.22f);
-        roundedFrame(g, x - 1, y - 1, w + 2, h + 2, halo);
-        // Crisp inner edge.
-        roundedFrame(g, x, y, w, h, C_ACCENT);
-    }
-
     /** Header band with a top-to-bottom gradient — quiet elevation. */
     public static void headerBand(GuiGraphics g, int x, int y, int w, int h) {
         g.fillGradient(x, y, x + w, y + h, C_HEADER_T, C_HEADER_B);
@@ -247,16 +237,6 @@ public final class Theme {
         g.fill(x, y + 1, x + w, y + 2, C_ACCENT_SOFT);    // soft below
         g.fill(x, y + 2, x + w, y + 3, C_ACCENT_FAINT);   // dim below
         g.fill(x, y + 3, x + w, y + 4, outer);            // outer halo (pulsed)
-    }
-
-    /** Neon glow halo around any rectangle. Use for hover/focus highlights. */
-    public static void neonHalo(GuiGraphics g, int x, int y, int w, int h) {
-        int halo = withPulsedAlpha((C_ACCENT & 0x00FFFFFF), 0.08f, 0.18f);
-        // Halo lines just outside the rect, top/bottom/left/right.
-        g.fill(x - 1, y - 1, x + w + 1, y,         halo);
-        g.fill(x - 1, y + h, x + w + 1, y + h + 1, halo);
-        g.fill(x - 1, y,     x,         y + h,     halo);
-        g.fill(x + w, y,     x + w + 1, y + h,     halo);
     }
 
     /** Inset shadow — 1px darker line at the top of a recessed surface so it reads as

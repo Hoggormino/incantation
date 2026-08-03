@@ -63,7 +63,7 @@ public final class VoiceController {
     private static volatile long lastLoudFrameNanos = 0L;
     /** How long the noise gate stays open after the last loud frame. Generous enough to span
      *  phoneme transitions in slow speech without re-opening for stray noise. */
-    private static final long NOISE_GATE_STICKY_NANOS = 600_000_000L; // 600ms
+    private static final long NOISE_GATE_STICKY_NANOS = 450_000_000L; // 450ms
 
     // ---- Auto-calibration -------------------------------------------------------------
     /** Running calibration state. Engaged via {@link #startNoiseGateCalibration()}; the
@@ -145,19 +145,14 @@ public final class VoiceController {
         return (System.nanoTime() - lastMovementNanos) > VoiceSpellsConfig.cAfkNanos;
     }
 
-    /** Was the player recently in combat? Uses vanilla's {@code getLastHurtByMobTimestamp}
-     *  plus our own client-side "dealt damage" timestamp. */
-    private static volatile long lastDealtDamageNanos = 0L;
-    public static void noteDealtDamage() { lastDealtDamageNanos = System.nanoTime(); }
+    /** Was the player recently in combat? Uses vanilla's {@code getLastHurtByMobTimestamp},
+     *  set whenever a mob last hurt the player (~10s window). */
     private static boolean isInCombat() {
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         if (mc.player == null || mc.player.level() == null) return false;
         long nowTicks = mc.player.level().getGameTime();
         long lastHurtTick = mc.player.getLastHurtByMobTimestamp();
-        boolean hurtRecently = lastHurtTick > 0 && (nowTicks - lastHurtTick) < 200; // 10s
-        boolean dealtRecently = lastDealtDamageNanos > 0
-            && (System.nanoTime() - lastDealtDamageNanos) < 10_000_000_000L;
-        return hurtRecently || dealtRecently;
+        return lastHurtTick > 0 && (nowTicks - lastHurtTick) < 200; // hurt within ~10s
     }
 
     /** Rolling history of recent audio levels for the debug-monitor waveform. Sampled at ~20Hz
@@ -199,15 +194,21 @@ public final class VoiceController {
      *  boundary. We drop duplicates of the same spell within a window (configurable via
      *  recognition.dedupMillis) so each "say it once" yields exactly one cast.
      *
-     *  Two anchors are kept:
-     *  - {@code lastDispatchedNanos} is sliding — pushed forward on every dedup hit. Combined
-     *    with {@code cDedupNanos} it forms the "no events within X ms" sliding window.
-     *  - {@code lastDispatchedFirstNanos} is anchored to the original dispatch and used by
-     *    the echo lockout below — a hard "absolute" window where same-spell repeats are
-     *    dropped no matter how spread out the events are.
-     *  The echo lockout catches the failure mode the sliding window misses: a slow Vosk
-     *  emission where partial → final spans longer than cDedupNanos, which would otherwise
-     *  produce a second dispatch (visible as the "cast registers as 2" bug).
+     *  Two anchors are kept, and <b>both are only ever written on a real dispatch</b> — never on
+     *  a suppressed repeat:
+     *  - {@code lastDispatchedNanos} is the time of the last actual dispatch. With
+     *    {@code cDedupNanos} it forms a fixed window that always lapses that long after the
+     *    cast happened.
+     *  - {@code lastDispatchedFirstNanos} anchors the echo lockout — a hard absolute window in
+     *    which same-spell repeats are dropped no matter how spread out the events are.
+     *  Slow Vosk emissions where partial → final spans longer than either window are handled by
+     *  {@link #lastDispatchedUtterance} instead, which compares utterance identity rather than
+     *  elapsed time and so cannot be defeated by timing at all.
+     *
+     *  <p>{@code lastDispatchedNanos} deliberately does <b>not</b> slide on suppressed repeats.
+     *  It used to, and that made the window self-perpetuating under a continuously open mic:
+     *  the same spell could never be cast twice in a row, only "unlocked" by saying a different
+     *  spell first.
      */
     private static volatile String lastDispatchedSpellId    = "";
     private static volatile long   lastDispatchedNanos      = 0L;
@@ -240,69 +241,6 @@ public final class VoiceController {
     public record RecognitionEvent(long nanoTime, String heard, String matched,
                                     double confidence, char tier) {}
 
-    // ---------- Voice macro recorder ---------------------------------------------------
-    /** A single step in a recorded macro: the spell id and the relative time (millis since
-     *  recording started) at which it should fire on playback. */
-    public record MacroStep(ResourceLocation spellId, long relativeMs) {}
-    private static volatile boolean macroRecording = false;
-    private static volatile long    macroStartNanos = 0L;
-    private static final java.util.List<MacroStep> MACRO = new java.util.ArrayList<>();
-
-    public static boolean isMacroRecording() { return macroRecording; }
-    public static int macroStepCount() {
-        synchronized (MACRO) { return MACRO.size(); }
-    }
-
-    /** Toggle macro recording. When stopping, leaves the recorded steps in place for later
-     *  playback (until a new recording starts and clears them). */
-    public static boolean toggleMacroRecording() {
-        if (macroRecording) {
-            macroRecording = false;
-        } else {
-            synchronized (MACRO) { MACRO.clear(); }
-            macroStartNanos = System.nanoTime();
-            macroRecording = true;
-        }
-        return macroRecording;
-    }
-
-    /** Play back the recorded macro on a daemon thread, sleeping between steps so the
-     *  original timing is preserved. Each step's CastSpellPayload goes through the normal
-     *  network path — server-side validation, rate-limit, advancement trigger all apply. */
-    public static void playMacro() {
-        java.util.List<MacroStep> snapshot;
-        synchronized (MACRO) { snapshot = new java.util.ArrayList<>(MACRO); }
-        if (snapshot.isEmpty()) return;
-        Thread t = new Thread(() -> {
-            long start = System.nanoTime();
-            for (MacroStep step : snapshot) {
-                long targetNs = start + step.relativeMs * 1_000_000L;
-                long wait = (targetNs - System.nanoTime()) / 1_000_000L;
-                if (wait > 0) {
-                    try { Thread.sleep(wait); }
-                    catch (InterruptedException ie) { Thread.currentThread().interrupt(); return; }
-                }
-                int total = VoiceStats.totalCasts();
-                int streak = currentStreak();
-                Minecraft.getInstance().execute(() -> {
-                    SpellSelector.select(step.spellId());
-                    PacketDistributor.sendToServer(new CastSpellPayload(
-                        step.spellId(), 1.0f, total, streak));
-                });
-            }
-        }, "VoiceSpells-Macro-Play");
-        t.setDaemon(true);
-        t.start();
-    }
-
-    /** Append the just-dispatched spell to the macro if recording is on. Called from the
-     *  dispatch path right after we've committed to the cast. */
-    private static void macroRecord(ResourceLocation spellId) {
-        if (!macroRecording) return;
-        long delay = (System.nanoTime() - macroStartNanos) / 1_000_000L;
-        synchronized (MACRO) { MACRO.add(new MacroStep(spellId, delay)); }
-    }
-
     /** One entry per successfully dispatched cast, for the rolling HUD history strip. */
     public record HistoryEntry(String display, long nanoTime) {}
     private static final int HISTORY_MAX = 3;
@@ -315,7 +253,6 @@ public final class VoiceController {
     private static final long STREAK_TIMEOUT_NANOS = 30L * 1_000_000_000L; // 30s of silence resets
 
     public static int  castStreak()      { return currentStreak(); }
-    public static long lastStreakNanos() { return lastStreakNanos; }
 
     /** Recompute the current effective streak — folds in the "timeout reset" so accessors
      *  don't have to do it themselves. */
@@ -389,8 +326,6 @@ public final class VoiceController {
         if (raw.length() <= 80) return raw;
         return raw.substring(raw.length() - 80);
     }
-    public static boolean isLoading() { return loading.get(); }
-    public static boolean isListeningEnabled() { return listeningEnabled; }
     public static boolean isHudVisible() { return hudVisible; }
     public static float   audioLevel() { return audioLevel; }
     public static String  lastCastDisplay() { return lastCastDisplay; }
@@ -506,12 +441,12 @@ public final class VoiceController {
         return hudVisible;
     }
 
-    /** Kick off Vosk model loading off the main thread. Safe to call multiple times. */
+    /** Kick off model loading off the main thread. Safe to call multiple times. */
     public static void preloadAsync() {
         if (session != null) return;
         if (!loading.compareAndSet(false, true)) return;
         statusLine = "LOADING";
-        new Thread(VoiceController::loadModel, "VoiceSpells-Vosk-Loader").start();
+        new Thread(VoiceController::loadModel, "VoiceSpells-Engine-Loader").start();
     }
 
     /** Called from {@code VoiceSpellsVoicechatPlugin} on every SVC mic frame, including empty
@@ -519,7 +454,7 @@ public final class VoiceController {
     public static void onMicFrame(short[] pcm) {
         if (!listeningEnabled) return;
         if (pcm.length == 0) {
-            // End of SVC transmission — flush so any pending utterance produces a final result.
+            // End of SVC transmission — flush so the pending utterance produces a final result.
             VoskSession s = session;
             if (s != null) {
                 Thread t = new Thread(() -> { s.flush(); s.reset(); }, "VoiceSpells-Flush");
@@ -541,15 +476,11 @@ public final class VoiceController {
         sampleCalibration(rms);
         VoskSession s = session;
         if (s != null) {
-            // Noise gate: skip frames quieter than the configured RMS floor. Vosk's
-            // grammar-restricted mode forces ANY incoming audio into the closest grammar
-            // phrase, so feeding it silence / breath / SVC tail produces phantom casts.
+            // Noise gate: skip frames quieter than the configured RMS floor — Vosk's grammar-
+            // restricted mode otherwise hallucinates phrases out of silence/breath.
             //
-            // BUT — a flat per-frame gate kills mid-word phoneme transitions where the RMS
-            // momentarily dips. Make the gate STICKY: once we see a loud frame, keep feeding
-            // for {@link #NOISE_GATE_STICKY_NANOS} after, so brief quiet beats between
-            // syllables ride through. The gate only fully closes after a sustained quiet
-            // period.
+            // The gate is sticky: once a loud frame arrives it stays open for
+            // NOISE_GATE_STICKY_NANOS so mid-word phoneme dips don't sever the utterance.
             if (rms >= VoiceSpellsConfig.cNoiseGateRms) {
                 lastLoudFrameNanos = now;
             }
@@ -560,7 +491,7 @@ public final class VoiceController {
             s.feed(pcm);
             return;
         }
-        // First frame and the model isn't loaded yet — kick that off so we're ready for next time.
+        // First frame and the engine isn't loaded yet — kick that off so we're ready for next time.
         if (SpellIndex.isReady()) preloadAsync();
     }
 
@@ -587,6 +518,7 @@ public final class VoiceController {
      */
     public static void onConfigChanged() {
         SpellIndex.reindex();
+        SpellInfo.clearCache(); // drop cached display names so spell renames / aliases re-resolve
         VoskSession s = session;
         if (s != null) {
             Thread t = new Thread(() -> s.rebuildGrammar(SpellIndex.getPhrases()),
@@ -740,70 +672,51 @@ public final class VoiceController {
      *  {@link #refreshOwnedSpellsIfDue()} every ~1s when restrictToOwned is on. Reads are
      *  lock-free volatile; the set instance is replaced atomically when the scan finishes. */
     private static volatile java.util.Set<String> ownedSpellIds = java.util.Set.of();
+    /** Whether the most recent owned-spell scan produced trustworthy data. Starts false and
+     *  flips true only after a successful scan. When false the equipped-only gate fails OPEN —
+     *  a permanent Iron's reflection break (or the pre-first-scan startup window) must not
+     *  silently block every voice cast. The server-side cast check remains authoritative. */
+    private static volatile boolean ownedScanReliable = false;
     private static long lastOwnedScanNanos    = 0L;
-    /** Nanos at which the owned set last changed. Used to debounce grammar rebuilds — we
-     *  only rebuild after the set has been stable for {@link #OWNED_STABLE_NANOS}, so a
-     *  player rapidly cycling through hotbar slots doesn't thrash the Vosk recognizer. */
-    private static long ownedChangedAtNanos   = 0L;
     private static int  lastOwnedSignature    = 0;
-    private static int  lastRebuiltSignature  = 0;
     private static final long OWNED_SCAN_INTERVAL_NANOS = 1_000_000_000L; // 1s
-    private static final long OWNED_STABLE_NANOS        = 1_500_000_000L; // 1.5s
-
-    public static java.util.Set<String> ownedSpellIds() { return ownedSpellIds; }
 
     /**
-     * Periodic owned-spell scan + debounced grammar rebuild. Called from the client tick. When
-     * the player picks up / swaps a spellbook the Vosk grammar narrows or widens accordingly
-     * within ~2.5s (1s scan interval + 1.5s stability debounce).
+     * Periodic owned-spell scan. Called from the client tick. The owned set is consumed by the
+     * dispatch-time equipped-only gate; it no longer drives a Vosk grammar rebuild (the grammar
+     * stays broad to keep noise-mapping diluted across the full registry).
      */
     public static void refreshOwnedSpellsIfDue() {
         if (!VoiceSpellsConfig.cRestrictToOwned) {
-            // Feature off — clear the cache so the SpellIndex falls back to the full registry
-            // immediately rather than holding a stale filter. Trigger a rebuild only if we
-            // previously had a non-empty owned set in use.
-            if (!ownedSpellIds.isEmpty()) {
+            // Feature off — clear the cache and drop reliability so a later re-enable starts
+            // clean (fails open until its first fresh scan rather than reusing stale data).
+            if (!ownedSpellIds.isEmpty() || ownedScanReliable) {
                 ownedSpellIds = java.util.Set.of();
                 lastOwnedSignature = 0;
-                triggerGrammarRebuild();
+                ownedScanReliable = false;
             }
             return;
         }
         long now = System.nanoTime();
-        if (now - lastOwnedScanNanos < OWNED_SCAN_INTERVAL_NANOS) {
-            // Not due for a scan yet — but still check whether a previous change has
-            // stabilised long enough to trigger the rebuild.
-            maybeRebuildAfterStability(now);
+        if (now - lastOwnedScanNanos < OWNED_SCAN_INTERVAL_NANOS) return;
+        lastOwnedScanNanos = now;
+        java.util.Optional<java.util.Set<String>> result =
+            com.niko.voicespells.spells.OwnedSpells.scan();
+        if (result.isEmpty()) {
+            // Couldn't scan reliably this tick (player not loaded yet, Iron's reflection
+            // unavailable, or a reflection mismatch). Mark the owned data UNRELIABLE so the
+            // dispatch gate fails OPEN — better a rare ghost HUD entry than every cast blocked.
+            // Leave the last-known set untouched so a one-tick blip doesn't thrash the cache.
+            ownedScanReliable = false;
             return;
         }
-        lastOwnedScanNanos = now;
-        java.util.Set<String> fresh = com.niko.voicespells.spells.OwnedSpells.scan();
+        ownedScanReliable = true;
+        java.util.Set<String> fresh = result.get();
         int sig = fresh.hashCode(); // HashSet.hashCode is stable across iterations
         if (sig != lastOwnedSignature) {
             ownedSpellIds = fresh;
             lastOwnedSignature = sig;
-            ownedChangedAtNanos = now;
         }
-        maybeRebuildAfterStability(now);
-    }
-
-    private static void maybeRebuildAfterStability(long now) {
-        if (lastOwnedSignature == lastRebuiltSignature) return;
-        if (ownedChangedAtNanos == 0L) return;
-        if (now - ownedChangedAtNanos < OWNED_STABLE_NANOS) return;
-        lastRebuiltSignature = lastOwnedSignature;
-        triggerGrammarRebuild();
-    }
-
-    private static void triggerGrammarRebuild() {
-        VoskSession s = session;
-        if (s == null) return;
-        // Rebuild on a worker thread — constructing a new Recognizer can take 100s of ms
-        // depending on grammar size, and we don't want to stall the client tick.
-        Thread t = new Thread(() -> s.rebuildGrammar(SpellIndex.getPhrases()),
-            "VoiceSpells-OwnedSet-Rebuild");
-        t.setDaemon(true);
-        t.start();
     }
 
     /**
@@ -822,6 +735,17 @@ public final class VoiceController {
             return;
         }
         if (isClientCasting()) return; // still casting — wait it out
+        // Equipped-only check at drain time too — the player may have unequipped the spell
+        // while it was sitting in the queue. Only enforced when the last scan was reliable
+        // (ownedScanReliable); an unreadable scan fails open here just like the dispatch gate.
+        if (VoiceSpellsConfig.cRestrictToOwned && ownedScanReliable) {
+            java.util.Set<String> owned = ownedSpellIds;
+            if (!owned.contains(entry.id().toString())) {
+                synchronized (CAST_QUEUE) { CAST_QUEUE.pollFirst(); }
+                logRecog("Queued {} dropped — no longer equipped", entry.id());
+                return;
+            }
+        }
         synchronized (CAST_QUEUE) {
             CAST_QUEUE.pollFirst();
         }
@@ -892,26 +816,26 @@ public final class VoiceController {
                 statusLine = "ERROR no spells indexed";
                 return;
             }
-            // User-overridable model path; falls back to the default config/voicespells/model.
-            String override = VoiceSpellsConfig.CLIENT.modelPath.get();
-            Path modelPath = (override == null || override.isBlank())
-                ? VoskSession.defaultModelPath()
-                : Path.of(override.trim());
+            loadVosk();
+        } finally {
+            loading.set(false);
+        }
+    }
+
+    private static void loadVosk() {
+        // User-overridable model path; falls back to the default config/voicespells/model.
+        String override = VoiceSpellsConfig.CLIENT.modelPath.get();
+        Path modelPath = (override == null || override.isBlank())
+            ? VoskSession.defaultModelPath()
+            : Path.of(override.trim());
+        try {
             if (!com.niko.voicespells.speech.ModelDownloader.looksLikeModel(modelPath)) {
                 statusLine = "DOWNLOADING model…";
                 boolean ok = com.niko.voicespells.speech.ModelDownloader.ensureModel(
                     modelPath, pct -> statusLine = "DOWNLOADING model " + pct + "%");
                 if (!ok) {
                     statusLine = "ERROR no Vosk model — see chat";
-                    Minecraft mc = Minecraft.getInstance();
-                    mc.execute(() -> {
-                        if (mc.player != null) {
-                            mc.player.displayClientMessage(
-                                Component.translatable("text.voicespells.model_missing",
-                                    modelPath.toAbsolutePath().toString()),
-                                false);
-                        }
-                    });
+                    notifyModelMissing(modelPath);
                     return;
                 }
             }
@@ -926,18 +850,20 @@ public final class VoiceController {
         } catch (Throwable t) {
             VoiceSpells.LOGGER.error("Vosk load failed: {}", t.toString());
             statusLine = "ERROR no Vosk model — see chat";
-            Minecraft mc = Minecraft.getInstance();
-            mc.execute(() -> {
-                if (mc.player != null) {
-                    mc.player.displayClientMessage(
-                        Component.translatable("text.voicespells.model_missing",
-                            VoskSession.defaultModelPath().toAbsolutePath().toString()),
-                        false);
-                }
-            });
-        } finally {
-            loading.set(false);
+            notifyModelMissing(modelPath);
         }
+    }
+
+    private static void notifyModelMissing(Path modelPath) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (mc.player != null) {
+                mc.player.displayClientMessage(
+                    Component.translatable("text.voicespells.model_missing",
+                        modelPath.toAbsolutePath().toString()),
+                    false);
+            }
+        });
     }
 
     /**
@@ -1097,6 +1023,23 @@ public final class VoiceController {
         String spellKey = spellId.toString();
         long now = System.nanoTime();
 
+        // Equipped-only hard gate. When cRestrictToOwned is on AND the last scan produced
+        // trustworthy data (ownedScanReliable), the spell MUST be in the actively-equipped set
+        // (main hand / off hand / curios) or we reject it — a reliable-but-empty set means the
+        // player is holding nothing castable, so every dispatch is rejected, keeping unowned
+        // phrases off the HUD streak/history. When the scan can't run reliably (Iron's
+        // reflection unavailable, or before the first scan completes) we fail OPEN instead: a
+        // permanent reflection break must not silently block every cast, and the server-side
+        // cast check is the real authority anyway.
+        if (VoiceSpellsConfig.cRestrictToOwned && ownedScanReliable) {
+            java.util.Set<String> owned = ownedSpellIds;
+            if (!owned.contains(spellKey)) {
+                recordEvent(phrase, spellKey + " (not equipped)", confidence, matchTier);
+                logRecog("Heard '{}' but {} is not equipped", phrase, spellId);
+                return;
+            }
+        }
+
         // Per-spell confidence override — relaxes (or tightens) the global gate for individual
         // spells. Only relevant on finals (partials already passed lookupExact, no fuzzy noise).
         if (isFinal && !VoiceSpellsConfig.cPerSpellConfidence.isEmpty()) {
@@ -1152,14 +1095,50 @@ public final class VoiceController {
             // exceed the configured echo lockout). Time-based gates still cover the case
             // where Vosk re-emits a "tail" event right after a final.
             if (sameUtterance || inSlidingWindow || inEchoLockout) {
-                lastDispatchedNanos = now;
+                // Deliberately do NOT push lastDispatchedNanos forward here. It used to slide on
+                // every suppressed repeat, which starved the window: grammar-mode Vosk force-fits
+                // ambient noise onto the nearest in-grammar phrase, so with an open or
+                // voice-activated mic the same spell kept re-arming the window and could never be
+                // cast a second time. The only escape was to say a *different* spell, which
+                // rewrites lastDispatchedSpellId — exactly the "I have to cast something else in
+                // between" bug players reported. The window is now measured from the real
+                // dispatch, so it always lapses cDedupNanos after the cast actually happened.
+                // Nothing is lost: sameUtterance already catches a slow partial→final span
+                // exactly (by identity, not by timing), and inEchoLockout still bounds repeats
+                // absolutely from lastDispatchedFirstNanos.
                 return;
             }
         }
         // Cast queue: if a long-cast is on the bar, park this for the tick drainer instead of
         // dispatching now (which would either be canceled server-side by the isCasting check or
-        // — worse — interrupt the current cast). One-slot queue, most recent wins.
+        // — worse — interrupt the current cast). Most recent wins on overflow.
         if (isClientCasting()) {
+            // Multi-cast / long-channel spells take a few hundred ms to complete; during that
+            // time SVC's tail audio + the user's own continued vocalisation keep getting grammar-
+            // forced into the same spell shape, and without this guard each repeat would stack
+            // in the queue and fire again the moment the cast finishes. Block:
+            //   - same spell as the one we just dispatched (lastDispatchedSpellId), and
+            //   - same spell that's already sitting in the queue.
+            // Different spells chain freely, which is the actual "queue the next intent" feature.
+            boolean sameAsLastDispatch = spellKey.equals(lastDispatchedSpellId);
+            boolean alreadyQueued;
+            synchronized (CAST_QUEUE) {
+                alreadyQueued = false;
+                for (QueueEntry e : CAST_QUEUE) {
+                    if (e.id().equals(spellId)) { alreadyQueued = true; break; }
+                }
+            }
+            if (sameAsLastDispatch || alreadyQueued) {
+                // No window slide here either — isClientCasting() plus these two checks already
+                // block the tail for as long as the cast is actually in flight. Sliding on top of
+                // that leaked the block past the end of the cast: every suppressed tail event
+                // re-armed the dedup window, so a spell with a long channel time could stay
+                // un-recastable well after it finished.
+                recordEvent(phrase, spellKey + " (already in flight)", confidence, matchTier);
+                logRecog("Heard '{}' but {} is already casting/queued — dropped",
+                    phrase, spellId);
+                return;
+            }
             synchronized (CAST_QUEUE) {
                 int max = Math.max(1, VoiceSpellsConfig.cCastQueueSize);
                 while (CAST_QUEUE.size() >= max) {
@@ -1192,7 +1171,6 @@ public final class VoiceController {
         lastDispatchedUtterance  = utteranceId;
         lastHeard       = phrase;
         lastCastDisplay = displayNameFor(spellId);
-        macroRecord(spellId);
         lastCastNanos   = now;
         lastCastSchool  = SpellInfo.of(spellKey).school;
         bumpStreak(now);

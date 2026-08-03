@@ -23,9 +23,9 @@ your PC.
 
 - **Speak any indexed spell** — works with Iron's Spells, all its addons, and any mod that
   registers spells through Iron's API.
-- **Owned-spell restriction** *(default ON)* — Vosk's grammar dynamically narrows to the
-  spells in your Curios slot, hands, and hotbar. Swap spellbooks and the grammar refreshes
-  within ~2 seconds.
+- **Owned-spell restriction** *(default ON)* — only spells you actually have equipped (Curios
+  spellbook slot, main hand, off hand) will cast, matching Iron's Spells' own equipped check,
+  so a book sitting in your backpack can't fire a spell the server would reject anyway.
 - **Imbued weapons supported** — hold an imbued sword or staff, say the spell it carries,
   it casts via the same mechanism as right-clicking.
 - **HUD chip** — corner-anchored chip showing last cast, queued spells, miss toast, "did
@@ -41,9 +41,14 @@ your PC.
   anything. Useful for tuning aliases or learning a tricky spell's pronunciation.
 - **Welcome wizard** on first launch — walks you through mic + model + first cast.
 - **Aliases & custom phrases** — bind words the model can pronounce to any spell id.
+- **Play in your own language** — `config/voicespells/phrasebook.json` is generated with every
+  installed spell and an editable `override` field, so you can translate the whole spell list in
+  one file instead of adding aliases one at a time. Your overrides survive updates, and newly
+  installed spells are appended automatically. Speaking a language other than English also needs
+  a matching [Vosk model](https://alphacephei.com/vosk/models) — Vosk can only hear words that
+  are in the loaded model's lexicon.
 - **Loadout shortcuts** — say one word, cast the first castable spell from a list (cooldown
   + mana aware).
-- **Macros** — record a cast sequence, replay it with one keybind.
 - **Voice commands** — `spell one`…`spell nine` switches the spellbook slot without casting;
   `yes`/`no` controls the cast queue.
 - **Server-side controls** — per-player whitelist, blocklist, rate limit, broadcast-nearby,
@@ -61,7 +66,7 @@ your PC.
 
 ## Setup
 
-1. Drop `incantation-0.9.0.jar` in your `mods/` folder alongside SVC and Iron's Spells.
+1. Drop `incantation-0.9.4.jar` in your `mods/` folder alongside SVC and Iron's Spells.
 2. Grab a Vosk model from [alphacephei.com/vosk/models](https://alphacephei.com/vosk/models)
    — `vosk-model-small-en-us-0.15.zip` is plenty for vanilla spell names.
 3. Unzip and copy the **contents** of that folder into `config/voicespells/model/` so you

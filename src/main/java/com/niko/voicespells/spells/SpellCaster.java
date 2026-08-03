@@ -74,14 +74,6 @@ public final class SpellCaster {
         }
     }
 
-    /** Back-compat overload — callers that don't have a volume sample just pass 1.0f. */
-    public static boolean cast(ServerPlayer player, ResourceLocation spellId) {
-        return cast(player, spellId, 1.0f, 0, 0);
-    }
-    public static boolean cast(ServerPlayer player, ResourceLocation spellId, float volumeScale) {
-        return cast(player, spellId, volumeScale, 0, 0);
-    }
-
     public static boolean cast(ServerPlayer player, ResourceLocation spellId,
                                 float volumeScale, int totalCasts, int streak) {
         // Per-player whitelist gate — empty list = everyone allowed; otherwise must match the
@@ -303,8 +295,27 @@ public final class SpellCaster {
             feedback(player, "voicespells.cast.no_iron_spells");
             return false;
         } catch (Throwable t) {
-            VoiceSpells.LOGGER.error("Cast failed for {}", spellId, t);
-            feedback(player, "voicespells.cast.error", t.getClass().getSimpleName());
+            // Everything above runs through reflection, so anything thrown inside Iron's Spells —
+            // or inside another mod's mixin on attemptInitiateCast — arrives wrapped in an
+            // InvocationTargetException. Reporting the wrapper told the player literally nothing
+            // ("Cast Error: InvocationTargetException") and hid which mod actually failed; one
+            // reported instance took weeks to trace to a third-party addon. Unwrap to the real
+            // cause for both the log and the on-screen message.
+            Throwable cause = t;
+            while (cause instanceof java.lang.reflect.InvocationTargetException
+                    && cause.getCause() != null) {
+                cause = cause.getCause();
+            }
+            VoiceSpells.LOGGER.error("Cast failed for {} — {}: {}", spellId,
+                cause.getClass().getName(), cause.getMessage(), cause);
+            VoiceSpells.LOGGER.error(
+                "If the class above belongs to another mod, this is a conflict in that mod's "
+                + "hook on Iron's Spells' cast path, not in Incantation itself.");
+            String detail = cause.getMessage() == null || cause.getMessage().isBlank()
+                ? cause.getClass().getSimpleName()
+                : cause.getClass().getSimpleName() + ": " + cause.getMessage();
+            if (detail.length() > 90) detail = detail.substring(0, 90) + "…";
+            feedback(player, "voicespells.cast.error", detail);
             return false;
         }
     }
@@ -643,8 +654,6 @@ public final class SpellCaster {
         SUBSCRIBERS.add(uuid);
         return true;
     }
-    public static boolean isSubscribed(java.util.UUID uuid) { return SUBSCRIBERS.contains(uuid); }
-
     /** Highest total-cast count we've seen reported per player, used by /voicespells top. The
      *  count is sent by the client in {@link com.niko.voicespells.network.CastSpellPayload}
      *  and reflects the player's lifetime stats from their local {@code VoiceStats}. */

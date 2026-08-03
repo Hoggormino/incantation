@@ -1,6 +1,5 @@
 package com.niko.voicespells.client;
 
-import com.niko.voicespells.VoiceSpells;
 import com.niko.voicespells.VoiceSpellsConfig;
 import com.niko.voicespells.spells.SpellIndex;
 import net.minecraft.world.entity.LivingEntity;
@@ -271,12 +270,5 @@ public final class Diagnostics {
         if (fail > 0) return fail + " failing, " + warn + " warning";
         if (warn > 0) return ok + " OK, " + warn + " warning";
         return ok + " OK";
-    }
-
-    /** Convenience — log everything once. Hooked from the chat command. */
-    public static void logToConsole() {
-        for (Result r : runAll()) {
-            VoiceSpells.LOGGER.info("[{}] {} — {}", r.status(), r.name(), r.detail());
-        }
     }
 }

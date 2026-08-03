@@ -223,12 +223,4 @@ public final class Phrasebook {
             try { Files.deleteIfExists(TMP_FILE); } catch (IOException ignored) {}
         }
     }
-
-    /** Count of in-memory non-empty overrides — for diagnostics. */
-    public static int activeOverrideCount() {
-        if (!loaded) return 0;
-        int n = 0;
-        for (String v : overrides.values()) if (v != null && !v.isBlank()) n++;
-        return n;
-    }
 }

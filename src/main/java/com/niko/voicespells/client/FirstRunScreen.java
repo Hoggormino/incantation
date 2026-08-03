@@ -223,12 +223,6 @@ public final class FirstRunScreen extends Screen {
         String shown = empty ? "(nothing yet)" : "\"" + fitFromRight(last, availW) + "\"";
         g.drawString(font, Component.literal(prefix + shown), x, y,
             empty ? Theme.C_FAINT : Theme.C_TEXT, false);
-
-        // Visual nudge on the Next button: brighten the border once we've seen mic activity.
-        if (nextBtn != null) {
-            // Nothing to flip — NeonButton renders based on hover. The bright "you're ready"
-            // signal is the Audio pill flipping to "detected" + the meter moving.
-        }
     }
 
     // ------------------------------------------------------------------------ Step 2

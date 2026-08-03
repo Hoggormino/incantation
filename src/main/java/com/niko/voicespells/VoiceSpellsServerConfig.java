@@ -67,7 +67,7 @@ public final class VoiceSpellsServerConfig {
                       "Useful for admin auditing on shared servers.");
             logVoiceCasts = b.define("logVoiceCasts", false);
             b.comment("Scale the effective spellbook level by the client's voice volume.",
-                      "Whisper -> level 1, shout -> max level on the equipped spellbook.",
+                      "Speaking quietly -> level 1, shout -> max level on the equipped spellbook.",
                       "Trusts the client to report its own RMS — not a security boundary, but a",
                       "fun expressivity toggle. Off by default.");
             voiceVolumeScaling = b.define("voiceVolumeScaling", false);

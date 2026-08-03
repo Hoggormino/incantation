@@ -3,11 +3,8 @@
   "key.voicespells.toggle_listening": "Toggle Voice Casting",
   "key.voicespells.toggle_hud": "Toggle Voice HUD",
   "key.voicespells.accept_suggestion": "Accept Alias Suggestion",
-  "key.voicespells.toggle_macro": "Toggle Voice Macro Recording",
-  "key.voicespells.play_macro": "Play Voice Macro",
   "key.voicespells.quick_recast": "Quick Recast Last Spell",
 
-  "text.voicespells.heard": "Heard \"%s\" → casting %s",
   "text.voicespells.model_missing": "Incantation: Vosk model not found. Unzip a small English model into %s and try again.",
 
   "text.voicespells.listening_on":  "Voice casting: ON",
@@ -17,7 +14,6 @@
 
   "voicespells.config.title": "Iron's Spells: Incantation",
   "voicespells.config.reset": "Reset",
-  "voicespells.config.transparent": "Transparent",
   "voicespells.config.spelllist": "Spell List",
 
   "voicespells.spelllist.title": "Indexed Spells",

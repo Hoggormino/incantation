@@ -59,7 +59,6 @@ custom phrases (see Configuration).
 - **Welcome wizard** on first launch — talks you through model + mic + first cast.
 - **Aliases / custom phrases.** Pick words the model can hear, bind them to a spell id.
 - **Loadout shortcuts.** Say one word, cast the first castable spell from a list.
-- **Macros.** Record a cast sequence, play it back with one keybind.
 - **Voice commands.** `spell one`…`spell nine` switches the active spellbook slot. `yes`/`no`
   control the cast queue when hands-free confirm is on.
 - **Server-side controls.** Per-player whitelist, blocklist, rate limit, broadcast-nearby,
@@ -74,8 +73,6 @@ Rebind in Controls → Incantation. Defaults:
 | **V** | Toggle voice casting (master on/off) |
 | **B** | Toggle the HUD chip |
 | **Y** | Accept the "did you mean X?" alias suggestion |
-| **J** | Start/stop macro recording |
-| **K** | Play the saved macro |
 | **]** | Quick-recast the last spell |
 
 ## Configuration
