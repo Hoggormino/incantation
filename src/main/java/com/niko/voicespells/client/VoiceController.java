@@ -22,19 +22,19 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Client-side glue between Simple Voice Chat's mic stream, the Vosk recognizer and the server.
+ * Client-side glue between the microphone, the Vosk recognizer and the server.
  *
- * No keybind: every SVC mic frame is fed into Vosk for as long as SVC is transmitting. When SVC
- * stops transmitting it emits an empty {@code short[]} as an end-of-transmission marker; that's
- * when we flush the recognizer to get the final result and reset it for the next utterance.
+ * No keybind: audio is captured continuously by {@link com.niko.voicespells.speech.MicCapture}
+ * and fed into Vosk whenever the noise gate is open. Because a capture device never signals
+ * end-of-speech, the recognizer is flushed on the gate's open-to-closed edge instead.
  *
- * Threading: {@link #onMicFrame} runs on SVC's mic thread; phrase callbacks arrive on the same
+ * Threading: {@link #onMicFrame16k} runs on the capture thread; phrase callbacks arrive on the same
  * thread, and we hop to the Minecraft client thread before touching world state or sending
  * packets.
  */
 public final class VoiceController {
 
-    /** Frames within this window of the last received frame mean SVC is actively transmitting. */
+    /** Frames within this window of the last received frame mean the mic is delivering audio. */
     private static final long HEARING_WINDOW_NANOS = TimeUnit.MILLISECONDS.toNanos(300);
     /** How long the heard-spell toast stays visible (including fade). */
     public  static final long TOAST_DURATION_NANOS = TimeUnit.MILLISECONDS.toNanos(2400);
@@ -414,7 +414,7 @@ public final class VoiceController {
         }
     }
 
-    /** True if we received a non-empty SVC frame in the recent past — i.e. mic is live. */
+    /** True if we received a frame in the recent past — i.e. capture is live. */
     public static boolean isHearingNow() {
         long t = lastFrameNanos;
         return t != 0L && (System.nanoTime() - t) < HEARING_WINDOW_NANOS;
@@ -449,7 +449,7 @@ public final class VoiceController {
         new Thread(VoiceController::loadModel, "VoiceSpells-Engine-Loader").start();
     }
 
-    /** Called from {@code VoiceSpellsVoicechatPlugin} on every SVC mic frame, including empty
+    /** Called on every captured mic frame, including empty
      *  arrays which signal end-of-transmission. */
     /**
      * OpenAL capture path — frames are already at the recognizer's 16 kHz, and the stream is
@@ -496,50 +496,6 @@ public final class VoiceController {
 
     /** Tracks the open→closed edge of the noise gate for the capture path's flush trigger. */
     private static volatile boolean gateWasOpen = false;
-
-    public static void onMicFrame(short[] pcm) {
-        if (!listeningEnabled) return;
-        if (pcm.length == 0) {
-            // End of SVC transmission — flush so the pending utterance produces a final result.
-            VoskSession s = session;
-            if (s != null) {
-                Thread t = new Thread(() -> { s.flush(); s.reset(); }, "VoiceSpells-Flush");
-                t.setDaemon(true);
-                t.start();
-            }
-            // Decay audio level on transmission end so the meter visibly drops to zero. Do
-            // NOT hard-reset lastLoudFrameNanos here — the sticky 600ms window will naturally
-            // close the gate, and forcing it to 0 means a brief SVC re-trigger (voice-
-            // activation hangover splits utterances into multiple SVC sessions) requires the
-            // VERY FIRST frame of the next utterance to cross the threshold from scratch,
-            // which clips word onset and makes "ages between casts" the lived experience.
-            audioLevel *= 0.2f;
-            return;
-        }
-        long now = System.nanoTime();
-        lastFrameNanos = now;
-        double rms = updateAudioLevel(pcm);
-        sampleCalibration(rms);
-        VoskSession s = session;
-        if (s != null) {
-            // Noise gate: skip frames quieter than the configured RMS floor — Vosk's grammar-
-            // restricted mode otherwise hallucinates phrases out of silence/breath.
-            //
-            // The gate is sticky: once a loud frame arrives it stays open for
-            // NOISE_GATE_STICKY_NANOS so mid-word phoneme dips don't sever the utterance.
-            if (rms >= VoiceSpellsConfig.cNoiseGateRms) {
-                lastLoudFrameNanos = now;
-            }
-            if (lastLoudFrameNanos == 0L
-                    || now - lastLoudFrameNanos > NOISE_GATE_STICKY_NANOS) {
-                return; // gate closed — sustained quiet
-            }
-            s.feed(pcm);
-            return;
-        }
-        // First frame and the engine isn't loaded yet — kick that off so we're ready for next time.
-        if (SpellIndex.isReady()) preloadAsync();
-    }
 
     /**
      * Compute the frame's RMS energy and fold it into a smoothed level used by the HUD's audio
@@ -852,7 +808,7 @@ public final class VoiceController {
 
     // ----- OpenAL capture lifecycle -------------------------------------------------------
 
-    /** Live capture engine when {@code audioSource = OPENAL}; null when SVC is the source. */
+    /** Live capture engine; null before client setup or after shutdown. */
     private static volatile com.niko.voicespells.speech.MicCapture capture;
 
     /**
@@ -860,12 +816,7 @@ public final class VoiceController {
      * on world join, and after a device change — and cheap when nothing has changed.
      */
     public static synchronized void syncCapture() {
-        boolean want = VoiceSpellsConfig.cAudioSource == VoiceSpellsConfig.AudioSource.OPENAL;
         com.niko.voicespells.speech.MicCapture c = capture;
-        if (!want) {
-            if (c != null) stopCapture();
-            return;
-        }
         // Restart when the selected device changed; the device name is baked in at construction.
         if (c != null) {
             if (java.util.Objects.equals(activeDevice, VoiceSpellsConfig.cCaptureDevice)) return;
@@ -957,7 +908,7 @@ public final class VoiceController {
     }
 
     /**
-     * Vosk callback — fires on the SVC mic thread.
+     * Vosk callback — fires on the capture thread.
      *
      * Partial (mid-utterance) results are matched <b>strictly</b> (exact phrase only): they're
      * the fast path and too noisy to run the lenient fallbacks against. Final results may use
@@ -1152,7 +1103,7 @@ public final class VoiceController {
             recordEvent(phrase, spellKey + " (menu)", confidence);
             return;
         }
-        // Optional sneak gate so casual SVC chatter doesn't fire spells.
+        // Optional sneak gate so casual talking doesn't fire spells.
         if (VoiceSpellsConfig.cRequireSneak
                 && (mc.player == null || !mc.player.isShiftKeyDown())) {
             recordEvent(phrase, spellKey + " (no sneak)", confidence);
@@ -1170,7 +1121,7 @@ public final class VoiceController {
             return;
         }
         // Sliding-window dedup. Vosk emits one utterance as partial(s) → getResult → the
-        // flush getFinalResult; with the accurate model and SVC voice-activation hangover the
+        // flush getFinalResult; with the accurate model and a sticky noise gate the
         // gap between the first partial cast and the flush can exceed a fixed window, which is
         // exactly the "casts twice" bug. So on every *repeat* of the same spell we push the
         // timestamp forward — the window only lapses after the spell genuinely stops being
@@ -1204,7 +1155,7 @@ public final class VoiceController {
         // — worse — interrupt the current cast). Most recent wins on overflow.
         if (isClientCasting()) {
             // Multi-cast / long-channel spells take a few hundred ms to complete; during that
-            // time SVC's tail audio + the user's own continued vocalisation keep getting grammar-
+            // time trailing audio + the user's own continued vocalisation keep getting grammar-
             // forced into the same spell shape, and without this guard each repeat would stack
             // in the queue and fire again the moment the cast finishes. Block:
             //   - same spell as the one we just dispatched (lastDispatchedSpellId), and

@@ -78,7 +78,7 @@ public final class ConfigMoreScreen extends Screen {
             b -> { if (minecraft != null) minecraft.setScreen(new HelpScreen(this)); }));
         y += 24;
 
-        // Test Arena requires SVC mic frames, which only flow when in a world. Disable the
+        // Test Arena requires mic frames, which only flow when in a world. Disable the
         // button from the main menu so users don't open an empty practice screen.
         boolean inWorld = minecraft != null && minecraft.player != null;
         NeonButton arenaBtn = NeonButton.of(px + Theme.PAD, y, btnW, 20,

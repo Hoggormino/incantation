@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
  * hearing live, what spell it would have picked, and the current confidence + tier.
  *
  * Use it to learn spell pronunciations safely — no mana spent, no cooldowns triggered, no
- * mobs killed by accident. Bonus: SVC mic frames are still flowing in the background so the
+ * mobs killed by accident. Bonus: mic frames are still flowing in the background so the
  * audio meter + last-heard updates in real time.
  */
 public final class TestArenaScreen extends Screen {
@@ -96,7 +96,7 @@ public final class TestArenaScreen extends Screen {
             x + 8, y + 13, Theme.C_MUTED, false);
         y += discH + 6;
 
-        // Hard-warn if the player isn't in a world: SVC won't feed mic frames, so nothing on
+        // Hard-warn if the player isn't in a world: capture is paused there, so nothing on
         // this screen will move. Without this banner the screen looks broken.
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) {
@@ -107,7 +107,7 @@ public final class TestArenaScreen extends Screen {
             g.drawString(font, Component.literal("⚠ Open a world first."), x + 6, y + 4,
                 Theme.C_DANGER, false);
             g.drawString(font,
-                Component.literal("SVC only transmits in-game, so no recognition fires here."),
+                Component.literal("Recognition only runs in-game, so nothing fires here."),
                 x + 6, y + 14, Theme.C_MUTED, false);
             y += bannerH + 8;
         }

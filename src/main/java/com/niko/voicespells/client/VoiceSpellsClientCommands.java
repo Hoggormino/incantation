@@ -62,9 +62,7 @@ public final class VoiceSpellsClientCommands {
                     .withStyle(ChatFormatting.GRAY)), false);
 
             MicCapture cap = VoiceController.captureEngine();
-            String state = cap == null
-                ? "not capturing (audioSource = " + VoiceSpellsConfig.cAudioSource + ")"
-                : cap.status();
+            String state = cap == null ? "not started" : cap.status();
             ctx.getSource().sendSuccess(() -> Component
                 .literal("  state: ").withStyle(ChatFormatting.DARK_GRAY)
                 .append(Component.literal(state).withStyle(ChatFormatting.AQUA)), false);

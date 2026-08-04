@@ -94,10 +94,6 @@ public final class ClientEvents {
             VoiceController.onConfigChanged();
             VoiceController.syncCapture();
         };
-        // Wire the cross-package back-references that we deliberately kept off the static
-        // import graph so common/server code can be loaded on a dedicated server without
-        // dragging in the client-only Minecraft GUI chain (fixes the 0.9.0 server crash).
-        com.niko.voicespells.svc.VoiceSpellsVoicechatPlugin.micFrameSink = VoiceController::onMicFrame;
         com.niko.voicespells.VoiceSpellsConfig.themeApplier = () -> {
             com.niko.voicespells.VoiceSpellsConfig.Client c = com.niko.voicespells.VoiceSpellsConfig.CLIENT;
             Theme.applyPalette(c.uiPalette.get());
@@ -109,7 +105,7 @@ public final class ClientEvents {
 
     private static void onClientSetup(FMLClientSetupEvent event) {
         // SpellIndex is populated in common setup which has already fired by now, so kicking off
-        // the Vosk load here means the model is usually ready before the first SVC transmission.
+        // the Vosk load here means the model is usually ready before the player's first sentence.
         event.enqueueWork(VoiceController::preloadAsync);
         // Bring the microphone up if OpenAL capture is the configured source. Safe when it is
         // not — syncCapture() is a no-op unless audioSource is OPENAL.

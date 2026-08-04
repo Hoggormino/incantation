@@ -32,7 +32,7 @@
   "voicespells.cast.not_allowed": "Voice casting is not enabled for you on this server",
 
   "advancements.voicespells.root.title": "Voice Casting",
-  "advancements.voicespells.root.description": "Speak a spell name through Simple Voice Chat to cast it",
+  "advancements.voicespells.root.description": "Say a spell name out loud to cast it",
   "advancements.voicespells.voice_first.title": "Speak the Word",
   "advancements.voicespells.voice_first.description": "Voice-cast your first spell",
   "advancements.voicespells.voice_apprentice.title": "Voice Apprentice",

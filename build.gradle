@@ -54,16 +54,10 @@ repositories {
 		name = 'NeoForged'
 		url = 'https://maven.neoforged.net/releases'
 	}
-	maven {
-		name = 'Henkelmax (Simple Voice Chat)'
-		url  = 'https://maven.maxhenkel.de/repository/public'
-	}
 	mavenCentral()
 }
 
 dependencies {
-	// Simple Voice Chat public API. compileOnly because SVC itself ships the API at runtime.
-	compileOnly "de.maxhenkel.voicechat:voicechat-api:${voicechat_api_version}"
 
 	// Vosk offline speech recognition (JNA-backed; native libs auto-extracted at runtime).
 	// Split declaration:

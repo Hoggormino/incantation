@@ -29,14 +29,13 @@ import java.util.Locale;
  *     because we enable {@code setWords(true)}; the consumer can run the lenient
  *     fuzzy/substring fallbacks but gate them behind an average-confidence floor.
  *
- * SVC delivers 48 kHz mono short[] frames; Vosk expects 16 kHz mono 16-bit PCM.
- * We downsample 3:1 with a 3-tap box filter — crude but adequate for speech.
+ * Audio arrives from MicCapture already at 16 kHz mono 16-bit — the rate Vosk wants — so there
+ * is no resampling anywhere in the path.
  *
  * Recognizer is not thread-safe; all entry points synchronize on this instance.
  */
 public final class VoskSession implements AutoCloseable {
     private static final float SAMPLE_RATE = 16_000f;
-    private static final int   DECIMATION  = 3; // 48 kHz → 16 kHz
 
     static {
         LibVosk.setLogLevel(LogLevel.WARNINGS);
@@ -96,23 +95,15 @@ public final class VoskSession implements AutoCloseable {
     /**
      * Feed a frame that is already at the recognizer's rate.
      *
-     * <p>Used by the OpenAL capture path, which opens the device at 16 kHz directly and so needs
-     * no resampling at all. {@link #feed(short[])} stays for the Simple Voice Chat path, whose
-     * frames arrive at SVC's 48 kHz capture rate and must be decimated first. Feeding 48 kHz audio
-     * through here would stretch every utterance 3x and destroy recognition, so the two entry
-     * points are deliberately separate rather than one method guessing at the rate.
+     * <p>The capture device is opened at 16 kHz, so frames need no conversion. The name keeps the
+     * rate explicit at every call site: feeding audio at any other rate here would stretch or
+     * compress every utterance and destroy recognition, and that failure is silent.
      */
     public synchronized void feed16k(short[] frame) {
         if (closed || frame == null || frame.length == 0) return;
         ByteBuffer bb = ByteBuffer.allocate(frame.length * 2).order(ByteOrder.LITTLE_ENDIAN);
         for (short s : frame) bb.putShort(s);
         accept(bb.array());
-    }
-
-    public synchronized void feed(short[] frame48k) {
-        if (closed || frame48k == null || frame48k.length == 0) return;
-        byte[] bytes = downsampleAndPack(frame48k);
-        accept(bytes);
     }
 
     private void accept(byte[] bytes) {
@@ -236,16 +227,6 @@ public final class VoskSession implements AutoCloseable {
         if (!first) sb.append(',');
         sb.append("\"[unk]\"]");
         return sb.toString();
-    }
-
-    private static byte[] downsampleAndPack(short[] in) {
-        int outLen = in.length / DECIMATION;
-        ByteBuffer bb = ByteBuffer.allocate(outLen * 2).order(ByteOrder.LITTLE_ENDIAN);
-        for (int i = 0, j = 0; i < outLen; i++, j += DECIMATION) {
-            int sum = in[j] + in[j + 1] + in[j + 2];
-            bb.putShort((short) (sum / DECIMATION));
-        }
-        return bb.array();
     }
 
     public static Path defaultModelPath() {
