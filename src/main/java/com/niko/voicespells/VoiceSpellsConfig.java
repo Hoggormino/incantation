@@ -146,6 +146,8 @@ public final class VoiceSpellsConfig {
         public final ModConfigSpec.DoubleValue  minConfidence;
         public final ModConfigSpec.BooleanValue autoDownloadModel;
         public final ModConfigSpec.ConfigValue<String> modelPath;
+        /** Catalogued model to install and use, when modelPath is not set explicitly. */
+        public final ModConfigSpec.ConfigValue<String> modelId;
         public final ModConfigSpec.BooleanValue requireSneak;
         public final ModConfigSpec.ConfigValue<String> triggerWord;
         public final ModConfigSpec.ConfigValue<List<? extends String>> triggerWords;
@@ -234,6 +236,16 @@ public final class VoiceSpellsConfig {
                       "(config/voicespells/model). Set to an absolute path to point at a",
                       "shared model on disk — useful for trying different precision/speed models.");
             modelPath = b.define("modelPath", "");
+            b.comment("Which speech model to use, by id. Downloaded on demand into",
+                      "config/voicespells/models/<id>/ when autoDownloadModel is on.",
+                      "Known ids: vosk-model-small-en-us-0.15 (default, ~40 MB),",
+                      "vosk-model-en-us-0.22-lgraph (~128 MB, more accurate English),",
+                      "vosk-model-small-es-0.42, vosk-model-small-ru-0.22,",
+                      "vosk-model-small-fr-0.22, vosk-model-small-de-0.15.",
+                      "A model only recognises words in its own language: to play in another",
+                      "language you need both the matching model here AND translated phrases in",
+                      "config/voicespells/phrasebook.json. modelPath overrides this entirely.");
+            modelId = b.define("modelId", com.niko.voicespells.speech.ModelCatalog.DEFAULT_ID);
             b.comment("Only voice-cast while sneaking. Off = always (hands-free).");
             requireSneak = b.define("requireSneak", false);
             b.comment("If set, the spell must be preceded by this word to cast.",
@@ -400,6 +412,8 @@ public final class VoiceSpellsConfig {
     public static volatile boolean cAlwaysShowHeard = false;
     public static volatile boolean cHandsFreeConfirm = false;
     public static volatile double  cNoiseGateRms    = 350.0;
+    public static volatile String  cModelId         =
+        com.niko.voicespells.speech.ModelCatalog.DEFAULT_ID;
     public static volatile GatingMode cGatingMode    = GatingMode.ALWAYS_ON;
     public static volatile boolean cSuspendUnfocused = true;
     public static volatile int     cGrammarFloor    = 16;
@@ -455,6 +469,7 @@ public final class VoiceSpellsConfig {
         cAlwaysShowHeard  = c.alwaysShowHeard.get();
         cHandsFreeConfirm = c.handsFreeConfirm.get();
         cNoiseGateRms     = c.noiseGateRms.get();
+        cModelId          = c.modelId.get();
         cGatingMode       = c.gatingMode.get();
         cSuspendUnfocused = c.suspendWhenUnfocused.get();
         cGrammarFloor     = c.grammarFloor.get();

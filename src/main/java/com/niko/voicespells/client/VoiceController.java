@@ -1071,11 +1071,11 @@ public final class VoiceController {
     }
 
     private static void loadVosk() {
-        // User-overridable model path; falls back to the default config/voicespells/model.
-        String override = VoiceSpellsConfig.CLIENT.modelPath.get();
-        Path modelPath = (override == null || override.isBlank())
-            ? VoskSession.defaultModelPath()
-            : Path.of(override.trim());
+        // Explicit modelPath wins; otherwise the legacy config/voicespells/model directory if it
+        // still holds a model (so an existing install is never re-downloaded), else the
+        // per-id models/<modelId> directory that downloads land in.
+        Path modelPath = com.niko.voicespells.speech.ModelCatalog.resolveModelDir(
+            VoiceSpellsConfig.CLIENT.modelPath.get(), VoiceSpellsConfig.cModelId);
         try {
             if (!com.niko.voicespells.speech.ModelDownloader.looksLikeModel(modelPath)) {
                 statusLine = "DOWNLOADING model…";
