@@ -1,6 +1,6 @@
 {
   "display": {
-    "icon": { "id": "minecraft:enchanted_book" },
+    "icon": { "item": "minecraft:enchanted_book" },
     "title": { "translate": "advancements.voicespells.root.title" },
     "description": { "translate": "advancements.voicespells.root.description" },
     "frame": "task",

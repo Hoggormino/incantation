@@ -1,7 +1,7 @@
 {
   "parent": "voicespells:voice_apprentice",
   "display": {
-    "icon": { "id": "minecraft:music_disc_blocks" },
+    "icon": { "item": "minecraft:music_disc_blocks" },
     "title": { "translate": "advancements.voicespells.voice_adept.title" },
     "description": { "translate": "advancements.voicespells.voice_adept.description" },
     "frame": "task",

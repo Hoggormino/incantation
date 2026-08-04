@@ -1,7 +1,7 @@
 {
   "parent": "voicespells:root",
   "display": {
-    "icon": { "id": "minecraft:experience_bottle" },
+    "icon": { "item": "minecraft:experience_bottle" },
     "title": { "translate": "advancements.voicespells.voice_first.title" },
     "description": { "translate": "advancements.voicespells.voice_first.description" },
     "frame": "task",

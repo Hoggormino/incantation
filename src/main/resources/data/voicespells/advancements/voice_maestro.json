@@ -1,7 +1,7 @@
 {
   "parent": "voicespells:voice_combo",
   "display": {
-    "icon": { "id": "minecraft:beacon" },
+    "icon": { "item": "minecraft:beacon" },
     "title": { "translate": "advancements.voicespells.voice_maestro.title" },
     "description": { "translate": "advancements.voicespells.voice_maestro.description" },
     "frame": "challenge",

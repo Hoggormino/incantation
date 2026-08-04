@@ -149,8 +149,8 @@ public final class OwnedSpells {
         // Curios slots (typically the dedicated spellbook slot).
         if (curiosAvailable) {
             try {
-                @SuppressWarnings("unchecked")
-                Optional<Object> invOpt = (Optional<Object>) curiosGetInventory.invoke(null, p);
+                // NOT a direct cast to Optional — 1.20.1 Forge returns LazyOptional here.
+                Optional<Object> invOpt = CuriosCompat.inventory(curiosGetInventory, p);
                 if (invOpt.isPresent()) {
                     Object handler = invOpt.get();
                     Predicate<ItemStack> isAnySpellContainer = stack -> {

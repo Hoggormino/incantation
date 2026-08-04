@@ -1,7 +1,7 @@
 {
   "parent": "voicespells:root",
   "display": {
-    "icon": { "id": "minecraft:firework_rocket" },
+    "icon": { "item": "minecraft:firework_rocket" },
     "title": { "translate": "advancements.voicespells.voice_combo.title" },
     "description": { "translate": "advancements.voicespells.voice_combo.description" },
     "frame": "task",

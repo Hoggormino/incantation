@@ -1,7 +1,7 @@
 {
   "parent": "voicespells:voice_first",
   "display": {
-    "icon": { "id": "minecraft:music_disc_cat" },
+    "icon": { "item": "minecraft:music_disc_cat" },
     "title": { "translate": "advancements.voicespells.voice_apprentice.title" },
     "description": { "translate": "advancements.voicespells.voice_apprentice.description" },
     "frame": "task",

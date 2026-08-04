@@ -1,48 +1,87 @@
+// ============================================================================
+//  Iron's Spells: Incantation  -  MinecraftForge 1.20.1 build
+//  ForgeGradle 6 (NOT NeoForged moddev).  Java 17 toolchain.
+// ============================================================================
 plugins {
-	id 'java-library'
 	id 'eclipse'
 	id 'idea'
-	id 'net.neoforged.moddev' version '2.0.78'
+	id 'java-library'
+	id 'maven-publish'
+	// Exactly what the official 1.20.1 MDK pins. Resolves 6.0.54 today.
+	id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+	// OPTIONAL: only if you want Parchment parameter names. Must come AFTER forgegradle.
+	// id 'org.parchmentmc.librarian.forgegradle' version '1.+'
 }
 
 version = mod_version
 group = mod_group_id
 
 base {
-	// Display name for the published jar. Decoupled from mod_id (which stays "voicespells"
-	// so existing configs / advancements / packets still resolve).
+	// Same as the 1.21.1 build: jar is "incantation-*", mod id stays "voicespells".
 	archivesName = 'incantation'
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+// 1.20.1 runs on Java 17. Do NOT leave this at 21 - the game's own classes are 17
+// and Forge 47 refuses class files above major 61.
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
-neoForge {
-	version = project.neo_version
+// MUST be called before the `minecraft {}` block (ForgeGradle requirement).
+jarJar.enable()
+
+minecraft {
+	// 'official' = Mojang names, which is what the NeoForge 1.21.1 workspace already used.
+	// Keeping 'official' means class/method/field names in the ported source are unchanged;
+	// only the *packages that moved between 1.20.1 and 1.21.1* have to be fixed.
+	mappings channel: 'official', version: minecraft_version
+	// Parchment alternative (needs the librarian plugin above + the parchment repo in settings):
+	// mappings channel: 'parchment', version: "${parchment_version}-${minecraft_version}"
+
+	// REQUIRED. Makes IDE run configs use processResources output, so the ${} tokens in
+	// META-INF/mods.toml and pack.mcmeta are expanded when you launch from the IDE.
+	copyIdeResources = true
+
+	// Uncomment if the port ever needs an AT (it currently should not).
+	// accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
 
 	runs {
-		client {
-			client()
-			systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
-		}
-		// A dedicated-server run. This mod ships client-only UI but must load on a headless
-		// server, and the "client GUI class on a dedicated server" crash has now regressed
-		// twice (0.9.0, and again in 0.9.3) purely because there was no way to test for it
-		// locally. `./gradlew runServer` is that test — run it before every release.
-		server {
-			server()
-			systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
-		}
-		data {
-			data()
-			programArguments.addAll '--mod', project.mod_id, '--all',
-				'--output', file('src/generated/resources/').getAbsolutePath(),
-				'--existing', file('src/main/resources/').getAbsolutePath()
-		}
-	}
+		configureEach {
+			workingDirectory project.file('run')
+			property 'forge.logging.markers', ''
+			property 'forge.logging.console.level', 'debug'
+			// Vosk unpacks ~90 MB of natives out of the nested jar on first model load.
+			jvmArgs '-Xmx4G'
 
-	mods {
-		"${mod_id}" {
-			sourceSet sourceSets.main
+			mods {
+				"${mod_id}" {
+					source sourceSets.main
+				}
+			}
+		}
+
+		client {
+			property 'forge.enabledGameTestNamespaces', mod_id
+		}
+
+		// MANDATORY - this is the regression test for "client GUI class loaded on a dedicated
+		// server", which has already shipped broken twice. Run `./gradlew runServer` before
+		// every release. Note the --nogui arg: without it the run opens Mojang's Swing panel
+		// and never reaches a headless-equivalent code path.
+		server {
+			property 'forge.enabledGameTestNamespaces', mod_id
+			args '--nogui'
+		}
+
+		// Runs every registered gametest then exits. Handy for CI; crashes if you have none,
+		// so leave it commented until you actually register gametests.
+		// gameTestServer {
+		//     property 'forge.enabledGameTestNamespaces', mod_id
+		// }
+
+		data {
+			workingDirectory project.file('run-data')
+			args '--mod', mod_id, '--all',
+				'--output', file('src/generated/resources/'),
+				'--existing', file('src/main/resources/')
 		}
 	}
 }
@@ -50,47 +89,111 @@ neoForge {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
+	// ForgeGradle auto-adds maven.minecraftforge.net + mavenCentral, but be explicit.
 	maven {
-		name = 'NeoForged'
-		url = 'https://maven.neoforged.net/releases'
+		name = 'MinecraftForge'
+		url  = 'https://maven.minecraftforge.net/'
 	}
 	maven {
-		name = 'Henkelmax (Simple Voice Chat)'
+		name = 'Henkelmax (Simple Voice Chat API)'
 		url  = 'https://maven.maxhenkel.de/repository/public'
 	}
+	maven {
+		name = 'TheIllusiveC4 (Curios)'
+		url  = 'https://maven.theillusivec4.top/'
+	}
+	maven {
+		name = "Iron's Spells - releases"
+		url  = 'https://code.redspace.io/releases'
+	}
+	// Fallback mirror for Curios:
+	// maven { name = 'BlameJared'; url = 'https://maven.blamejared.com' }
+	// Only needed if you want the *full* SVC mod jar in runClient (maxhenkel's maven only
+	// publishes voicechat-api, not the mod):
+	// maven { name = 'CurseMaven'; url = 'https://cursemaven.com'; content { includeGroup 'curse.maven' } }
 	mavenCentral()
 }
 
 dependencies {
-	// Simple Voice Chat public API. compileOnly because SVC itself ships the API at runtime.
+	minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+
+	// Simple Voice Chat public API. compileOnly - SVC ships the API at runtime.
 	compileOnly "de.maxhenkel.voicechat:voicechat-api:${voicechat_api_version}"
 
-	// Vosk offline speech recognition (JNA-backed; native libs auto-extracted at runtime).
-	// Split declaration:
-	//   - implementation: compile + runtime visibility for prod usage of the shaded classes.
-	//   - jarJar: ships the dep inside the mod jar via NeoForge's nested-jar mechanism so end
-	//     users don't need to install a Vosk library separately.
-	//   - localRuntime: dev-only runClient classpath; NeoForge's dev ModLauncher won't pick
-	//     up jarJar-bundled deps before runtime extraction happens.
-	implementation("com.alphacephei:vosk:0.3.45")
-	// Make Vosk visible to NeoForge's dev ModLauncher. `implementation` alone keeps it on
-	// Gradle's runtimeClasspath but moddev's runClient uses a stricter classpath that needs
-	// libraries declared explicitly here.
-	additionalRuntimeClasspath("com.alphacephei:vosk:0.3.45")
-	jarJar("com.alphacephei:vosk:0.3.45") {
-		version {
-			strictly "[0.3.45,1)"
-			prefer "0.3.45"
-		}
+	// Vosk offline speech recognition.
+	//   implementation  -> compile classpath AND the ForgeGradle dev-run classpath. FG6 runs use
+	//                      sourceSets.main.runtimeClasspath, so there is NO moddev-style
+	//                      `additionalRuntimeClasspath` to declare here. Delete that line.
+	//   jarJar          -> nests vosk-0.3.45.jar at META-INF/jarjar/ in the shipped jar, exactly
+	//                      like the 1.21.1 build does. Forge 1.20.1's JarInJarDependencyLocator
+	//                      overrides getDefaultJarModType() -> IModFile.Type.GAMELIBRARY, so a
+	//                      plain library with no mods.toml and no FMLModType manifest attribute
+	//                      nests and loads fine. No dummy mods.toml needed.
+	implementation "com.alphacephei:vosk:${vosk_version}"
+	jarJar(group: 'com.alphacephei', name: 'vosk', version: "[${vosk_version},1)") {
+		jarJar.pin(it, vosk_version)
+		// Vosk declares JNA transitively and jarJar will happily nest it. Do not let it:
+		// Minecraft 1.20.1 already ships net.java.dev.jna:jna:5.12.1 (for oshi), and the version
+		// Vosk pulls is 5.7.0 — older. A nested older JNA can win resolution and break either
+		// Vosk's native loading or oshi. The shipped 1.21.1 jar nests vosk and nothing else;
+		// this keeps the 1.20.1 jar the same shape.
+		exclude group: 'net.java.dev.jna'
 	}
+	// NOTE: JNA is NOT nested. Minecraft 1.20.1 itself ships net.java.dev.jna:jna:5.12.1 and
+	// jna-platform:5.12.1 (for oshi), which is what satisfies Vosk - same as on 1.21.1.
+
+	// ---- OPTIONAL dev-runtime mods ------------------------------------------------------
+	// EVERY Iron's Spells / Curios call in this mod is reflective, so neither is needed to
+	// compile. These are only for actually casting a spell in runClient.
+	// runtimeOnly fg.deobf("io.redspace:irons_spellbooks:${irons_spells_version}")
+	// runtimeOnly fg.deobf("top.theillusivec4.curios:curios-forge:${curios_version}")
+	// compileOnly  fg.deobf("top.theillusivec4.curios:curios-forge:${curios_version}:api")
+	// SVC full mod: not on maxhenkel's maven - drop the jar into run/mods, or use CurseMaven.
+}
+
+// ---------------------------------------------------------------------------
+//  Reobfuscation. THIS IS NEW WORK vs NeoForge 1.21.1.
+//  Forge 1.20.1 runs on SRG member names in production while the dev workspace is on Mojang
+//  names, so every jar you ship must go through reobf. NeoForge 1.21.1 needed none of this.
+//  FG6 auto-creates a reobf task per Jar/JarJar task, but does NOT auto-wire finalizedBy.
+// ---------------------------------------------------------------------------
+def modManifest = [
+	'Specification-Title'     : mod_id,
+	'Specification-Vendor'    : mod_authors,
+	'Specification-Version'   : '1',
+	'Implementation-Title'    : project.name,
+	'Implementation-Version'  : project.version,
+	'Implementation-Vendor'   : mod_authors,
+	'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+]
+
+tasks.named('jar', Jar).configure {
+	// The thin jar (no Vosk). Give it a classifier so the jarJar output can own the plain name.
+	archiveClassifier.set('slim')
+	manifest { attributes(modManifest) }
+	finalizedBy 'reobfJar'
+}
+
+// FG6 gives the jarJar task archiveClassifier.convention("all"). Make it the primary artifact
+// so the released file is "incantation-<ver>.jar", matching what users already have.
+tasks.named('jarJar').configure {
+	archiveClassifier.set('')
+	manifest { attributes(modManifest) }
+	finalizedBy 'reobfJarJar'
+}
+
+// The jarJar task is NOT wired into `assemble` by default - without this, `./gradlew build`
+// silently produces only the slim jar.
+tasks.named('assemble').configure {
+	dependsOn 'jarJar'
 }
 
 tasks.named('processResources', ProcessResources).configure {
 	var replaceProperties = [
 		minecraft_version       : minecraft_version,
 		minecraft_version_range : minecraft_version_range,
-		neo_version             : neo_version,
-		neo_version_range       : neo_version_range,
+		forge_version           : forge_version,
+		forge_version_range     : forge_version_range,
 		loader_version_range    : loader_version_range,
 		mod_id                  : mod_id,
 		mod_name                : mod_name,
@@ -101,8 +204,9 @@ tasks.named('processResources', ProcessResources).configure {
 	]
 	inputs.properties replaceProperties
 
-	filesMatching(['META-INF/neoforge.mods.toml']) {
-		expand replaceProperties
+	// NOTE the filename change: mods.toml, not neoforge.mods.toml.
+	filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+		expand replaceProperties + [project: project]
 	}
 }
 

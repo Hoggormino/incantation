@@ -1,6 +1,6 @@
 package com.niko.voicespells;
 
-import net.neoforged.neoforge.common.ModConfigSpec;
+import net.minecraftforge.common.ForgeConfigSpec;
 import org.apache.commons.lang3.tuple.Pair;
 
 /**
@@ -22,11 +22,11 @@ public final class VoiceSpellsServerConfig {
         FREE
     }
 
-    public static final ModConfigSpec SERVER_SPEC;
+    public static final ForgeConfigSpec SERVER_SPEC;
     public static final Server SERVER;
     static {
-        Pair<Server, ModConfigSpec> pair =
-            new ModConfigSpec.Builder().configure(Server::new);
+        Pair<Server, ForgeConfigSpec> pair =
+            new ForgeConfigSpec.Builder().configure(Server::new);
         SERVER = pair.getLeft();
         SERVER_SPEC = pair.getRight();
     }
@@ -34,16 +34,16 @@ public final class VoiceSpellsServerConfig {
     private VoiceSpellsServerConfig() {}
 
     public static final class Server {
-        public final ModConfigSpec.EnumValue<CastMode> castMode;
-        public final ModConfigSpec.IntValue            maxCastsPerSecond;
-        public final ModConfigSpec.ConfigValue<java.util.List<? extends String>> serverBlockedSpells;
-        public final ModConfigSpec.ConfigValue<java.util.List<? extends String>> voiceAllowedPlayers;
-        public final ModConfigSpec.BooleanValue        logVoiceCasts;
-        public final ModConfigSpec.BooleanValue        voiceVolumeScaling;
-        public final ModConfigSpec.BooleanValue        broadcastVoiceCasts;
-        public final ModConfigSpec.IntValue            broadcastRadius;
+        public final ForgeConfigSpec.EnumValue<CastMode> castMode;
+        public final ForgeConfigSpec.IntValue            maxCastsPerSecond;
+        public final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> serverBlockedSpells;
+        public final ForgeConfigSpec.ConfigValue<java.util.List<? extends String>> voiceAllowedPlayers;
+        public final ForgeConfigSpec.BooleanValue        logVoiceCasts;
+        public final ForgeConfigSpec.BooleanValue        voiceVolumeScaling;
+        public final ForgeConfigSpec.BooleanValue        broadcastVoiceCasts;
+        public final ForgeConfigSpec.IntValue            broadcastRadius;
 
-        Server(ModConfigSpec.Builder b) {
+        Server(ForgeConfigSpec.Builder b) {
             b.push("casting");
             b.comment("How voice casting validates a spell before casting it.",
                       "CURIO_SPELLBOOK - spellbook in the Curios spellbook slot (default).",

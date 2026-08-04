@@ -1,27 +1,35 @@
 package com.niko.voicespells.advancements;
 
-import com.niko.voicespells.VoiceSpells;
-import net.minecraft.advancements.CriterionTrigger;
-import net.minecraft.core.registries.Registries;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.neoforge.registries.DeferredHolder;
-import net.neoforged.neoforge.registries.DeferredRegister;
+import net.minecraft.advancements.CriteriaTriggers;
+import net.minecraftforge.eventbus.api.IEventBus;
 
 /**
- * Registers our custom advancement criterion triggers. Hooked from the mod constructor; the
- * registry runs during mod startup before any datapacks are loaded, so the JSON criteria in
- * {@code data/voicespells/advancement/} can reference {@code voicespells:voice_cast}.
+ * Registers our custom advancement criterion triggers.
+ *
+ * <p><b>1.20.1 shape.</b> There is no {@code Registries.TRIGGER_TYPE} registry to defer into —
+ * that arrived with the 1.20.2 criterion rewrite. Triggers are added to a plain static map by
+ * {@link CriteriaTriggers#register}, which must happen before any datapack is parsed, so the call
+ * runs eagerly in the static initialiser rather than on a registry event. The JSON criteria in
+ * {@code data/voicespells/advancements/} can then reference {@code voicespells:voice_cast}.
+ *
+ * <p>{@code VOICE_CAST} is a direct instance reference rather than a {@code DeferredHolder}, so
+ * call sites use it directly instead of going through {@code .get()}.
  */
 public final class ModTriggers {
     private ModTriggers() {}
 
-    public static final DeferredRegister<CriterionTrigger<?>> TRIGGERS =
-        DeferredRegister.create(Registries.TRIGGER_TYPE, VoiceSpells.MOD_ID);
+    public static final VoiceCastTrigger VOICE_CAST =
+        CriteriaTriggers.register(new VoiceCastTrigger());
 
-    public static final DeferredHolder<CriterionTrigger<?>, VoiceCastTrigger> VOICE_CAST =
-        TRIGGERS.register("voice_cast", VoiceCastTrigger::new);
-
+    /**
+     * Kept for symmetry with the 1.21.1 entry point. Registration already happened in this class's
+     * static initialiser; touching the class here is what forces that to run at a well-defined
+     * point during mod construction rather than lazily at first cast.
+     */
     public static void bootstrap(IEventBus modBus) {
-        TRIGGERS.register(modBus);
+        // Referencing VOICE_CAST forces class init (and therefore registration) now.
+        if (VOICE_CAST == null) {
+            throw new IllegalStateException("voice_cast trigger failed to register");
+        }
     }
 }

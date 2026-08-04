@@ -1,7 +1,7 @@
 {
   "parent": "voicespells:voice_magus",
   "display": {
-    "icon": { "id": "minecraft:music_disc_pigstep" },
+    "icon": { "item": "minecraft:music_disc_pigstep" },
     "title": { "translate": "advancements.voicespells.voice_archmage.title" },
     "description": { "translate": "advancements.voicespells.voice_archmage.description" },
     "frame": "challenge",

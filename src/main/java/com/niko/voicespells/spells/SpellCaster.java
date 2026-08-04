@@ -335,8 +335,9 @@ public final class SpellCaster {
         Class<?> slotResultCls  = Class.forName(CURIOS_SLOT_RES);
 
         Method getInventory = curiosApi.getMethod("getCuriosInventory", LivingEntity.class);
-        @SuppressWarnings("unchecked")
-        Optional<Object> invOpt = (Optional<Object>) getInventory.invoke(null, player);
+        // NOT a direct cast to Optional — on 1.20.1 Forge this returns LazyOptional. See
+        // CuriosCompat for why that difference is invisible until the first cast fails.
+        Optional<Object> invOpt = CuriosCompat.inventory(getInventory, player);
         if (invOpt.isEmpty()) return null;
         Object handler = invOpt.get();
 
@@ -569,7 +570,7 @@ public final class SpellCaster {
                                               int totalCasts, int streak) {
         try {
             String school = resolveSchool(spell, spellCls);
-            com.niko.voicespells.advancements.ModTriggers.VOICE_CAST.get()
+            com.niko.voicespells.advancements.ModTriggers.VOICE_CAST
                 .fire(player, totalCasts, streak, school);
         } catch (Throwable t) {
             VoiceSpells.LOGGER.debug("Advancement trigger failed: {}", t.toString());
@@ -584,7 +585,7 @@ public final class SpellCaster {
             if (!com.niko.voicespells.VoiceSpellsServerConfig.SERVER.logVoiceCasts.get()) return;
             net.minecraft.server.MinecraftServer server = player.getServer();
             if (server == null) return;
-            java.nio.file.Path logDir = server.getServerDirectory().resolve("logs");
+            java.nio.file.Path logDir = server.getServerDirectory().toPath().resolve("logs");
             java.nio.file.Files.createDirectories(logDir);
             java.nio.file.Path logFile = logDir.resolve("voicespells-casts.log");
             String line = String.format(java.util.Locale.ROOT, "%s\t%s\t%s\t%s%n",

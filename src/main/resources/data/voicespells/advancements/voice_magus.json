@@ -1,7 +1,7 @@
 {
   "parent": "voicespells:voice_adept",
   "display": {
-    "icon": { "id": "minecraft:music_disc_far" },
+    "icon": { "item": "minecraft:music_disc_far" },
     "title": { "translate": "advancements.voicespells.voice_magus.title" },
     "description": { "translate": "advancements.voicespells.voice_magus.description" },
     "frame": "goal",

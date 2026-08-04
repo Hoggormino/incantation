@@ -10,7 +10,7 @@ import com.niko.voicespells.spells.SpellInfo;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.neoforge.network.PacketDistributor;
+import com.niko.voicespells.network.Network;
 
 import java.nio.file.Path;
 import java.util.ArrayDeque;
@@ -372,15 +372,17 @@ public final class VoiceController {
         ResourceLocation id;
         try {
             if (lastDispatchedSpellId == null || lastDispatchedSpellId.isEmpty()) return;
-            id = ResourceLocation.parse(lastDispatchedSpellId);
+            id = ResourceLocation.tryParse(lastDispatchedSpellId);
         } catch (Throwable t) { return; }
+        // tryParse yields null instead of throwing on a malformed id.
+        if (id == null) return;
         if (!clientCanCast(id)) return;
         ResourceLocation dispatched = id;
         int totalForTrigger = VoiceStats.totalCasts();
         int streakForTrigger = currentStreak();
         Minecraft.getInstance().execute(() -> {
             SpellSelector.select(dispatched);
-            PacketDistributor.sendToServer(new CastSpellPayload(dispatched, 1.0f,
+            Network.sendToServer(new CastSpellPayload(dispatched, 1.0f,
                 totalForTrigger, streakForTrigger));
             if (VoiceSpellsConfig.cEchoSfx) playEchoChime(dispatched);
         });
@@ -773,7 +775,7 @@ public final class VoiceController {
         int streakForTrigger = currentStreak();
         Minecraft.getInstance().execute(() -> {
             SpellSelector.select(queued);
-            PacketDistributor.sendToServer(new CastSpellPayload(queued, vol,
+            Network.sendToServer(new CastSpellPayload(queued, vol,
                 totalForTrigger, streakForTrigger));
             if (VoiceSpellsConfig.cEchoSfx) playEchoChime(queued);
         });
@@ -1195,7 +1197,7 @@ public final class VoiceController {
             // Move the spellbook's selected spell to the one we're casting so the HUD bar
             // reflects it and a follow-up manual cast uses the same spell.
             SpellSelector.select(dispatched);
-            PacketDistributor.sendToServer(new CastSpellPayload(dispatched, vol,
+            Network.sendToServer(new CastSpellPayload(dispatched, vol,
                 totalForTrigger, streakForTrigger));
             if (VoiceSpellsConfig.cEchoSfx) playEchoChime(dispatched);
         });

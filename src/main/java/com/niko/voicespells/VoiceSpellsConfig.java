@@ -1,8 +1,8 @@
 package com.niko.voicespells;
 
-import net.neoforged.fml.config.ModConfig;
-import net.neoforged.fml.event.config.ModConfigEvent;
-import net.neoforged.neoforge.common.ModConfigSpec;
+import net.minecraftforge.fml.config.ModConfig;
+import net.minecraftforge.fml.event.config.ModConfigEvent;
+import net.minecraftforge.common.ForgeConfigSpec;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.List;
@@ -57,11 +57,11 @@ public final class VoiceSpellsConfig {
         SLATE       // mid-grey neutral — gunmetal feel
     }
 
-    public static final ModConfigSpec CLIENT_SPEC;
+    public static final ForgeConfigSpec CLIENT_SPEC;
     public static final Client CLIENT;
     static {
-        Pair<Client, ModConfigSpec> pair =
-            new ModConfigSpec.Builder().configure(Client::new);
+        Pair<Client, ForgeConfigSpec> pair =
+            new ForgeConfigSpec.Builder().configure(Client::new);
         CLIENT = pair.getLeft();
         CLIENT_SPEC = pair.getRight();
     }
@@ -108,56 +108,56 @@ public final class VoiceSpellsConfig {
 
     public static final class Client {
         // --- position ---
-        public final ModConfigSpec.EnumValue<Corner> hudCorner;
-        public final ModConfigSpec.IntValue          hudOffsetX;
-        public final ModConfigSpec.IntValue          hudOffsetY;
-        public final ModConfigSpec.DoubleValue       globalOpacity;
+        public final ForgeConfigSpec.EnumValue<Corner> hudCorner;
+        public final ForgeConfigSpec.IntValue          hudOffsetX;
+        public final ForgeConfigSpec.IntValue          hudOffsetY;
+        public final ForgeConfigSpec.DoubleValue       globalOpacity;
 
         // --- colours (ARGB hex strings) ---
-        public final ModConfigSpec.ConfigValue<String> bgColor;
-        public final ModConfigSpec.ConfigValue<String> borderColor;
-        public final ModConfigSpec.ConfigValue<String> textMuted;
-        public final ModConfigSpec.ConfigValue<String> textToast;
+        public final ForgeConfigSpec.ConfigValue<String> bgColor;
+        public final ForgeConfigSpec.ConfigValue<String> borderColor;
+        public final ForgeConfigSpec.ConfigValue<String> textMuted;
+        public final ForgeConfigSpec.ConfigValue<String> textToast;
 
         // --- recognition tuning ---
-        public final ModConfigSpec.BooleanValue debugMonitor;
-        public final ModConfigSpec.IntValue     fuzzyMaxDistance;
-        public final ModConfigSpec.BooleanValue substringMatch;
-        public final ModConfigSpec.IntValue     dedupMillis;
-        public final ModConfigSpec.IntValue     echoLockoutMillis;
-        public final ModConfigSpec.IntValue     castQueueSize;
-        public final ModConfigSpec.BooleanValue clientPreflight;
-        public final ModConfigSpec.DoubleValue  minConfidence;
-        public final ModConfigSpec.BooleanValue autoDownloadModel;
-        public final ModConfigSpec.ConfigValue<String> modelPath;
-        public final ModConfigSpec.BooleanValue requireSneak;
-        public final ModConfigSpec.ConfigValue<String> triggerWord;
-        public final ModConfigSpec.ConfigValue<List<? extends String>> triggerWords;
-        public final ModConfigSpec.ConfigValue<List<? extends String>> perSpellMinConfidence;
-        public final ModConfigSpec.BooleanValue showMisses;
-        public final ModConfigSpec.BooleanValue enableEchoSfx;
-        public final ModConfigSpec.BooleanValue streamerMode;
-        public final ModConfigSpec.BooleanValue sassMode;
-        public final ModConfigSpec.BooleanValue combatOnly;
-        public final ModConfigSpec.BooleanValue pauseWhenAfk;
-        public final ModConfigSpec.IntValue     afkSeconds;
-        public final ModConfigSpec.BooleanValue alwaysShowHeard;
-        public final ModConfigSpec.EnumValue<ThemePreset> themePreset;
-        public final ModConfigSpec.EnumValue<UiPalette> uiPalette;
-        public final ModConfigSpec.BooleanValue handsFreeConfirm;
-        public final ModConfigSpec.DoubleValue  noiseGateRms;
-        public final ModConfigSpec.BooleanValue chatRankTag;
-        public final ModConfigSpec.BooleanValue voiceHotbarSelect;
-        public final ModConfigSpec.BooleanValue restrictToOwned;
-        public final ModConfigSpec.ConfigValue<List<? extends String>> customPhrases;
-        public final ModConfigSpec.ConfigValue<List<? extends String>> incantations;
-        public final ModConfigSpec.ConfigValue<List<? extends String>> blockedSpells;
-        public final ModConfigSpec.ConfigValue<List<? extends String>> loadouts;
+        public final ForgeConfigSpec.BooleanValue debugMonitor;
+        public final ForgeConfigSpec.IntValue     fuzzyMaxDistance;
+        public final ForgeConfigSpec.BooleanValue substringMatch;
+        public final ForgeConfigSpec.IntValue     dedupMillis;
+        public final ForgeConfigSpec.IntValue     echoLockoutMillis;
+        public final ForgeConfigSpec.IntValue     castQueueSize;
+        public final ForgeConfigSpec.BooleanValue clientPreflight;
+        public final ForgeConfigSpec.DoubleValue  minConfidence;
+        public final ForgeConfigSpec.BooleanValue autoDownloadModel;
+        public final ForgeConfigSpec.ConfigValue<String> modelPath;
+        public final ForgeConfigSpec.BooleanValue requireSneak;
+        public final ForgeConfigSpec.ConfigValue<String> triggerWord;
+        public final ForgeConfigSpec.ConfigValue<List<? extends String>> triggerWords;
+        public final ForgeConfigSpec.ConfigValue<List<? extends String>> perSpellMinConfidence;
+        public final ForgeConfigSpec.BooleanValue showMisses;
+        public final ForgeConfigSpec.BooleanValue enableEchoSfx;
+        public final ForgeConfigSpec.BooleanValue streamerMode;
+        public final ForgeConfigSpec.BooleanValue sassMode;
+        public final ForgeConfigSpec.BooleanValue combatOnly;
+        public final ForgeConfigSpec.BooleanValue pauseWhenAfk;
+        public final ForgeConfigSpec.IntValue     afkSeconds;
+        public final ForgeConfigSpec.BooleanValue alwaysShowHeard;
+        public final ForgeConfigSpec.EnumValue<ThemePreset> themePreset;
+        public final ForgeConfigSpec.EnumValue<UiPalette> uiPalette;
+        public final ForgeConfigSpec.BooleanValue handsFreeConfirm;
+        public final ForgeConfigSpec.DoubleValue  noiseGateRms;
+        public final ForgeConfigSpec.BooleanValue chatRankTag;
+        public final ForgeConfigSpec.BooleanValue voiceHotbarSelect;
+        public final ForgeConfigSpec.BooleanValue restrictToOwned;
+        public final ForgeConfigSpec.ConfigValue<List<? extends String>> customPhrases;
+        public final ForgeConfigSpec.ConfigValue<List<? extends String>> incantations;
+        public final ForgeConfigSpec.ConfigValue<List<? extends String>> blockedSpells;
+        public final ForgeConfigSpec.ConfigValue<List<? extends String>> loadouts;
 
         // --- internal flags (tracked by the mod, not normally hand-edited) ---
-        public final ModConfigSpec.BooleanValue firstRun;
+        public final ForgeConfigSpec.BooleanValue firstRun;
 
-        Client(ModConfigSpec.Builder b) {
+        Client(ForgeConfigSpec.Builder b) {
             b.push("hud");
             b.comment("Position of the HUD chip on screen. offsetX/Y are pixels from the",
                       "chosen corner to the nearest corner of the chip.");

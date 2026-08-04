@@ -259,12 +259,12 @@ public final class ConfigMoreScreen extends Screen {
             case "afkSeconds":        c.afkSeconds.set(Integer.parseInt(val.trim())); return true;
             case "chatRankTag":       c.chatRankTag.set(Boolean.parseBoolean(val)); return true;
             case "voiceHotbarSelect": c.voiceHotbarSelect.set(Boolean.parseBoolean(val)); return true;
-            case "customPhrases":     ((net.neoforged.neoforge.common.ModConfigSpec.ConfigValue) c.customPhrases).set(splitList(val)); return true;
-            case "incantations":      ((net.neoforged.neoforge.common.ModConfigSpec.ConfigValue) c.incantations).set(splitList(val)); return true;
-            case "loadouts":          ((net.neoforged.neoforge.common.ModConfigSpec.ConfigValue) c.loadouts).set(splitList(val)); return true;
-            case "blockedSpells":     ((net.neoforged.neoforge.common.ModConfigSpec.ConfigValue) c.blockedSpells).set(splitList(val)); return true;
-            case "triggerWords":      ((net.neoforged.neoforge.common.ModConfigSpec.ConfigValue) c.triggerWords).set(splitList(val)); return true;
-            case "perSpellMinConfidence": ((net.neoforged.neoforge.common.ModConfigSpec.ConfigValue) c.perSpellMinConfidence).set(splitList(val)); return true;
+            case "customPhrases":     ((net.minecraftforge.common.ForgeConfigSpec.ConfigValue) c.customPhrases).set(splitList(val)); return true;
+            case "incantations":      ((net.minecraftforge.common.ForgeConfigSpec.ConfigValue) c.incantations).set(splitList(val)); return true;
+            case "loadouts":          ((net.minecraftforge.common.ForgeConfigSpec.ConfigValue) c.loadouts).set(splitList(val)); return true;
+            case "blockedSpells":     ((net.minecraftforge.common.ForgeConfigSpec.ConfigValue) c.blockedSpells).set(splitList(val)); return true;
+            case "triggerWords":      ((net.minecraftforge.common.ForgeConfigSpec.ConfigValue) c.triggerWords).set(splitList(val)); return true;
+            case "perSpellMinConfidence": ((net.minecraftforge.common.ForgeConfigSpec.ConfigValue) c.perSpellMinConfidence).set(splitList(val)); return true;
             default: return false; // unknown key — quietly skip
         }
     }

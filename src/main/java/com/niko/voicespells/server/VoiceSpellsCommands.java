@@ -7,8 +7,8 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.RegisterCommandsEvent;
 
 import java.util.List;
 
@@ -27,7 +27,7 @@ public final class VoiceSpellsCommands {
 
     /** Wire this up from the mod's constructor — see VoiceSpells.java. */
     public static void register() {
-        NeoForge.EVENT_BUS.addListener(VoiceSpellsCommands::onRegisterCommands);
+        MinecraftForge.EVENT_BUS.addListener(VoiceSpellsCommands::onRegisterCommands);
     }
 
     private static void onRegisterCommands(RegisterCommandsEvent event) {
