@@ -23,6 +23,12 @@ neoForge {
 		client {
 			client()
 			systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+			// Optional: -PquickPlay=<world folder> boots straight into that singleplayer world
+			// instead of stopping at the title screen. Microphone capture only runs in a world,
+			// so this is what makes it testable without clicking through the menus by hand.
+			if (project.hasProperty('quickPlay')) {
+				programArguments.addAll '--quickPlaySingleplayer', project.property('quickPlay').toString()
+			}
 		}
 		// A dedicated-server run. This mod ships client-only UI but must load on a headless
 		// server, and the "client GUI class on a dedicated server" crash has now regressed
