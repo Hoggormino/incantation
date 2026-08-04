@@ -380,8 +380,7 @@ public final class VoiceController {
         int streakForTrigger = currentStreak();
         Minecraft.getInstance().execute(() -> {
             SpellSelector.select(dispatched);
-            PacketDistributor.sendToServer(new CastSpellPayload(dispatched, 1.0f,
-                totalForTrigger, streakForTrigger));
+            dispatchCast(dispatched, 1.0f, totalForTrigger, streakForTrigger);
             if (VoiceSpellsConfig.cEchoSfx) playEchoChime(dispatched);
         });
     }
@@ -726,6 +725,27 @@ public final class VoiceController {
         }
     }
 
+
+    /**
+     * Send the cast, preferring Iron's Spells' own client-to-server path.
+     *
+     * <p>{@link ClientCast} makes the server build the whole cast from its own view of the
+     * player's inventory, so nothing about the spell is taken on the client's word. It is also the
+     * path that lets this mod work without a server-side component at all.
+     *
+     * <p>The mod's own packet stays as the fallback, deliberately. The Iron's class it reflects
+     * against is internal rather than API, so an Iron's update can rename it out from under us; and
+     * the client path depends on both sides ordering their spell slots identically, which is an
+     * assumption rather than a guarantee. Falling back costs nothing and keeps casting working in
+     * both cases.
+     */
+    private static void dispatchCast(ResourceLocation spellId, float volume,
+                                     int totalForTrigger, int streakForTrigger) {
+        if (ClientCast.tryCast(spellId)) return;
+        PacketDistributor.sendToServer(
+            new CastSpellPayload(spellId, volume, totalForTrigger, streakForTrigger));
+    }
+
     /**
      * The grammar the recognizer should be using right now.
      *
@@ -834,8 +854,7 @@ public final class VoiceController {
         int streakForTrigger = currentStreak();
         Minecraft.getInstance().execute(() -> {
             SpellSelector.select(queued);
-            PacketDistributor.sendToServer(new CastSpellPayload(queued, vol,
-                totalForTrigger, streakForTrigger));
+            dispatchCast(queued, vol, totalForTrigger, streakForTrigger);
             if (VoiceSpellsConfig.cEchoSfx) playEchoChime(queued);
         });
     }
@@ -1295,8 +1314,7 @@ public final class VoiceController {
             // Move the spellbook's selected spell to the one we're casting so the HUD bar
             // reflects it and a follow-up manual cast uses the same spell.
             SpellSelector.select(dispatched);
-            PacketDistributor.sendToServer(new CastSpellPayload(dispatched, vol,
-                totalForTrigger, streakForTrigger));
+            dispatchCast(dispatched, vol, totalForTrigger, streakForTrigger);
             if (VoiceSpellsConfig.cEchoSfx) playEchoChime(dispatched);
         });
     }

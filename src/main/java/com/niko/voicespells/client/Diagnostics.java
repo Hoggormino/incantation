@@ -35,6 +35,7 @@ public final class Diagnostics {
         List<Result> out = new ArrayList<>();
         // --- Integrations ---
         out.add(checkMicrophone());
+        out.add(checkCastPath());
         out.add(checkIronsSpells());
         out.add(checkCurios());
         // --- Recognition stack ---
@@ -108,6 +109,23 @@ public final class Diagnostics {
                 status + " — run /voicespells devices to see what is connected");
         }
         return new Result("Microphone", Status.WARN, status);
+    }
+
+    /** Which route casts actually take. The client path needs no server-side component; the
+     *  fallback does, and silently requires the mod on the server. Worth surfacing, because the
+     *  difference is invisible until someone joins a server without it. */
+    private static Result checkCastPath() {
+        Boolean avail = ClientCast.availability();
+        if (Boolean.TRUE.equals(avail)) {
+            return new Result("Cast path", Status.OK,
+                "Iron's Spells client path — no server-side mod needed");
+        }
+        if (Boolean.FALSE.equals(avail)) {
+            return new Result("Cast path", Status.WARN,
+                "Client path unavailable; using the fallback, which needs Incantation on the server");
+        }
+        return new Result("Cast path", Status.INFO,
+            "Untried — resolves on the first cast");
     }
 
     private static Result checkIronsSpells() {
