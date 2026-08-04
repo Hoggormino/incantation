@@ -4,6 +4,7 @@
   "key.voicespells.toggle_hud": "Toggle Voice HUD",
   "key.voicespells.accept_suggestion": "Accept Alias Suggestion",
   "key.voicespells.quick_recast": "Quick Recast Last Spell",
+  "key.voicespells.push_to_talk": "Push To Talk (HOLD_KEY mode)",
 
   "text.voicespells.model_missing": "Incantation: Vosk model not found. Unzip a small English model into %s and try again.",
 

@@ -460,8 +460,108 @@ public final class VoiceController {
      * the flush fires when the noise gate closes after having been open, which is the same
      * "speech just ended" signal derived locally rather than handed to us.
      */
+    /**
+     * Whether captured audio may reach the recognizer right now.
+     *
+     * <p>This is the capture-time gate, and it is deliberately stricter than the dispatch-time
+     * filters ({@code combatOnly}, {@code pauseWhenAfk}) which only discard results after the audio
+     * has already been recognised. In HOLD_KEY and HOLD_ITEM the recognizer never receives the
+     * audio at all — the difference matters for both CPU and for what "the mic is off" means.
+     *
+     * <p>Being outside a world counts as closed regardless of mode: there is nothing to cast at,
+     * and it means the mic is not live while sitting on the title screen.
+     */
+    private static boolean captureArmed() {
+        if (!listeningEnabled) return false;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null) return false;
+        if (VoiceSpellsConfig.cSuspendUnfocused && (!mc.isWindowActive() || mc.isPaused())) {
+            return false;
+        }
+        switch (VoiceSpellsConfig.cGatingMode) {
+            case HOLD_KEY:  return ClientEvents.isPushToTalkDown();
+            case HOLD_ITEM: return com.niko.voicespells.spells.OwnedSpells.holdingSpellFocus();
+            default:        return true;
+        }
+    }
+
+    /** Exposed for the HUD's mic-state icon and for diagnostics. */
+    public static boolean isArmed() { return captureArmed(); }
+
+    // ----- Calibration / transcription mode ------------------------------------------------
+
+    private static volatile boolean transcription = false;
+    private static volatile String lastTranscriptShown = "";
+
+    public static boolean isTranscribing() { return transcription; }
+
+    /**
+     * Toggle free-dictation mode: the recognizer drops its grammar and every result is printed to
+     * chat instead of being matched or cast.
+     *
+     * <p>Exists because grammar mode structurally cannot answer "what did it hear?". With a
+     * grammar the recognizer can only return phrases from that grammar, so a misheard spell tells
+     * you which of your spells you were closest to, not the words you actually produced. Choosing
+     * a good alias needs the latter.
+     *
+     * @return the new state
+     */
+    public static boolean toggleTranscription() {
+        transcription = !transcription;
+        lastTranscriptShown = "";
+        VoskSession s = session;
+        if (s != null) {
+            boolean on = transcription;
+            Thread t = new Thread(() -> {
+                if (on) s.rebuildUnconstrained();
+                else    s.rebuildGrammar(currentGrammar());
+            }, "VoiceSpells-Grammar-Calibrate");
+            t.setDaemon(true);
+            t.start();
+        }
+        return transcription;
+    }
+
+    private static void reportTranscription(String phrase, boolean isFinal, double confidence) {
+        if (phrase == null || phrase.isBlank()) return;
+        // Partials repeat every frame as the utterance grows; only surface changes, or chat
+        // becomes unreadable.
+        if (!isFinal && phrase.equals(lastTranscriptShown)) return;
+        lastTranscriptShown = phrase;
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (mc.player == null) return;
+            Component line = isFinal
+                ? Component.literal("heard: ")
+                    .withStyle(net.minecraft.ChatFormatting.DARK_GRAY)
+                    .append(Component.literal(phrase)
+                        .withStyle(net.minecraft.ChatFormatting.AQUA))
+                    .append(Component.literal(String.format(java.util.Locale.ROOT,
+                            "  (%.0f%%)", confidence * 100))
+                        .withStyle(net.minecraft.ChatFormatting.DARK_GRAY))
+                : Component.literal("  … " + phrase)
+                    .withStyle(net.minecraft.ChatFormatting.DARK_GRAY);
+            mc.player.displayClientMessage(line, false);
+        });
+    }
+
     public static void onMicFrame16k(short[] pcm) {
-        if (!listeningEnabled || pcm == null || pcm.length == 0) return;
+        if (pcm == null || pcm.length == 0) return;
+        if (!captureArmed()) {
+            // Gate closed. If speech was in flight, settle it rather than leaving a half-recognised
+            // utterance to bleed into whatever is said after the gate reopens.
+            if (gateWasOpen) {
+                gateWasOpen = false;
+                VoskSession s = session;
+                if (s != null) {
+                    Thread t = new Thread(() -> { s.flush(); s.reset(); }, "VoiceSpells-Flush");
+                    t.setDaemon(true);
+                    t.start();
+                }
+            }
+            audioLevel *= 0.5f;
+            return;
+        }
         long now = System.nanoTime();
         lastFrameNanos = now;
         double rms = updateAudioLevel(pcm);
@@ -912,6 +1012,35 @@ public final class VoiceController {
 
     private static volatile String activeDevice = null;
 
+    /**
+     * Open or release the capture device according to whether the game is in a state where
+     * listening makes sense at all. Called once per client tick; idempotent and cheap.
+     *
+     * <p>Deliberately coarse. Only long-lived conditions release the device — no world, window
+     * unfocused, game paused — because opening a capture device is not instant, and thrashing it
+     * on something as fast as a push-to-talk keypress would clip the start of every utterance.
+     * Short-lived gating is handled per frame in {@code captureArmed()} instead.
+     */
+    public static void tickCaptureSuspension() {
+        Minecraft mc = Minecraft.getInstance();
+        boolean inWorld = mc.level != null && mc.player != null;
+        boolean suspended = !inWorld
+            || (VoiceSpellsConfig.cSuspendUnfocused && (!mc.isWindowActive() || mc.isPaused()));
+
+        if (suspended) {
+            if (capture != null) {
+                stopCapture();
+                // Drop any half-heard utterance so it cannot resurface after resuming.
+                VoskSession s = session;
+                if (s != null) s.reset();
+                gateWasOpen = false;
+                audioLevel = 0f;
+            }
+            return;
+        }
+        if (capture == null) syncCapture();
+    }
+
     public static synchronized void stopCapture() {
         com.niko.voicespells.speech.MicCapture c = capture;
         capture = null;
@@ -995,6 +1124,11 @@ public final class VoiceController {
      * casting via a greedy substring grab.
      */
     private static void onPhraseRecognized(String phrase, boolean isFinal, double confidence) {
+        // Calibration mode short-circuits everything: report what the model heard and cast nothing.
+        if (transcription) {
+            reportTranscription(phrase, isFinal, confidence);
+            return;
+        }
         // Utterance-boundary detection: a partial that follows a final is the start of a new
         // utterance. Bump the counter so the dedup check below can tell "still the same thing
         // I was just hearing" from "the player said it again".

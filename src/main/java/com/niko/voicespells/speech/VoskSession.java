@@ -93,6 +93,36 @@ public final class VoskSession implements AutoCloseable {
     }
 
     /**
+     * Swap in a recognizer with <b>no grammar at all</b> — free dictation over the model's whole
+     * lexicon.
+     *
+     * <p>This is the opposite of how the mod normally runs, and that is the point. With a grammar,
+     * the recognizer can only ever report phrases the grammar contains, so it cannot tell you what
+     * it actually heard — it tells you which of your spells your speech was closest to. For
+     * choosing aliases you need the unfiltered transcription: say the spell name, see the words the
+     * model genuinely produced, and bind those.
+     *
+     * <p>Far less accurate than grammar mode and not meant for casting. The caller is expected to
+     * suppress casting while this is active.
+     */
+    public synchronized void rebuildUnconstrained() {
+        if (closed) return;
+        Recognizer fresh;
+        try {
+            fresh = new Recognizer(model, SAMPLE_RATE);
+            fresh.setWords(true);
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.error("Could not open a free-dictation recognizer: {}", t.toString());
+            return;
+        }
+        Recognizer old = recognizer;
+        recognizer = fresh;
+        lastTriedPartial = "";
+        try { old.close(); } catch (Throwable ignored) {}
+        VoiceSpells.LOGGER.info("Recognition switched to free dictation (no grammar)");
+    }
+
+    /**
      * Feed a frame that is already at the recognizer's rate.
      *
      * <p>The capture device is opened at 16 kHz, so frames need no conversion. The name keeps the

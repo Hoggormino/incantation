@@ -106,6 +106,22 @@ public final class VoiceSpellsConfig {
         cacheColors();
     }
 
+    /**
+     * When the microphone is allowed to feed the recognizer.
+     *
+     * <p>Distinct from the existing combatOnly / pauseWhenAfk options, which filter at dispatch —
+     * after audio has already been recognised. These gate at capture, so in HOLD_KEY and HOLD_ITEM
+     * the recognizer never sees the audio at all.
+     */
+    public enum GatingMode {
+        /** Microphone live whenever you are in a world. */
+        ALWAYS_ON,
+        /** Only while the push-to-talk keybind is held. */
+        HOLD_KEY,
+        /** Only while holding a spellbook, staff or imbued weapon. */
+        HOLD_ITEM
+    }
+
     public static final class Client {
         // --- position ---
         public final ModConfigSpec.EnumValue<Corner> hudCorner;
@@ -146,6 +162,10 @@ public final class VoiceSpellsConfig {
         public final ModConfigSpec.EnumValue<UiPalette> uiPalette;
         public final ModConfigSpec.BooleanValue handsFreeConfirm;
         public final ModConfigSpec.DoubleValue  noiseGateRms;
+        /** When the mic is allowed to feed the recognizer. */
+        public final ModConfigSpec.EnumValue<GatingMode> gatingMode;
+        /** Release the mic while the window is unfocused or the game is paused. */
+        public final ModConfigSpec.BooleanValue suspendWhenUnfocused;
         /** Minimum spell phrases kept in the Vosk grammar; short sets are padded with decoys. */
         public final ModConfigSpec.IntValue     grammarFloor;
         /** Exact capture device name, or blank for the system default. /voicespells devices lists them. */
@@ -275,6 +295,18 @@ public final class VoiceSpellsConfig {
                       "Raise this if you see phantom casts on background noise; lower if",
                       "soft speech is being missed. Set to 0 to disable the gate entirely.");
             noiseGateRms = b.defineInRange("noiseGateRms", 350.0, 0.0, 6000.0);
+            b.comment("When the microphone is allowed to listen.",
+                      "ALWAYS_ON - live whenever you are in a world.",
+                      "HOLD_KEY  - only while the push-to-talk keybind is held.",
+                      "HOLD_ITEM - only while holding a spellbook, staff or imbued weapon.",
+                      "Unlike combatOnly and pauseWhenAfk, which filter after recognition, this",
+                      "gates capture itself: in HOLD_KEY and HOLD_ITEM the recognizer never",
+                      "receives the audio at all.");
+            gatingMode = b.defineEnum("gatingMode", GatingMode.ALWAYS_ON);
+            b.comment("Close the microphone device entirely while the game window is unfocused or",
+                      "paused. Leave this on unless you specifically want to cast while tabbed out;",
+                      "it means the mic is not held open while you are doing something else.");
+            suspendWhenUnfocused = b.define("suspendWhenUnfocused", true);
             b.comment("Minimum number of spell phrases in the speech grammar.",
                       "The grammar is narrowed to spells you can actually cast, which is what makes",
                       "recognition accurate. But a very small grammar is dangerous: the recognizer",
@@ -368,6 +400,8 @@ public final class VoiceSpellsConfig {
     public static volatile boolean cAlwaysShowHeard = false;
     public static volatile boolean cHandsFreeConfirm = false;
     public static volatile double  cNoiseGateRms    = 350.0;
+    public static volatile GatingMode cGatingMode    = GatingMode.ALWAYS_ON;
+    public static volatile boolean cSuspendUnfocused = true;
     public static volatile int     cGrammarFloor    = 16;
     public static volatile String  cCaptureDevice    = "";
     public static volatile boolean cChatRankTag     = false;
@@ -421,6 +455,8 @@ public final class VoiceSpellsConfig {
         cAlwaysShowHeard  = c.alwaysShowHeard.get();
         cHandsFreeConfirm = c.handsFreeConfirm.get();
         cNoiseGateRms     = c.noiseGateRms.get();
+        cGatingMode       = c.gatingMode.get();
+        cSuspendUnfocused = c.suspendWhenUnfocused.get();
         cGrammarFloor     = c.grammarFloor.get();
         cCaptureDevice    = c.captureDevice.get();
         cChatRankTag      = c.chatRankTag.get();

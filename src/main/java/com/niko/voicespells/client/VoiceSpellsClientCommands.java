@@ -104,6 +104,34 @@ public final class VoiceSpellsClientCommands {
             return 1;
         }));
 
+        root.then(Commands.literal("test").executes(ctx -> {
+            boolean on = VoiceController.toggleTranscription();
+            if (on) {
+                ctx.getSource().sendSuccess(() -> Component
+                    .literal("Calibration mode ON — grammar dropped, casting disabled")
+                    .withStyle(ChatFormatting.GOLD), false);
+                ctx.getSource().sendSuccess(() -> Component
+                    .literal("Say a spell name and read what the model actually heard, then bind "
+                           + "that wording as an alias. Run again to go back to casting.")
+                    .withStyle(ChatFormatting.DARK_GRAY), false);
+            } else {
+                ctx.getSource().sendSuccess(() -> Component
+                    .literal("Calibration mode OFF — grammar restored, casting re-enabled")
+                    .withStyle(ChatFormatting.GREEN), false);
+            }
+            return 1;
+        }));
+
+        root.then(Commands.literal("reload").executes(ctx -> {
+            VoiceSpellsConfig.refreshCache();
+            VoiceController.onConfigChanged();
+            VoiceController.syncCapture();
+            ctx.getSource().sendSuccess(() -> Component
+                .literal("Reloaded config, phrases and grammar")
+                .withStyle(ChatFormatting.GREEN), false);
+            return 1;
+        }));
+
         event.getDispatcher().register(root);
     }
 }

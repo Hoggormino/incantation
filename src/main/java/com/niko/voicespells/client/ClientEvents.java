@@ -60,6 +60,21 @@ public final class ClientEvents {
         "key.categories.voicespells"
     );
 
+    /** Push-to-talk, used only when gatingMode = HOLD_KEY. Held rather than toggled, so it is
+     *  read directly from the key state each frame instead of via consumeClick(). */
+    private static final KeyMapping PUSH_TO_TALK = new KeyMapping(
+        "key.voicespells.push_to_talk",
+        KeyConflictContext.IN_GAME,
+        InputConstants.Type.KEYSYM,
+        GLFW.GLFW_KEY_GRAVE_ACCENT,
+        "key.categories.voicespells"
+    );
+
+    /** True while the push-to-talk key is physically down. */
+    public static boolean isPushToTalkDown() {
+        return PUSH_TO_TALK.isDown();
+    }
+
     private ClientEvents() {}
 
     /** Called from {@link VoiceSpells} constructor on the client. */
@@ -117,6 +132,7 @@ public final class ClientEvents {
         event.register(TOGGLE_HUD);
         event.register(ACCEPT_SUGGESTION);
         event.register(QUICK_RECAST);
+        event.register(PUSH_TO_TALK);
     }
 
     private static void onRegisterGuiLayers(RegisterGuiLayersEvent event) {
@@ -156,6 +172,11 @@ public final class ClientEvents {
 
     private static void onClientTickPost(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
+        // Device-level suspend, distinct from the per-frame gate in captureArmed(). The frame gate
+        // is what makes HOLD_KEY feel instant; this is what makes "the mic is off" literally true —
+        // the OpenAL device is closed, not merely ignored, while you are tabbed out, paused, or on
+        // a menu. Cheap to evaluate and idempotent, so running it every tick is fine.
+        VoiceController.tickCaptureSuspension();
         if (mc.player == null) {
             firstRunEligibleSinceMs = 0L; // reset settle timer between worlds
             return;
@@ -400,6 +421,55 @@ public final class ClientEvents {
         private static final int METER_W  = 24;
         private static final int METER_H  = 4;
 
+        /**
+         * Mic state dot plus a live level meter.
+         *
+         * <p>This chip used to be deleted on the grounds that Simple Voice Chat already showed
+         * whether you were transmitting. That is no longer true — the mod owns the microphone now,
+         * and without this there is nothing anywhere in the UI that says whether it is listening.
+         * That matters most in HOLD_KEY and HOLD_ITEM, where the mic being closed is the normal
+         * state and is otherwise indistinguishable from the mod being broken.
+         *
+         * <p>Three states, deliberately distinct at a glance:
+         * <ul>
+         *   <li><b>idle</b> (faint) — capture suspended or gate closed: not listening.</li>
+         *   <li><b>armed</b> (accent) — listening, nothing above the noise gate yet.</li>
+         *   <li><b>listening</b> (bright, pulsing) — audio is passing the gate and reaching Vosk.</li>
+         * </ul>
+         */
+        private void drawMicChip(GuiGraphics g, Font font, int x, int y, boolean isBottom) {
+            boolean armed = VoiceController.isArmed();
+            float level = VoiceController.audioLevel();
+            boolean hot = armed && level > 0.02f;
+
+            int dotColor = !armed ? Theme.C_FAINT
+                         : hot    ? Theme.withPulsedAlpha(Theme.C_ACCENT_BRIGHT & 0x00FFFFFF, 0.75f, 1.0f)
+                                  : Theme.C_ACCENT_SOFT;
+
+            // Sits opposite the toast so the two never overlap as history stacks up.
+            int chipY = y + (isBottom ? CHIP_H + 3 : -(CHIP_H + 3));
+            int dotX = x + PAD_X;
+            int dotY = chipY + (CHIP_H - DOT_SIZE) / 2;
+            g.fill(dotX, dotY, dotX + DOT_SIZE, dotY + DOT_SIZE, dotColor);
+
+            // Level meter. Drawn even when idle (as an empty track) so the chip keeps a stable
+            // width and does not jitter as speech starts and stops.
+            int meterX = dotX + DOT_SIZE + 4;
+            int meterY = chipY + (CHIP_H - METER_H) / 2;
+            g.fill(meterX, meterY, meterX + METER_W, meterY + METER_H, Theme.C_PANEL);
+            if (armed && level > 0f) {
+                int filled = Math.max(1, Math.min(METER_W, Math.round(level * METER_W)));
+                g.fill(meterX, meterY, meterX + filled, meterY + METER_H, dotColor);
+            }
+
+            // Calibration mode replaces casting entirely, so say so rather than letting the chip
+            // imply spells are about to fire.
+            if (VoiceController.isTranscribing()) {
+                g.drawString(font, "calibrating", meterX + METER_W + 4,
+                    chipY + (CHIP_H - font.lineHeight) / 2 + 1, Theme.C_MUTED, false);
+            }
+        }
+
         @Override
         public void render(GuiGraphics g, net.minecraft.client.DeltaTracker delta) {
             Minecraft mc = Minecraft.getInstance();
@@ -410,11 +480,6 @@ public final class ClientEvents {
             // backdrop, so the toast bleeds through the config panel.
             if (mc.screen != null) return;
 
-            // The persistent "voice / listening / loading" chip is gone — Simple Voice Chat's
-            // own mic indicator already shows whether you're transmitting, so duplicating it
-            // here was visual noise. We only draw the spell-cast toast now, anchored to the
-            // configured corner. Off / error / loading still get conveyed via the chat
-            // messages emitted by the toggle and load paths.
             Font font = mc.font;
 
             int screenW = mc.getWindow().getGuiScaledWidth();
@@ -428,6 +493,7 @@ public final class ClientEvents {
             boolean isBottom = (corner == VoiceSpellsConfig.Corner.BOTTOM_LEFT
                              || corner == VoiceSpellsConfig.Corner.BOTTOM_RIGHT);
 
+            drawMicChip(g, font, anchorX, anchorY, isBottom);
             drawToastIfActive(g, font, anchorX, anchorY);
 
             // History strip — older casts trail the most recent cast toast in a stack that
