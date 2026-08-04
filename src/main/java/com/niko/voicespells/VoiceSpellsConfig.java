@@ -106,6 +106,10 @@ public final class VoiceSpellsConfig {
         cacheColors();
     }
 
+    /** Microphone source. Kept as an enum so the legacy SVC path stays selectable while the
+     *  OpenAL capture path beds in. */
+    public enum AudioSource { OPENAL, SIMPLE_VOICE_CHAT }
+
     public static final class Client {
         // --- position ---
         public final ModConfigSpec.EnumValue<Corner> hudCorner;
@@ -146,6 +150,11 @@ public final class VoiceSpellsConfig {
         public final ModConfigSpec.EnumValue<UiPalette> uiPalette;
         public final ModConfigSpec.BooleanValue handsFreeConfirm;
         public final ModConfigSpec.DoubleValue  noiseGateRms;
+        /** Where microphone audio comes from. OPENAL captures the mic directly and needs no
+         *  other mod; SIMPLE_VOICE_CHAT taps an existing SVC transmission. */
+        public final ModConfigSpec.EnumValue<AudioSource> audioSource;
+        /** Exact capture device name, or blank for the system default. /voicespells devices lists them. */
+        public final ModConfigSpec.ConfigValue<String> captureDevice;
         public final ModConfigSpec.BooleanValue chatRankTag;
         public final ModConfigSpec.BooleanValue voiceHotbarSelect;
         public final ModConfigSpec.BooleanValue restrictToOwned;
@@ -271,6 +280,13 @@ public final class VoiceSpellsConfig {
                       "Raise this if you see phantom casts on background noise; lower if",
                       "soft speech is being missed. Set to 0 to disable the gate entirely.");
             noiseGateRms = b.defineInRange("noiseGateRms", 350.0, 0.0, 6000.0);
+            b.comment("Where microphone audio comes from.",
+                      "OPENAL             - capture the microphone directly. No other mod needed.",
+                      "SIMPLE_VOICE_CHAT  - listen to your Simple Voice Chat transmission (legacy).");
+            audioSource   = b.defineEnum("audioSource", AudioSource.OPENAL);
+            b.comment("Capture device name, or blank for the system default.",
+                      "Run /voicespells devices in game to list the exact names.");
+            captureDevice = b.define("captureDevice", "");
             b.comment("Prefix chat messages with your voice-cast rank, e.g. '[Adept] hello'.",
                       "Cosmetic only — opt-in.");
             chatRankTag = b.define("chatRankTag", false);
@@ -352,6 +368,8 @@ public final class VoiceSpellsConfig {
     public static volatile boolean cAlwaysShowHeard = false;
     public static volatile boolean cHandsFreeConfirm = false;
     public static volatile double  cNoiseGateRms    = 350.0;
+    public static volatile AudioSource cAudioSource  = AudioSource.OPENAL;
+    public static volatile String  cCaptureDevice    = "";
     public static volatile boolean cChatRankTag     = false;
     public static volatile boolean cVoiceHotbarSelect = false;
     public static volatile boolean cRestrictToOwned   = true;
@@ -403,6 +421,8 @@ public final class VoiceSpellsConfig {
         cAlwaysShowHeard  = c.alwaysShowHeard.get();
         cHandsFreeConfirm = c.handsFreeConfirm.get();
         cNoiseGateRms     = c.noiseGateRms.get();
+        cAudioSource      = c.audioSource.get();
+        cCaptureDevice    = c.captureDevice.get();
         cChatRankTag      = c.chatRankTag.get();
         cVoiceHotbarSelect = c.voiceHotbarSelect.get();
         cRestrictToOwned   = c.restrictToOwned.get();

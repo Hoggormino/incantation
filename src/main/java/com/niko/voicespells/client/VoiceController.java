@@ -451,6 +451,52 @@ public final class VoiceController {
 
     /** Called from {@code VoiceSpellsVoicechatPlugin} on every SVC mic frame, including empty
      *  arrays which signal end-of-transmission. */
+    /**
+     * OpenAL capture path — frames are already at the recognizer's 16 kHz, and the stream is
+     * continuous.
+     *
+     * <p>That continuity is the real difference from SVC. SVC hands us an empty frame to mark
+     * end-of-transmission, which is what triggers the flush that turns a pending utterance into a
+     * final result. A raw capture device never stops sending, so there is no such marker: instead
+     * the flush fires when the noise gate closes after having been open, which is the same
+     * "speech just ended" signal derived locally rather than handed to us.
+     */
+    public static void onMicFrame16k(short[] pcm) {
+        if (!listeningEnabled || pcm == null || pcm.length == 0) return;
+        long now = System.nanoTime();
+        lastFrameNanos = now;
+        double rms = updateAudioLevel(pcm);
+        sampleCalibration(rms);
+        VoskSession s = session;
+        if (s == null) {
+            if (SpellIndex.isReady()) preloadAsync();
+            return;
+        }
+        boolean loud = rms >= VoiceSpellsConfig.cNoiseGateRms;
+        if (loud) lastLoudFrameNanos = now;
+        boolean gateOpen = lastLoudFrameNanos != 0L
+            && (now - lastLoudFrameNanos) <= NOISE_GATE_STICKY_NANOS;
+
+        if (gateOpen) {
+            gateWasOpen = true;
+            s.feed16k(pcm);
+            return;
+        }
+        // Gate just closed after speech: flush so the pending utterance settles into a final
+        // result, exactly as SVC's empty frame used to do. Flushing off-thread keeps the capture
+        // thread free to keep reading the device.
+        if (gateWasOpen) {
+            gateWasOpen = false;
+            Thread t = new Thread(() -> { s.flush(); s.reset(); }, "VoiceSpells-Flush");
+            t.setDaemon(true);
+            t.start();
+            audioLevel *= 0.2f;
+        }
+    }
+
+    /** Tracks the open→closed edge of the noise gate for the capture path's flush trigger. */
+    private static volatile boolean gateWasOpen = false;
+
     public static void onMicFrame(short[] pcm) {
         if (!listeningEnabled) return;
         if (pcm.length == 0) {
@@ -798,10 +844,54 @@ public final class VoiceController {
     /** Closes the underlying session — call on client shutdown. */
     public static void shutdown() {
         lastFrameNanos = 0L;
+        stopCapture();
         VoskSession s = session;
         session = null;
         if (s != null) s.close();
     }
+
+    // ----- OpenAL capture lifecycle -------------------------------------------------------
+
+    /** Live capture engine when {@code audioSource = OPENAL}; null when SVC is the source. */
+    private static volatile com.niko.voicespells.speech.MicCapture capture;
+
+    /**
+     * Bring capture in line with the current config. Safe to call repeatedly — on config reload,
+     * on world join, and after a device change — and cheap when nothing has changed.
+     */
+    public static synchronized void syncCapture() {
+        boolean want = VoiceSpellsConfig.cAudioSource == VoiceSpellsConfig.AudioSource.OPENAL;
+        com.niko.voicespells.speech.MicCapture c = capture;
+        if (!want) {
+            if (c != null) stopCapture();
+            return;
+        }
+        // Restart when the selected device changed; the device name is baked in at construction.
+        if (c != null) {
+            if (java.util.Objects.equals(activeDevice, VoiceSpellsConfig.cCaptureDevice)) return;
+            stopCapture();
+        }
+        activeDevice = VoiceSpellsConfig.cCaptureDevice;
+        com.niko.voicespells.speech.MicCapture fresh =
+            new com.niko.voicespells.speech.MicCapture(activeDevice, VoiceController::onMicFrame16k);
+        capture = fresh;
+        fresh.start();
+        // The recognizer is loaded lazily elsewhere off the first frame, but starting it here
+        // means the model is usually ready before the player finishes their first sentence.
+        if (session == null && SpellIndex.isReady()) preloadAsync();
+    }
+
+    private static volatile String activeDevice = null;
+
+    public static synchronized void stopCapture() {
+        com.niko.voicespells.speech.MicCapture c = capture;
+        capture = null;
+        activeDevice = null;
+        if (c != null) c.close();
+    }
+
+    /** Capture status for the HUD / diagnostics, or null when OpenAL capture is not in use. */
+    public static com.niko.voicespells.speech.MicCapture captureEngine() { return capture; }
 
     // ----- internal -----
 

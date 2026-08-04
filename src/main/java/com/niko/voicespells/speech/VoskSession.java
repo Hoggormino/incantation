@@ -93,9 +93,29 @@ public final class VoskSession implements AutoCloseable {
         VoiceSpells.LOGGER.info("Recognition grammar rebuilt ({} phrases)", phrases.size());
     }
 
+    /**
+     * Feed a frame that is already at the recognizer's rate.
+     *
+     * <p>Used by the OpenAL capture path, which opens the device at 16 kHz directly and so needs
+     * no resampling at all. {@link #feed(short[])} stays for the Simple Voice Chat path, whose
+     * frames arrive at SVC's 48 kHz capture rate and must be decimated first. Feeding 48 kHz audio
+     * through here would stretch every utterance 3x and destroy recognition, so the two entry
+     * points are deliberately separate rather than one method guessing at the rate.
+     */
+    public synchronized void feed16k(short[] frame) {
+        if (closed || frame == null || frame.length == 0) return;
+        ByteBuffer bb = ByteBuffer.allocate(frame.length * 2).order(ByteOrder.LITTLE_ENDIAN);
+        for (short s : frame) bb.putShort(s);
+        accept(bb.array());
+    }
+
     public synchronized void feed(short[] frame48k) {
         if (closed || frame48k == null || frame48k.length == 0) return;
         byte[] bytes = downsampleAndPack(frame48k);
+        accept(bytes);
+    }
+
+    private void accept(byte[] bytes) {
         try {
             if (recognizer.acceptWaveForm(bytes, bytes.length)) {
                 emitFinal(recognizer.getResult());

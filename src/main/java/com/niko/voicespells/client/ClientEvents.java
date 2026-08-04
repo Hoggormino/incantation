@@ -88,8 +88,12 @@ public final class ClientEvents {
         modBus.addListener(ClientEvents::onRegisterKeys);
         NeoForge.EVENT_BUS.addListener(ClientEvents::onClientTickPost);
         NeoForge.EVENT_BUS.addListener(ClientEvents::onClientChat);
+        NeoForge.EVENT_BUS.addListener(VoiceSpellsClientCommands::onRegister);
         // Live-apply external edits to voicespells-client.toml (no game restart).
-        com.niko.voicespells.VoiceSpellsConfig.reloadCallback = VoiceController::onConfigChanged;
+        com.niko.voicespells.VoiceSpellsConfig.reloadCallback = () -> {
+            VoiceController.onConfigChanged();
+            VoiceController.syncCapture();
+        };
         // Wire the cross-package back-references that we deliberately kept off the static
         // import graph so common/server code can be loaded on a dedicated server without
         // dragging in the client-only Minecraft GUI chain (fixes the 0.9.0 server crash).
@@ -107,6 +111,9 @@ public final class ClientEvents {
         // SpellIndex is populated in common setup which has already fired by now, so kicking off
         // the Vosk load here means the model is usually ready before the first SVC transmission.
         event.enqueueWork(VoiceController::preloadAsync);
+        // Bring the microphone up if OpenAL capture is the configured source. Safe when it is
+        // not — syncCapture() is a no-op unless audioSource is OPENAL.
+        event.enqueueWork(VoiceController::syncCapture);
     }
 
     private static void onRegisterKeys(RegisterKeyMappingsEvent event) {

@@ -62,6 +62,14 @@ public final class VoiceSpellsVoicechatPlugin implements VoicechatPlugin {
     private void onClientSound(ClientSoundEvent event) {
         Consumer<short[]> sink = micFrameSink;
         if (sink == null) return; // Dedicated server, or client not initialised yet — no mic source.
+        // With OpenAL capture selected, the mod owns its own microphone stream and must ignore
+        // SVC entirely — otherwise the same speech is fed to the recognizer twice, once at 16 kHz
+        // from the capture device and once decimated from SVC's 48 kHz, which produces duplicate
+        // and conflicting partials.
+        if (com.niko.voicespells.VoiceSpellsConfig.cAudioSource
+                != com.niko.voicespells.VoiceSpellsConfig.AudioSource.SIMPLE_VOICE_CHAT) {
+            return;
+        }
 
         VoicechatClientApi api = clientApi;
         boolean muted = api != null && api.isMuted();
