@@ -149,15 +149,64 @@ public final class SpellIndex {
         }
     }
 
+    /**
+     * Grammar for a player who currently has {@code ownedIds} castable, padded to a floor.
+     *
+     * <p>Narrowing the grammar to what the player can actually cast is what makes recognition
+     * accurate — a handful of candidate phrases is far easier to discriminate between than a
+     * hundred and fifty. But narrowing alone is a trap, and this codebase learned it the hard
+     * way: Kaldi with a closed grammar does not reject, it picks the least-bad match. Get down to
+     * one or two phrases and <i>any</i> sound in the room becomes a spell. Shipping that is what
+     * forced the earlier retreat to a permanently broad grammar.
+     *
+     * <p>{@code [unk]} alone did not save it. That entry was already present throughout, and the
+     * force-fitting happened anyway — it is necessary but nowhere near sufficient.
+     *
+     * <p>So the grammar is narrowed <b>and</b> floored: if the castable set is smaller than
+     * {@code floor}, it is padded with phrases for spells the player does <i>not</i> have. Those
+     * make excellent padding precisely because they are real spell names — in-lexicon, drawn from
+     * the same phonetic distribution as the real targets, and therefore genuine acoustic
+     * competitors rather than filler the recognizer can dismiss. And when one of them wins, the
+     * outcome is already correct: the dispatch gate refuses to cast a spell the player does not
+     * have, so a decoy match is silently a no-op.
+     *
+     * <p>Padding is deterministic (sorted, then taken in order) so the same equipment produces the
+     * same grammar every time — a recognizer that reshuffles its own decoys between rebuilds would
+     * be unreproducible to debug.
+     *
+     * @param ownedIds namespaced ids the player can currently cast, or empty to fall back to the
+     *                 full grammar (an unreliable ownership scan must not shrink the grammar)
+     * @param floor    minimum number of spell phrases to keep in the grammar
+     */
+    public static List<String> phrasesFor(Set<String> ownedIds, int floor) {
+        Map<String, ResourceLocation> all = STATE.get().phraseToId;
+        if (ownedIds == null || ownedIds.isEmpty()) return getPhrases();
+
+        List<String> owned = new java.util.ArrayList<>();
+        List<String> rest  = new java.util.ArrayList<>();
+        for (Map.Entry<String, ResourceLocation> e : all.entrySet()) {
+            if (ownedIds.contains(e.getValue().toString())) owned.add(e.getKey());
+            else rest.add(e.getKey());
+        }
+        if (owned.isEmpty()) return getPhrases(); // nothing matched — don't narrow to nothing
+
+        java.util.Collections.sort(rest);
+        List<String> out = new java.util.ArrayList<>(owned);
+        for (String decoy : rest) {
+            if (out.size() >= floor) break;
+            out.add(decoy);
+        }
+        return withVoiceCommands(out);
+    }
+
     public static List<String> getPhrases() {
         Map<String, ResourceLocation> all = STATE.get().phraseToId;
-        // The grammar stays BROAD — every registered spell phrase is in the Vosk grammar
-        // regardless of what the player has equipped. Narrowing to "owned" sounded sensible
-        // but in practice it makes Vosk grammar-force background noise into the few remaining
-        // phrases far too aggressively (1-2 spells in the grammar = ANY audio becomes one of
-        // them). The equipped-only restriction is enforced at dispatch time in VoiceController
-        // instead, so unowned spells still can't cast.
         List<String> base = List.copyOf(all.keySet());
+        return withVoiceCommands(base);
+    }
+
+    /** Append the non-spell control words the recognizer also has to hear. */
+    private static List<String> withVoiceCommands(List<String> base) {
         boolean needsHF = com.niko.voicespells.VoiceSpellsConfig.cHandsFreeConfirm;
         boolean needsHotbar = com.niko.voicespells.VoiceSpellsConfig.cVoiceHotbarSelect;
         if (!needsHF && !needsHotbar) return base;

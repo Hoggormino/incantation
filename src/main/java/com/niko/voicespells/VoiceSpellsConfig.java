@@ -146,6 +146,8 @@ public final class VoiceSpellsConfig {
         public final ModConfigSpec.EnumValue<UiPalette> uiPalette;
         public final ModConfigSpec.BooleanValue handsFreeConfirm;
         public final ModConfigSpec.DoubleValue  noiseGateRms;
+        /** Minimum spell phrases kept in the Vosk grammar; short sets are padded with decoys. */
+        public final ModConfigSpec.IntValue     grammarFloor;
         /** Exact capture device name, or blank for the system default. /voicespells devices lists them. */
         public final ModConfigSpec.ConfigValue<String> captureDevice;
         public final ModConfigSpec.BooleanValue chatRankTag;
@@ -273,6 +275,15 @@ public final class VoiceSpellsConfig {
                       "Raise this if you see phantom casts on background noise; lower if",
                       "soft speech is being missed. Set to 0 to disable the gate entirely.");
             noiseGateRms = b.defineInRange("noiseGateRms", 350.0, 0.0, 6000.0);
+            b.comment("Minimum number of spell phrases in the speech grammar.",
+                      "The grammar is narrowed to spells you can actually cast, which is what makes",
+                      "recognition accurate. But a very small grammar is dangerous: the recognizer",
+                      "picks the closest match rather than rejecting, so with only one or two",
+                      "phrases almost any sound becomes a spell. Below this number the grammar is",
+                      "padded with names of spells you do NOT have, which act as decoys - if one",
+                      "wins, nothing casts. Raise it if you get false casts, lower it if a spell",
+                      "you own is being misheard as one you do not.");
+            grammarFloor = b.defineInRange("grammarFloor", 16, 1, 512);
             b.comment("Capture device name, or blank for the system default.",
                       "Run /voicespells devices in game to list the exact names.");
             captureDevice = b.define("captureDevice", "");
@@ -357,6 +368,7 @@ public final class VoiceSpellsConfig {
     public static volatile boolean cAlwaysShowHeard = false;
     public static volatile boolean cHandsFreeConfirm = false;
     public static volatile double  cNoiseGateRms    = 350.0;
+    public static volatile int     cGrammarFloor    = 16;
     public static volatile String  cCaptureDevice    = "";
     public static volatile boolean cChatRankTag     = false;
     public static volatile boolean cVoiceHotbarSelect = false;
@@ -409,6 +421,7 @@ public final class VoiceSpellsConfig {
         cAlwaysShowHeard  = c.alwaysShowHeard.get();
         cHandsFreeConfirm = c.handsFreeConfirm.get();
         cNoiseGateRms     = c.noiseGateRms.get();
+        cGrammarFloor     = c.grammarFloor.get();
         cCaptureDevice    = c.captureDevice.get();
         cChatRankTag      = c.chatRankTag.get();
         cVoiceHotbarSelect = c.voiceHotbarSelect.get();

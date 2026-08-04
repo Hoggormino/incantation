@@ -72,6 +72,38 @@ public final class VoiceSpellsClientCommands {
             return 1;
         }));
 
+        root.then(Commands.literal("grammar").executes(ctx -> {
+            java.util.Set<String> owned = VoiceController.ownedSpellIdsView();
+            java.util.List<String> active = VoiceController.activeGrammarView();
+            int floor = VoiceSpellsConfig.cGrammarFloor;
+
+            ctx.getSource().sendSuccess(() -> Component
+                .literal("Active grammar — " + active.size() + " phrases, floor " + floor)
+                .withStyle(ChatFormatting.GOLD), false);
+            ctx.getSource().sendSuccess(() -> Component
+                .literal("  " + owned.size() + " spell(s) equipped; anything beyond that is a "
+                       + "decoy that cannot cast")
+                .withStyle(ChatFormatting.DARK_GRAY), false);
+
+            // Sort so the phrases you can actually cast are listed first and marked — the whole
+            // point of reading this list is telling those two groups apart.
+            java.util.List<String> castable = new java.util.ArrayList<>();
+            java.util.List<String> decoys    = new java.util.ArrayList<>();
+            for (String phrase : active) {
+                if (VoiceController.phraseIsCastable(phrase)) castable.add(phrase);
+                else decoys.add(phrase);
+            }
+            for (String p : castable) {
+                ctx.getSource().sendSuccess(() -> Component.literal("  * " + p)
+                    .withStyle(ChatFormatting.GREEN), false);
+            }
+            for (String p : decoys) {
+                ctx.getSource().sendSuccess(() -> Component.literal("    " + p)
+                    .withStyle(ChatFormatting.DARK_GRAY), false);
+            }
+            return 1;
+        }));
+
         event.getDispatcher().register(root);
     }
 }

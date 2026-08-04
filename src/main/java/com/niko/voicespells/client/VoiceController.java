@@ -523,7 +523,7 @@ public final class VoiceController {
         SpellInfo.clearCache(); // drop cached display names so spell renames / aliases re-resolve
         VoskSession s = session;
         if (s != null) {
-            Thread t = new Thread(() -> s.rebuildGrammar(SpellIndex.getPhrases()),
+            Thread t = new Thread(() -> s.rebuildGrammar(currentGrammar()),
                 "VoiceSpells-Grammar-Reload");
             t.setDaemon(true);
             t.start();
@@ -718,7 +718,66 @@ public final class VoiceController {
         if (sig != lastOwnedSignature) {
             ownedSpellIds = fresh;
             lastOwnedSignature = sig;
+            // The castable set actually changed, so the grammar is now wrong. This is the only
+            // thing that triggers a rebuild — never per tick. Rebuilding is not free (it
+            // constructs a new Recognizer, though it keeps the loaded Model), so it is gated on a
+            // real equipment change rather than on time.
+            rebuildGrammarForOwned(fresh);
         }
+    }
+
+    /**
+     * The grammar the recognizer should be using right now.
+     *
+     * <p>Falls back to the full phrase list whenever ownership is unknown or unreliable — a failed
+     * scan must never be allowed to shrink the grammar, because a grammar narrowed to the wrong
+     * set is far worse than one that is merely too broad: the spell the player is actually holding
+     * would not be in it at all.
+     */
+    /** Read-only view of the equipped-spell set, for /voicespells grammar. */
+    public static java.util.Set<String> ownedSpellIdsView() {
+        java.util.Set<String> owned = ownedSpellIds;
+        return owned == null ? java.util.Set.of() : java.util.Set.copyOf(owned);
+    }
+
+    /** The phrase list the recognizer is currently listening for, for /voicespells grammar. */
+    public static java.util.List<String> activeGrammarView() {
+        return currentGrammar();
+    }
+
+    /** True when this phrase resolves to a spell the player can actually cast right now — i.e.
+     *  it is a real target rather than one of the decoys padding the grammar to the floor. */
+    public static boolean phraseIsCastable(String phrase) {
+        // Exact match only: this is a display helper for a grammar phrase we generated ourselves,
+        // so the fuzzy/phonetic tiers would only add false positives to the listing.
+        var hit = SpellIndex.lookupExactWithTier(phrase);
+        if (hit.isEmpty()) return false;
+        java.util.Set<String> owned = ownedSpellIds;
+        return owned != null && owned.contains(hit.get().id().toString());
+    }
+
+    private static java.util.List<String> currentGrammar() {
+        java.util.Set<String> owned = ownedSpellIds;
+        if (!ownedScanReliable || owned == null || owned.isEmpty()) return SpellIndex.getPhrases();
+        return SpellIndex.phrasesFor(owned, VoiceSpellsConfig.cGrammarFloor);
+    }
+
+    /**
+     * Swap the recognizer onto a grammar narrowed to what the player can currently cast, padded to
+     * {@code grammarFloor} with decoys. Runs off-thread because building a Recognizer blocks, and
+     * this is called from the client tick.
+     */
+    private static void rebuildGrammarForOwned(java.util.Set<String> owned) {
+        VoskSession s = session;
+        if (s == null) return;
+        java.util.Set<String> snapshot = java.util.Set.copyOf(owned);
+        Thread t = new Thread(() -> {
+            java.util.List<String> phrases =
+                SpellIndex.phrasesFor(snapshot, VoiceSpellsConfig.cGrammarFloor);
+            s.rebuildGrammar(phrases);
+        }, "VoiceSpells-Grammar");
+        t.setDaemon(true);
+        t.start();
     }
 
     /**
@@ -882,7 +941,7 @@ public final class VoiceController {
             }
             VoskSession s = VoskSession.open(
                 modelPath,
-                SpellIndex.getPhrases(),
+                currentGrammar(),
                 VoiceController::onPhraseRecognized
             );
             session = s;
