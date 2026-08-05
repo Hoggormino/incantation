@@ -382,9 +382,11 @@ public final class ClientEvents {
     }
 
     /**
-     * Slick bottom-left HUD. Two stacked chips:
-     *   - main:  status dot + label + audio meter, always shown while HUD is visible
-     *   - toast: fades in/out when a spell just cast, positioned just above the main chip
+     * Slick bottom-left HUD. Everything here is transient - there is no always-on chip.
+     * SVC draws its own mic indicator, so duplicating status/level here was visual noise
+     * and the always-on chip was removed. What can appear:
+     *   - cast toast + history strip, queued-spell chip, miss toast,
+     *     last-heard chip (opt-in), and the "did you mean...?" alias suggestion
      *
      * Chip frames use a one-pixel border drawn as two nested rects — cheap "rounded enough"
      * look that fits MC's pixel aesthetic without needing custom textures.
@@ -394,7 +396,6 @@ public final class ClientEvents {
         private static final int CHIP_H   = 14;
         private static final int PAD_X    = 5;
         private static final int DOT_SIZE = 4;
-        private static final int METER_W  = 24;
         private static final int METER_H  = 4;
 
         @Override

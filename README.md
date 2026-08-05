@@ -44,10 +44,11 @@ custom phrases (see Configuration).
   (default), a hand-held spellbook (with `castMode = ANY_SPELLBOOK`), or an imbued sword/staff
   in hand — Incantation finds the right item and casts via the matching `CastSource` so mana
   and cooldowns behave exactly like a manual cast.
-- **HUD chip** showing model status, mic state, last heard phrase, and a live audio meter.
+- **HUD chip** showing your last cast, recent cast history, queued spells, miss toasts,
+  the last phrase heard, and "did you mean…?" alias suggestions.
   Configurable corner, offset, opacity. Toggle with **B**.
 - **Themes + palettes.** Cycle the accent color (Arcane, Blossom, Ocean, Mint, Gold, …) and
-  switch the base palette between Dark, Midnight, Light, and Slate. Some themes unlock as you
+  switch the base palette between Dark, Midnight, and Slate. Some themes unlock as you
   voice-cast more.
 - **Vanilla advancements.** Voice-cast milestones (1, 10, 50, 200, 1000) and combo casts surface
   as standard Minecraft advancements.
@@ -59,7 +60,8 @@ custom phrases (see Configuration).
 - **Welcome wizard** on first launch — talks you through model + mic + first cast.
 - **Aliases / custom phrases.** Pick words the model can hear, bind them to a spell id.
 - **Loadout shortcuts.** Say one word, cast the first castable spell from a list.
-- **Voice commands.** `spell one`…`spell nine` switches the active spellbook slot. `yes`/`no`
+- **Voice commands.** `spell one`…`spell nine` switches the active spellbook slot (enable
+  *voiceHotbarSelect* first — it is off by default). `yes`/`no`
   control the cast queue when hands-free confirm is on.
 - **Server-side controls.** Per-player whitelist, blocklist, rate limit, broadcast-nearby,
   cast logging, follow subscriptions for admins.
@@ -102,8 +104,8 @@ customPhrases = [
 ```
 
 Custom phrases override generated ones and are added to the Vosk grammar. Use the in-game spell
-list or the debug monitor to find exact spell ids. Requires a restart (the grammar is built
-once at startup).
+list or the debug monitor to find exact spell ids. No restart needed — use
+**More… → Reload grammar now** and the recogniser picks them up immediately.
 
 ### Localisation / phrasebook
 
@@ -131,7 +133,8 @@ same-language Vosk model — install one from <https://alphacephei.com/vosk/mode
 
 ## Troubleshooting
 
-- **HUD chip says `loading model`** — Vosk hasn't found a model under `config/voicespells/model/`.
+- **Chat says `Vosk model not found`** (or Diagnostics shows `Vosk model: FAIL`) — no model
+  under `config/voicespells/model/`.
   Recheck the layout: `am/`, `conf/`, `graph/` should be directly under that path.
 - **Mic indicator is dead** — SVC isn't transmitting. Confirm it works for chat first; Voice
   Spells listens to the same audio stream.

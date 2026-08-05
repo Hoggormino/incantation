@@ -4,7 +4,7 @@
 
 Incantation listens to your Simple Voice Chat mic, runs the audio through an offline speech
 recognizer (Vosk), and casts whichever Iron's Spells 'n Spellbooks spell you just said. No
-voice training, no extra keybind, no setup beyond unzipping a model into the config folder.
+voice training, no extra keybind, and the speech model installs itself on first launch.
 
 ---
 
@@ -12,9 +12,10 @@ voice training, no extra keybind, no setup beyond unzipping a model into the con
 
 When Simple Voice Chat is transmitting your audio, Incantation feeds the frames to a Vosk
 recognizer built from the names of every spell in the registry. Whatever it hears is then
-checked against what you actually have equipped — spellbook in your Curios slot, spellbook
-in hand, or an imbued weapon you're holding — and anything you don't have equipped is
-rejected on your client before it ever reaches the server.
+checked against what you actually have equipped — a spellbook in your Curios slot, or an
+imbued weapon you're holding — and anything else is rejected on your client before it ever
+reaches the server. Servers that would rather let you cast from a spellbook held in hand
+can set `castMode = ANY_SPELLBOOK`.
 
 The grammar deliberately stays broad. Narrowing it to just your equipped spells sounds
 safer, but with only two or three phrases left the recognizer force-matches *any* audio —
@@ -22,21 +23,24 @@ a cough, a footstep, someone else talking — into whichever of them is closest.
 every spell name in there dilutes that, and the equipped check is what actually stops an
 unowned spell from casting.
 
-The whole pipeline runs locally. No network calls. No accounts. Your voice never leaves
-your PC.
+Recognition runs entirely on your machine. No accounts, no telemetry, and your voice never
+leaves your PC — it is never transmitted, never recorded, never written to disk. The one
+time Incantation touches the network is the speech-model download on first launch; set
+`autoDownloadModel = false` and install the model yourself if you would rather it didn't.
 
 ## Features
 
 - **Speak any indexed spell** — works with Iron's Spells, all its addons, and any mod that
   registers spells through Iron's API.
-- **Owned-spell restriction** *(default ON)* — only spells you actually have equipped (Curios
-  spellbook slot, main hand, off hand) will cast, matching Iron's Spells' own equipped check,
-  so a book sitting in your backpack can't fire a spell the server would reject anyway.
+- **Equipped-only casting** *(default ON)* — a spell only fires if you actually have it on
+  you. Under the default server `castMode = CURIO_SPELLBOOK` that means your Curios spellbook
+  slot or an imbued weapon in hand; set `ANY_SPELLBOOK` to also allow a spellbook held in
+  hand or on the hotbar.
 - **Imbued weapons supported** — hold an imbued sword or staff, say the spell it carries,
   it casts via the same mechanism as right-clicking.
-- **HUD chip** — corner-anchored chip showing last cast, queued spells, miss toast, "did
-  you mean…?" alias suggestions, and a live audio meter.
-- **Themes** — accent presets (Arcane, Blossom, Ocean, Mint, Gold, plus Phoenix / Frost /
+- **HUD chip** — corner-anchored chip showing last cast, queued spells, miss toast, the
+  last phrase heard, and "did you mean…?" alias suggestions.
+- **Themes** — accent presets (Arcane, Blossom, Ocean, Dusk, Mint, Gold, plus Phoenix / Frost /
   Verdant / Necrotic unlocked by cast milestones) and base palettes (Dark, Midnight, Slate).
 - **Vanilla advancements** — voice-cast milestones (1, 10, 50, 200, 1000) and combo casts
   surface as standard advancement toasts.
@@ -55,8 +59,8 @@ your PC.
   are in the loaded model's lexicon.
 - **Loadout shortcuts** — say one word, cast the first castable spell from a list (cooldown
   + mana aware).
-- **Voice commands** — `spell one`…`spell nine` switches the spellbook slot without casting;
-  `yes`/`no` controls the cast queue.
+- **Voice commands** — `spell one`…`spell nine` switches the spellbook slot without casting
+  (enable *voiceHotbarSelect* first); `yes`/`no` controls the cast queue.
 - **Server-side controls** — per-player whitelist, blocklist, rate limit, broadcast-nearby,
   cast logging.
 
@@ -67,26 +71,30 @@ your PC.
 - [Simple Voice Chat](https://modrinth.com/plugin/simple-voice-chat) by henkelmax (2.5.x+)
 - [Iron's Spells 'n Spellbooks](https://modrinth.com/mod/irons-spells-n-spellbooks) by
   iron431 (3.x+)
-- A small Vosk English model (~40 MB)
+- A Vosk English model — downloaded for you on first launch (~128 MB)
 - Curios API recommended (Iron's Spells dependency anyway)
 
 ## Setup
 
 1. Drop the Incantation jar in your `mods/` folder alongside SVC and Iron's Spells.
-2. Grab a Vosk model from [alphacephei.com/vosk/models](https://alphacephei.com/vosk/models)
-   — `vosk-model-small-en-us-0.15.zip` is plenty for vanilla spell names.
-3. Unzip and copy the **contents** of that folder into `config/voicespells/model/` so you
-   end up with `config/voicespells/model/am/`, `config/voicespells/model/conf/`, etc.
-4. Launch the game, join a world, trigger SVC, and say a spell you have equipped.
+2. Launch the game. On first run Incantation downloads `vosk-model-en-us-0.22-lgraph`
+   (~128 MB) into `config/voicespells/model/` for you.
+3. Join a world, trigger SVC, and say a spell you have equipped.
 
-For tricky spell names (Traveloptics, Cataclysm, anything with unusual phonetics), either:
+Prefer to install the model yourself? Set `autoDownloadModel = false`, grab one from
+[alphacephei.com/vosk/models](https://alphacephei.com/vosk/models), and unzip its
+**contents** into `config/voicespells/model/` so you end up with
+`config/voicespells/model/am/`, `config/voicespells/model/conf/`, etc.
+`vosk-model-small-en-us-0.15` (~40 MB) is enough for vanilla spell names.
 
-- switch to the medium model (`vosk-model-en-us-0.22-lgraph`, ~128 MB), or
-- map an alias: in `config/voicespells-client.toml`,
-  ```toml
-  customPhrases = [ "dark beam=traveloptics:abyssal_blast" ]
-  ```
-  then restart.
+For tricky spell names (Traveloptics, Cataclysm, anything with unusual phonetics), map an
+alias in `config/voicespells-client.toml`:
+
+```toml
+customPhrases = [ "dark beam=traveloptics:abyssal_blast" ]
+```
+
+then use **More… → Reload grammar now** — no restart needed.
 
 ## Configuration
 
@@ -104,8 +112,9 @@ broadcast-nearby radius.
 
 ## Troubleshooting
 
-- **HUD says "loading model"** — Vosk hasn't found a model under `config/voicespells/model/`.
-  Recheck the layout: `am/`, `conf/`, `graph/` should sit directly under that path.
+- **Chat says "Vosk model not found"** (or Diagnostics shows `Vosk model: FAIL`) — no model
+  under `config/voicespells/model/`. Recheck the layout: `am/`, `conf/`, `graph/` should sit
+  directly under that path.
 - **Mic indicator is dead** — SVC isn't transmitting. Confirm SVC works for chat first.
 - **Recognition feels slow** — open More → **Auto-calibrate noise gate** and say a few
   spell names. Or use the **Diagnostics** screen to verify each prerequisite.

@@ -47,7 +47,7 @@ public final class VoiceSpellsServerConfig {
             b.push("casting");
             b.comment("How voice casting validates a spell before casting it.",
                       "CURIO_SPELLBOOK - spellbook in the Curios spellbook slot (default).",
-                      "ANY_SPELLBOOK   - Curios slot OR a spellbook held in main/off hand.",
+                      "ANY_SPELLBOOK   - Curios slot OR a spellbook in either hand or the hotbar.",
                       "FREE            - no spellbook needed; level 1, no mana or cooldown.");
             castMode = b.defineEnum("castMode", CastMode.CURIO_SPELLBOOK);
             b.comment("Max successful voice casts per second per player (0 = unlimited).",

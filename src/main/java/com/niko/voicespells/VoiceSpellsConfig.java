@@ -239,8 +239,10 @@ public final class VoiceSpellsConfig {
             streamerMode = b.define("streamerMode", false);
             b.comment("Sass mode - occasional snarky 'was that even a spell?' toast on miss.");
             sassMode = b.define("sassMode", false);
-            b.comment("Combat-only mode - recognition only fires when the player took or dealt",
-                      "damage in the last ~10 seconds. Keeps casual SVC chatter from misfiring.");
+            b.comment("Combat-only mode - recognition only fires when a mob has hurt you in",
+                      "the last ~10 seconds. Damage you deal does not count - this reads",
+                      "vanilla's last-hurt-by-mob timestamp. Keeps casual SVC chatter",
+                      "from misfiring.");
             combatOnly = b.define("combatOnly", false);
             b.comment("Pause recognition when AFK (no movement for afkSeconds).");
             pauseWhenAfk = b.define("pauseWhenAfk", false);
@@ -264,9 +266,9 @@ public final class VoiceSpellsConfig {
                       "grammar so they're listened for.");
             handsFreeConfirm = b.define("handsFreeConfirm", false);
             b.comment("Noise gate: skip mic frames quieter than this RMS (0..32767) before",
-                      "feeding them to Vosk. Stops the grammar-restricted recogniser from",
+                      "feeding them to Vosk. Stops the recogniser from",
                       "hallucinating spells out of silence / breath / SVC transmission tail.",
-                      "The gate is sticky: once a loud frame arrives it stays open for ~600ms,",
+                      "The gate is sticky: once a loud frame arrives it stays open for ~450ms,",
                       "so phoneme dips inside a word don't cut the utterance.",
                       "Raise this if you see phantom casts on background noise; lower if",
                       "soft speech is being missed. Set to 0 to disable the gate entirely.");
@@ -315,8 +317,10 @@ public final class VoiceSpellsConfig {
             b.pop();
 
             b.push("internal");
-            b.comment("Whether the welcome wizard has been shown yet.",
-                      "Flip back to true to see it again next time you load a world.");
+            b.comment("Whether the welcome wizard has been shown yet. Setting this back to",
+                      "true is not enough on its own - the wizard also checks a separate",
+                      "'seen' flag in the stats file. To replay it, use",
+                      "Mods -> Incantation -> More... -> Open Welcome Wizard.");
             firstRun = b.define("firstRun", true);
             b.pop();
         }
