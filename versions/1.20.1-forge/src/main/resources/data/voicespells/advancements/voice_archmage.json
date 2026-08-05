@@ -1,0 +1,19 @@
+{
+  "parent": "voicespells:voice_magus",
+  "display": {
+    "icon": { "item": "minecraft:music_disc_pigstep" },
+    "title": { "translate": "advancements.voicespells.voice_archmage.title" },
+    "description": { "translate": "advancements.voicespells.voice_archmage.description" },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "thousand_voice_casts": {
+      "trigger": "voicespells:voice_cast",
+      "conditions": { "min_total_casts": 1000 }
+    }
+  },
+  "requirements": [["thousand_voice_casts"]]
+}

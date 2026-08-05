@@ -1,24 +1,26 @@
 plugins {
     id("java-library")
-    id("net.neoforged.moddev")
+    // Forge 1.17-1.20.1. Same artifact and version as net.neoforged.moddev, which is why one
+    // plugin declaration in stonecutter.gradle.kts covers both loaders. ForgeGradle 6 cannot be
+    // used here: Stonecutter 0.8+ requires Gradle 9 and FG6 does not run on it.
+    id("net.neoforged.moddev.legacyforge")
 }
 
-val mcVersion       = property("deps.minecraft") as String
-val neoVersion      = property("deps.neoforge") as String
-val modId           = property("mod.id") as String
-val voicechatApi    = property("deps.voicechat_api") as String
-val voskVersion     = property("deps.vosk") as String
+val mcVersion    = property("deps.minecraft") as String
+val forgeVersion = property("deps.forge") as String
+val modId        = property("mod.id") as String
+val voicechatApi = property("deps.voicechat_api") as String
+val voskVersion  = property("deps.vosk") as String
 
-version = "${property("mod.version")}+$mcVersion-neoforge"
+version = "${property("mod.version")}+$mcVersion-forge"
 group   = property("mod.group") as String
 
 base {
-    // Display name for the published jar. Decoupled from mod.id (which stays "voicespells" so
-    // existing configs, advancements and packets still resolve).
     archivesName = "incantation"
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+// 1.20.1 runs on Java 17. Forge 47 refuses class files above major 61.
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 // Loader-specific Java. Some classes are shaped by the loader rather than merely referencing it —
 // the @Mod entrypoint, networking, the config spec, and the advancement triggers have genuinely
@@ -31,33 +33,26 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 // in that directory and are picked up; everything portable stays in the shared tree at the root.
 
 
-neoForge {
-    version = neoVersion
+// Forge-only resources. The two loaders disagree on file NAMES and DIRECTORY layout, not just
+// content — mods.toml vs neoforge.mods.toml, data/<ns>/advancement/ vs advancements/, and a
+// different pack_format — and none of that can be expressed with source conditionals. So the
+// shared tree carries the NeoForge layout and this overlay supplies the Forge one.
+sourceSets["main"].resources.srcDir(rootProject.file("versions/$name/src/main/resources"))
+
+legacyForge {
+    version = "$mcVersion-$forgeVersion"
 
     runs {
         register("client") {
             client()
-            systemProperty("neoforge.enabledGameTestNamespaces", modId)
-            // -PquickPlay=<world> boots straight into a world. Microphone capture only runs in a
-            // world, so this is what makes the audio path testable without clicking through menus.
             if (project.hasProperty("quickPlay")) {
                 programArguments.addAll("--quickPlaySingleplayer", project.property("quickPlay").toString())
             }
         }
-        // Mandatory. This mod ships client-only UI but must load headless, and the "client GUI
-        // class on a dedicated server" crash regressed twice (0.9.0, then again in 0.9.3) purely
-        // because there was no way to test for it locally. Run before every release.
+        // Mandatory — the dedicated-server crash regressed twice for want of this.
         register("server") {
             server()
-            systemProperty("neoforge.enabledGameTestNamespaces", modId)
-        }
-        register("data") {
-            data()
-            programArguments.addAll(
-                "--mod", modId, "--all",
-                "--output", file("src/generated/resources/").absolutePath,
-                "--existing", file("../../src/main/resources/").absolutePath
-            )
+            programArguments.add("--nogui")
         }
     }
 
@@ -76,32 +71,23 @@ repositories {
 }
 
 dependencies {
-    // Simple Voice Chat public API. compileOnly — SVC ships the API at runtime.
     compileOnly("de.maxhenkel.voicechat:voicechat-api:$voicechatApi")
 
-    // Vosk offline speech recognition (JNA-backed; natives extract at runtime).
     implementation("com.alphacephei:vosk:$voskVersion")
-    // additionalRuntimeClasspath and jarJar are configurations created by ModDevGradle, so they
-    // have no generated Kotlin accessor — they are invoked by name.
     "additionalRuntimeClasspath"("com.alphacephei:vosk:$voskVersion")
     "jarJar"("com.alphacephei:vosk") {
         this as ExternalModuleDependency
         version { strictly("[$voskVersion,1)"); prefer(voskVersion) }
-        // Vosk pulls JNA transitively and jarJar will nest it. Do not let it: Minecraft already
-        // ships net.java.dev.jna 5.12.1 for oshi, and nesting an older copy risks it winning
-        // resolution and breaking either Vosk's natives or oshi.
+        // Minecraft already ships JNA for oshi; nesting Vosk's older copy risks it winning.
         exclude(group = "net.java.dev.jna")
     }
 }
 
-// Resolved here, at project scope. Inside a task-configuration block `property(...)` resolves
-// against the TASK rather than the project, which fails with "unknown property" for every one of
-// these — the values must be captured before the block.
 val tokens = mapOf(
     "minecraft_version"       to mcVersion,
     "minecraft_version_range" to property("deps.minecraft_range") as String,
-    "neo_version"             to neoVersion,
-    "neo_version_range"       to property("deps.neoforge_range") as String,
+    "forge_version"           to forgeVersion,
+    "forge_version_range"     to property("deps.forge_range") as String,
     "loader_version_range"    to property("deps.loader_range") as String,
     "mod_id"                  to modId,
     "mod_name"                to property("mod.name") as String,
@@ -114,9 +100,13 @@ val tokens = mapOf(
 tasks.named<ProcessResources>("processResources") {
     val replacements = tokens
     inputs.properties(replacements)
-    filesMatching("META-INF/neoforge.mods.toml") { expand(replacements) }
-    // The Forge target uses mods.toml at the same path; neither loader should ship the other's.
-    exclude("META-INF/mods.toml")
+    filesMatching("META-INF/mods.toml") { expand(replacements) }
+    // Never ship the other loader's metadata or datapack layout.
+    exclude("META-INF/neoforge.mods.toml")
+    exclude("data/*/advancement/**")   // the 1.21.x singular form
+    // pack.mcmeta differs too (pack_format 15 vs 46) and comes from the overlay,
+    // which Gradle prefers because the overlay srcDir is added after the shared one.
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
 tasks.withType<JavaCompile>().configureEach {

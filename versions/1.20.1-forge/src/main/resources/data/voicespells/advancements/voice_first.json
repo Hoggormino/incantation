@@ -1,0 +1,19 @@
+{
+  "parent": "voicespells:root",
+  "display": {
+    "icon": { "item": "minecraft:experience_bottle" },
+    "title": { "translate": "advancements.voicespells.voice_first.title" },
+    "description": { "translate": "advancements.voicespells.voice_first.description" },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "first_cast": {
+      "trigger": "voicespells:voice_cast",
+      "conditions": {}
+    }
+  },
+  "requirements": [["first_cast"]]
+}

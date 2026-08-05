@@ -1,0 +1,19 @@
+{
+  "parent": "voicespells:voice_apprentice",
+  "display": {
+    "icon": { "item": "minecraft:music_disc_blocks" },
+    "title": { "translate": "advancements.voicespells.voice_adept.title" },
+    "description": { "translate": "advancements.voicespells.voice_adept.description" },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "fifty_voice_casts": {
+      "trigger": "voicespells:voice_cast",
+      "conditions": { "min_total_casts": 50 }
+    }
+  },
+  "requirements": [["fifty_voice_casts"]]
+}

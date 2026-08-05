@@ -1,0 +1,51 @@
+modLoader = "javafml"
+loaderVersion = "${loader_version_range}"
+license = "${mod_license}"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${mod_version}"
+displayName = "${mod_name}"
+authors = "${mod_authors}"
+description = '''${mod_description}'''
+logoFile = "icon.png"
+logoBlur = false
+
+[[dependencies.${mod_id}]]
+modId = "forge"
+mandatory = true
+versionRange = "${forge_version_range}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "minecraft"
+mandatory = true
+versionRange = "${minecraft_version_range}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "voicechat"
+# Optional: without SVC, the mod simply has no mic source and idles. The plugin class is only
+# loaded when SVC's annotation scanner runs, so missing SVC doesn't link-fail anything.
+mandatory = false
+# Mod publishes versions like "1.20.1-2.6.21" so the range must allow that.
+versionRange = "[1.20,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "irons_spellbooks"
+# Optional: without Iron's Spells, SpellIndex finds zero spells via reflection and recognition
+# just never matches. Mod loads without it.
+#
+# The floor matters on 1.20.1 in a way it did not on 1.21.1. Iron's Spells rewrote its addon API
+# during the 1.20.1 line: builds at 3.4.0.11 and earlier expose a different shape from the one
+# every reflective call in this mod targets, and many 1.20.1 packs still ship those older builds.
+# Against them the mod loads, indexes nothing, and silently never casts. 3.15.0 is the floor that
+# guarantees the API this mod reflects against.
+mandatory = false
+versionRange = "[1.20.1-3.15.0,)"
+ordering = "AFTER"
+side = "BOTH"
