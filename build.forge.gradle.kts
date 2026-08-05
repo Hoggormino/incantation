@@ -37,7 +37,8 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 // content — mods.toml vs neoforge.mods.toml, data/<ns>/advancement/ vs advancements/, and a
 // different pack_format — and none of that can be expressed with source conditionals. So the
 // shared tree carries the NeoForge layout and this overlay supplies the Forge one.
-sourceSets["main"].resources.srcDir(rootProject.file("versions/$name/src/main/resources"))
+// (versions/<node>/src/main/resources is registered by Stonecutter convention - adding it
+//  explicitly registers it twice and fails with duplicate-entry errors.)
 
 legacyForge {
     version = "$mcVersion-$forgeVersion"
@@ -95,18 +96,19 @@ val tokens = mapOf(
     "mod_version"             to property("mod.version") as String,
     "mod_authors"             to property("mod.authors") as String,
     "mod_description"         to property("mod.description") as String,
+    // pack_format differs per Minecraft version (15 on 1.20.1, 46 on 1.21.x).
+    // Templating it keeps ONE shared pack.mcmeta instead of a per-node copy,
+    // which also removes a duplicate-entry clash in sourcesJar.
+    "pack_format"             to property("deps.pack_format") as String,
 )
 
 tasks.named<ProcessResources>("processResources") {
     val replacements = tokens
     inputs.properties(replacements)
-    filesMatching("META-INF/mods.toml") { expand(replacements) }
+    filesMatching(listOf("META-INF/mods.toml", "pack.mcmeta")) { expand(replacements) }
     // Never ship the other loader's metadata or datapack layout.
     exclude("META-INF/neoforge.mods.toml")
     exclude("data/*/advancement/**")   // the 1.21.x singular form
-    // pack.mcmeta differs too (pack_format 15 vs 46) and comes from the overlay,
-    // which Gradle prefers because the overlay srcDir is added after the shared one.
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
 tasks.withType<JavaCompile>().configureEach {

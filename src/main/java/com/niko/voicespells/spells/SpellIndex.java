@@ -442,7 +442,14 @@ public final class SpellIndex {
                 if (!enabled) continue;
 
                 String idString = (String) getSpellId.invoke(spell);
+//? if forge {
+/*                // tryParse returns null for a malformed id where 1.21's parse() threw; a spell
+                // with an unparseable id is simply skipped rather than aborting the index.
+                ResourceLocation id = ResourceLocation.tryParse(idString);
+                if (id == null) continue;
+*///?} else {
                 ResourceLocation id = ResourceLocation.parse(idString);
+//?}
                 String defaultPhrase = phraseFromPath(id.getPath());
                 if (defaultPhrase.isEmpty()) continue;
                 defaultsForPhrasebook.put(idString, defaultPhrase);
@@ -538,11 +545,24 @@ public final class SpellIndex {
             for (String token : entry.substring(eq + 1).split(",")) {
                 String trimmed = token.trim();
                 if (trimmed.isEmpty()) continue;
+//? if forge {
+/*                // tryParse returns null rather than throwing, so a bad id has to be caught by
+                // the null check, not only by the catch below.
+                ResourceLocation parsed = ResourceLocation.tryParse(trimmed);
+                if (parsed == null) {
+*///?} else {
                 try {
                     ids.add(ResourceLocation.parse(trimmed));
                 } catch (Throwable bad) {
+//?}
                     VoiceSpells.LOGGER.warn("Bad spell id in loadouts entry: {}", trimmed);
+//? if forge {
+/*                    continue;
+*///?}
                 }
+//? if forge {
+/*                ids.add(parsed);
+*///?}
             }
             if (ids.isEmpty()) continue;
             LOADOUTS.put(name, List.copyOf(ids));
@@ -612,8 +632,18 @@ public final class SpellIndex {
             if (phrase.isEmpty()) continue;
             ResourceLocation id;
             try {
+//? if forge {
+/*                id = ResourceLocation.tryParse(idStr);
+*///?} else {
                 id = ResourceLocation.parse(idStr);
+//?}
             } catch (Throwable bad) {
+//? if forge {
+/*                id = null;
+            }
+            if (id == null) {
+                // tryParse signals failure with null instead of an exception.
+*///?}
                 VoiceSpells.LOGGER.warn("Bad spell id in {} entry: {}", labelForLogs, entry);
                 continue;
             }

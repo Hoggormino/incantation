@@ -3,7 +3,11 @@ package com.niko.voicespells.client;
 import com.niko.voicespells.VoiceSpellsConfig;
 import com.niko.voicespells.spells.SpellIndex;
 import net.minecraft.world.entity.LivingEntity;
+//? if forge {
+/*import net.minecraftforge.fml.ModList;
+*///?} else {
 import net.neoforged.fml.ModList;
+//?}
 
 import java.lang.reflect.Method;
 import java.nio.file.Files;
@@ -125,10 +129,28 @@ public final class Diagnostics {
                 "Not installed — spellbook detection falls back to mainhand/offhand only");
         }
         try {
+//? if forge {
+/*            java.lang.reflect.Method m = Class.forName("top.theillusivec4.curios.api.CuriosApi")
+*///?} else {
             Class.forName("top.theillusivec4.curios.api.CuriosApi")
+//?}
                 .getMethod("getCuriosInventory", LivingEntity.class);
+//? if forge {
+/*            // Reachability alone is not enough — the return type differs between Minecraft
+            // versions (LazyOptional on 1.20.1, Optional on 1.21.1) and an unrecognised one means
+            // every Curios spellbook lookup silently returns nothing.
+            if (!com.niko.voicespells.spells.CuriosCompat.returnTypeSupported(m)) {
+                return new Result("Curios API", Status.WARN,
+                    "Unsupported return type " + m.getReturnType().getSimpleName()
+                    + " — Curios spellbook slot will not be seen");
+            }
+*///?}
             return new Result("Curios API", Status.OK,
+//? if forge {
+/*                "getCuriosInventory reachable (" + m.getReturnType().getSimpleName() + ")");
+*///?} else {
                 "getCuriosInventory reachable");
+//?}
         } catch (Throwable t) {
             return new Result("Curios API", Status.WARN,
                 "Loaded but API method changed: " + t.getClass().getSimpleName());

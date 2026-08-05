@@ -28,10 +28,10 @@ stonecutter {
         // 1.20.1 needs ModDevGradle's legacyforge plugin, NeoForge 1.21.x needs the regular one.
         version("1.21.1-neoforge", "1.21.1").buildscript = "build.neoforge.gradle.kts"
 
-        // Additional targets are added once the shared source carries the conditionals they need.
-        // Declaring a node before its source compiles just means a broken build for that node.
-        //   version("1.21-neoforge", "1.21"  ).buildscript = "build.neoforge.gradle.kts"
-        //   version("1.20.1-forge",  "1.20.1").buildscript = "build.forge.gradle.kts"
+        version("1.20.1-forge",  "1.20.1").buildscript = "build.forge.gradle.kts"
+
+        // 1.21 is not ported yet - Stonecutter holds version differences, it does not find them.
+        //   version("1.21-neoforge", "1.21").buildscript = "build.neoforge.gradle.kts"
 
         vcsVersion = "1.21.1-neoforge"
     }

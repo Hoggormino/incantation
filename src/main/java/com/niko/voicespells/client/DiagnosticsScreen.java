@@ -188,7 +188,11 @@ public final class DiagnosticsScreen extends Screen {
         }
 
         @Override
+//? if forge {
+/*        public boolean mouseScrolled(double mx, double my, double sy) {
+*///?} else {
         public boolean mouseScrolled(double mx, double my, double sx, double sy) {
+//?}
             if (!isMouseOver(mx, my)) return false;
             scroll = Math.max(0, scroll - (int) Math.signum(sy));
             return true;

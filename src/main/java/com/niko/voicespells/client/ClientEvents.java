@@ -7,9 +7,25 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+//? if forge {
+/*import net.minecraftforge.client.gui.overlay.ForgeGui;
+import net.minecraftforge.client.gui.overlay.IGuiOverlay;
+import net.minecraftforge.client.event.RegisterGuiOverlaysEvent;
+import net.minecraftforge.client.ConfigScreenHandler;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.fml.ModLoadingContext;
+*///?} else {
 import net.minecraft.client.gui.LayeredDraw;
+//?}
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+//? if forge {
+/*import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
+import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
+import net.minecraftforge.client.settings.KeyConflictContext;
+import net.minecraftforge.common.MinecraftForge;
+*///?} else {
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
@@ -19,6 +35,7 @@ import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.settings.KeyConflictContext;
 import net.neoforged.neoforge.common.NeoForge;
+//?}
 import org.lwjgl.glfw.GLFW;
 
 public final class ClientEvents {
@@ -62,6 +79,29 @@ public final class ClientEvents {
 
     private ClientEvents() {}
 
+//? if forge {
+/*
+    /^*
+     * Client-side wiring, called from the {@link VoiceSpells} constructor under a dist guard.
+     *
+     * <p>The config-screen extension point is registered <i>here</i> rather than in the mod
+     * constructor, and that placement is load-bearing rather than stylistic.
+     * {@code ConfigScreenHandler.ConfigScreenFactory} wraps a {@code BiFunction<Minecraft, Screen,
+     * Screen>}, so a lambda for it desugars into a synthetic method whose descriptor names
+     * {@code Screen}. If that lambda sits in the mod constructor, Forge's dist-aware class loader
+     * tries to resolve {@code Screen} while the constructor is being prepared — before any
+     * {@code FMLEnvironment.dist} check inside the body can run — and a dedicated server dies with
+     * "Attempted to load class net/minecraft/client/gui/screens/Screen for invalid dist
+     * DEDICATED_SERVER". A runtime {@code if} cannot guard a class-loading event that happens at
+     * method preparation time; only moving the reference into a class the server never touches
+     * can. This whole class is client-only and is reached from exactly one dist-guarded static
+     * call, so it is safe here.
+     *
+     * <p>Unlike NeoForge there is no {@code ModContainer} parameter — Forge exposes it through the
+     * {@link ModLoadingContext} singleton instead.
+     ^/
+    public static void bootstrap(IEventBus modBus) {
+*///?} else {
     /** Called from {@link VoiceSpells} constructor on the client. */
     /**
      * Client-side wiring. Takes the {@link ModContainer} so the config-screen extension point is
@@ -79,15 +119,32 @@ public final class ClientEvents {
      * client-only and is reached from exactly one dist-guarded static call, so it is safe here.
      */
     public static void bootstrap(IEventBus modBus, ModContainer container) {
+//?}
         // "Config" button in Mods → Incantation opens our screen.
+//? if forge {
+/*        ModLoadingContext.get().registerExtensionPoint(
+            ConfigScreenHandler.ConfigScreenFactory.class,
+            () -> new ConfigScreenHandler.ConfigScreenFactory(
+                (mc, parent) -> new VoiceSpellsConfigScreen(parent)));
+*///?} else {
         container.registerExtensionPoint(IConfigScreenFactory.class,
             (c, parent) -> new VoiceSpellsConfigScreen(parent));
+//?}
 
         modBus.addListener(ClientEvents::onClientSetup);
+//? if forge {
+/*        modBus.addListener(ClientEvents::onRegisterGuiOverlays);
+*///?} else {
         modBus.addListener(ClientEvents::onRegisterGuiLayers);
+//?}
         modBus.addListener(ClientEvents::onRegisterKeys);
+//? if forge {
+/*        MinecraftForge.EVENT_BUS.addListener(ClientEvents::onClientTickPost);
+        MinecraftForge.EVENT_BUS.addListener(ClientEvents::onClientChat);
+*///?} else {
         NeoForge.EVENT_BUS.addListener(ClientEvents::onClientTickPost);
         NeoForge.EVENT_BUS.addListener(ClientEvents::onClientChat);
+//?}
         // Live-apply external edits to voicespells-client.toml (no game restart).
         com.niko.voicespells.VoiceSpellsConfig.reloadCallback = VoiceController::onConfigChanged;
         // Wire the cross-package back-references that we deliberately kept off the static
@@ -116,6 +173,15 @@ public final class ClientEvents {
         event.register(QUICK_RECAST);
     }
 
+//? if forge {
+/*
+    /^* Forge takes a bare id string here and namespaces it under the mod itself, where NeoForge
+     *  wanted a full ResourceLocation. ^/
+    private static void onRegisterGuiOverlays(RegisterGuiOverlaysEvent event) {
+        event.registerAboveAll("voice_hud",           new HudOverlay());
+        event.registerAboveAll("cast_vignette",       new CastingVignette());
+        event.registerAboveAll("cooldown_indicator",  new CooldownIndicator());
+*///?} else {
     private static void onRegisterGuiLayers(RegisterGuiLayersEvent event) {
         event.registerAboveAll(
             ResourceLocation.fromNamespaceAndPath(VoiceSpells.MOD_ID, "voice_hud"),
@@ -129,6 +195,7 @@ public final class ClientEvents {
             ResourceLocation.fromNamespaceAndPath(VoiceSpells.MOD_ID, "cooldown_indicator"),
             new CooldownIndicator()
         );
+//?}
     }
 
     /** Drain the keybind click queue every tick. consumeClick() returns true once per press,
@@ -138,10 +205,17 @@ public final class ClientEvents {
      *  screen is up — that's the first moment the wizard can demonstrate anything live. */
     private static boolean firstRunPopped = false;
     private static long    firstRunEligibleSinceMs = 0L;
+//? if forge {
+/*
+    /^* Prepend the player's voice-cast rank to outgoing chat messages when {@code chatRankTag}
+     *  is on. Cosmetic; sent BEFORE the server sees it so other players see the prefix too. ^/
+    private static void onClientChat(net.minecraftforge.client.event.ClientChatEvent event) {
+*///?} else {
 
     /** Prepend the player's voice-cast rank to outgoing chat messages when {@code chatRankTag}
      *  is on. Cosmetic; sent BEFORE the server sees it so other players see the prefix too. */
     private static void onClientChat(net.neoforged.neoforge.client.event.ClientChatEvent event) {
+//?}
         if (!VoiceSpellsConfig.cChatRankTag) return;
         String original = event.getMessage();
         if (original == null || original.isEmpty()) return;
@@ -151,7 +225,15 @@ public final class ClientEvents {
         event.setMessage("[" + rank + "] " + original);
     }
 
+//? if forge {
+/*
+    /^* 1.20.1 has one ClientTickEvent with a phase field rather than NeoForge's Pre/Post
+     *  subclasses, so the END-phase filter has to be explicit. ^/
+    private static void onClientTickPost(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+*///?} else {
     private static void onClientTickPost(ClientTickEvent.Post event) {
+//?}
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) {
             firstRunEligibleSinceMs = 0L; // reset settle timer between worlds
@@ -259,9 +341,17 @@ public final class ClientEvents {
         private IronsSpellsRefl() {}
     }
 
+//? if forge {
+/*    private static final class CooldownIndicator implements IGuiOverlay {
+*///?} else {
     private static final class CooldownIndicator implements LayeredDraw.Layer {
+//?}
         @Override
+//? if forge {
+/*        public void render(ForgeGui gui, GuiGraphics g, float partialTick, int screenWidth, int screenHeight) {
+*///?} else {
         public void render(GuiGraphics g, net.minecraft.client.DeltaTracker delta) {
+//?}
             String spellId = VoiceController.lastDispatchedSpellId();
             if (spellId == null || spellId.isEmpty()) return;
             Minecraft mc = Minecraft.getInstance();
@@ -337,6 +427,16 @@ public final class ClientEvents {
             return 0f;
         }
     }
+//? if forge {
+/*
+    /^*
+     * Cinematic accent edges while the player is casting a long spell. Reflectively reads
+     * ClientMagicData.isCasting() each frame — when true, draws a quietly pulsing accent line
+     * at the top and bottom of the screen plus a corner glow. Disabled when no cast is in
+     * flight so it never interferes with normal play.
+     ^/
+    private static final class CastingVignette implements IGuiOverlay {
+*///?} else {
 
     /**
      * Cinematic accent edges while the player is casting a long spell. Reflectively reads
@@ -345,8 +445,13 @@ public final class ClientEvents {
      * flight so it never interferes with normal play.
      */
     private static final class CastingVignette implements LayeredDraw.Layer {
+//?}
         @Override
+//? if forge {
+/*        public void render(ForgeGui gui, GuiGraphics g, float partialTick, int screenWidth, int screenHeight) {
+*///?} else {
         public void render(GuiGraphics g, net.minecraft.client.DeltaTracker delta) {
+//?}
             if (!isCasting()) return;
             Minecraft mc = Minecraft.getInstance();
             if (mc.options.hideGui) return;
@@ -380,6 +485,18 @@ public final class ClientEvents {
             }
         }
     }
+//? if forge {
+/*
+    /^*
+     * Slick bottom-left HUD. Two stacked chips:
+     *   - main:  status dot + label + audio meter, always shown while HUD is visible
+     *   - toast: fades in/out when a spell just cast, positioned just above the main chip
+     *
+     * Chip frames use a one-pixel border drawn as two nested rects — cheap "rounded enough"
+     * look that fits MC's pixel aesthetic without needing custom textures.
+     ^/
+    private static final class HudOverlay implements IGuiOverlay {
+*///?} else {
 
     /**
      * Slick bottom-left HUD. Two stacked chips:
@@ -390,6 +507,7 @@ public final class ClientEvents {
      * look that fits MC's pixel aesthetic without needing custom textures.
      */
     private static final class HudOverlay implements LayeredDraw.Layer {
+//?}
 
         private static final int CHIP_H   = 14;
         private static final int PAD_X    = 5;
@@ -398,7 +516,11 @@ public final class ClientEvents {
         private static final int METER_H  = 4;
 
         @Override
+//? if forge {
+/*        public void render(ForgeGui gui, GuiGraphics g, float partialTick, int screenWidth, int screenHeight) {
+*///?} else {
         public void render(GuiGraphics g, net.minecraft.client.DeltaTracker delta) {
+//?}
             Minecraft mc = Minecraft.getInstance();
             if (mc.options.hideGui || mc.player == null) return;
             if (!VoiceController.isHudVisible()) return;

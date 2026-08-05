@@ -1,9 +1,13 @@
 package com.niko.voicespells.client;
 
 import com.niko.voicespells.VoiceSpells;
+//? if !forge {
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+//?}
 import net.minecraft.resources.ResourceLocation;
+//? if !forge {
 import net.neoforged.neoforge.network.PacketDistributor;
+//?}
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -93,11 +97,58 @@ public final class SpellSelector {
             Class<?> pktCls = Class.forName(SELECT_PACKET);
             Constructor<?> ctor = pktCls.getConstructor(selCls);
             Object packet = ctor.newInstance(selection);
+//? if forge {
+/*            sendIronsPacket(packet);
+*///?} else {
             // SelectSpellPacket implements CustomPacketPayload and is registered on Iron's
             // Spells' own channel, so the vanilla distributor routes it by payload id.
             PacketDistributor.sendToServer((CustomPacketPayload) packet);
+//?}
         } catch (Throwable t) {
             VoiceSpells.LOGGER.debug("Spell-selection server sync skipped: {}", t.toString());
         }
     }
+//? if forge {
+/*
+    /^*
+     * Send one of Iron's Spells' own packets on Iron's Spells' own channel.
+     *
+     * <p>This is the one place where the 1.20.1 port genuinely cannot mirror what 1.21.1 did. On
+     * 1.20.5+ networking routes by payload id, so {@code PacketDistributor.sendToServer} would
+     * happily deliver another mod's {@code CustomPacketPayload}. Forge 1.20.1 has no such common
+     * channel: every mod owns a private {@code SimpleChannel} and there is no way to hand a
+     * foreign packet to your own. The packet therefore has to go out through Iron's Spells'
+     * dispatcher, which is reached reflectively like everything else here.
+     *
+     * <p>Fails soft by design. Selection sync only keeps Iron's own spell bar visually in step
+     * with what was just voice-cast — {@code SpellCaster} resolves and casts the spell server-side
+     * on its own, so a miss here costs a cosmetic highlight, never a cast.
+     ^/
+    private static void sendIronsPacket(Object packet) {
+        // Candidate dispatchers across Iron's Spells' 1.20.1 builds. First one that resolves wins.
+        String[][] candidates = {
+            { "io.redspace.ironsspellbooks.setup.Messages",   "sendToServer" },
+            { "io.redspace.ironsspellbooks.network.Messages", "sendToServer" },
+            { "io.redspace.ironsspellbooks.IronsSpellbooks",  "sendToServer" },
+        };
+        for (String[] c : candidates) {
+            try {
+                Class<?> cls = Class.forName(c[0]);
+                for (Method m : cls.getMethods()) {
+                    if (!m.getName().equals(c[1])) continue;
+                    if (m.getParameterCount() != 1) continue;
+                    if (!m.getParameterTypes()[0].isInstance(packet)
+                            && m.getParameterTypes()[0] != Object.class) continue;
+                    m.invoke(null, packet);
+                    return;
+                }
+            } catch (Throwable ignored) {
+                // Try the next candidate.
+            }
+        }
+        VoiceSpells.LOGGER.debug(
+            "No Iron's Spells packet dispatcher found; spell-bar selection will not sync. "
+            + "Casting is unaffected.");
+    }
+*///?}
 }

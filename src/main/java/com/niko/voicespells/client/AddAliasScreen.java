@@ -199,13 +199,21 @@ public final class AddAliasScreen extends Screen {
     }
 
     @SuppressWarnings("unchecked")
+//? if forge {
+/*    private boolean removeFromList(net.minecraftforge.common.ForgeConfigSpec.ConfigValue<List<? extends String>> spec,
+*///?} else {
     private boolean removeFromList(net.neoforged.neoforge.common.ModConfigSpec.ConfigValue<List<? extends String>> spec,
+//?}
                                     String entry) {
         List<String> current = (List<String>) (List<?>) spec.get();
         if (!current.contains(entry)) return false;
         List<String> updated = new ArrayList<>(current);
         updated.remove(entry);
+//? if forge {
+/*        ((net.minecraftforge.common.ForgeConfigSpec.ConfigValue) spec).set(updated);
+*///?} else {
         ((net.neoforged.neoforge.common.ModConfigSpec.ConfigValue) spec).set(updated);
+//?}
         return true;
     }
 

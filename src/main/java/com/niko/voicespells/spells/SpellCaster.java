@@ -308,6 +308,11 @@ public final class SpellCaster {
             }
             VoiceSpells.LOGGER.error("Cast failed for {} — {}: {}", spellId,
                 cause.getClass().getName(), cause.getMessage(), cause);
+//? if forge {
+/*            VoiceSpells.LOGGER.error(
+                "If the class above belongs to another mod, this is a conflict in that mod's "
+                + "hook on Iron's Spells' cast path, not in Incantation itself.");
+*///?} else {
 
             String culprit = blameThirdPartyMod(cause);
             if (culprit != null) {
@@ -322,15 +327,20 @@ public final class SpellCaster {
                     + "hook on Iron's Spells' cast path, not in Incantation itself.");
             }
 
+//?}
             String detail = cause.getMessage() == null || cause.getMessage().isBlank()
                 ? cause.getClass().getSimpleName()
                 : cause.getClass().getSimpleName() + ": " + cause.getMessage();
             if (detail.length() > 90) detail = detail.substring(0, 90) + "…";
+//? if forge {
+/*            feedback(player, "voicespells.cast.error", detail);
+*///?} else {
             if (culprit != null) {
                 feedback(player, "voicespells.cast.error_mod", culprit);
             } else {
                 feedback(player, "voicespells.cast.error", detail);
             }
+//?}
             return false;
         }
     }
@@ -350,8 +360,14 @@ public final class SpellCaster {
         Class<?> slotResultCls  = Class.forName(CURIOS_SLOT_RES);
 
         Method getInventory = curiosApi.getMethod("getCuriosInventory", LivingEntity.class);
+//? if forge {
+/*        // NOT a direct cast to Optional — on 1.20.1 Forge this returns LazyOptional. See
+        // CuriosCompat for why that difference is invisible until the first cast fails.
+        Optional<Object> invOpt = CuriosCompat.inventory(getInventory, player);
+*///?} else {
         @SuppressWarnings("unchecked")
         Optional<Object> invOpt = (Optional<Object>) getInventory.invoke(null, player);
+//?}
         if (invOpt.isEmpty()) return null;
         Object handler = invOpt.get();
 
@@ -551,6 +567,7 @@ public final class SpellCaster {
             return false;
         }
     }
+//? if !forge {
 
     /**
      * Work out which third-party mod a cast failure actually came from, by walking the stack trace
@@ -617,6 +634,7 @@ public final class SpellCaster {
         return null;
     }
 
+//?}
     private static void feedback(ServerPlayer player, String translationKey, Object... args) {
         player.displayClientMessage(Component.translatable(translationKey, args), true);
     }
@@ -649,7 +667,11 @@ public final class SpellCaster {
                                               int totalCasts, int streak) {
         try {
             String school = resolveSchool(spell, spellCls);
+//? if forge {
+/*            com.niko.voicespells.advancements.ModTriggers.VOICE_CAST
+*///?} else {
             com.niko.voicespells.advancements.ModTriggers.VOICE_CAST.get()
+//?}
                 .fire(player, totalCasts, streak, school);
         } catch (Throwable t) {
             VoiceSpells.LOGGER.debug("Advancement trigger failed: {}", t.toString());
@@ -664,7 +686,11 @@ public final class SpellCaster {
             if (!com.niko.voicespells.VoiceSpellsServerConfig.SERVER.logVoiceCasts.get()) return;
             net.minecraft.server.MinecraftServer server = player.getServer();
             if (server == null) return;
+//? if forge {
+/*            java.nio.file.Path logDir = server.getServerDirectory().toPath().resolve("logs");
+*///?} else {
             java.nio.file.Path logDir = server.getServerDirectory().resolve("logs");
+//?}
             java.nio.file.Files.createDirectories(logDir);
             java.nio.file.Path logFile = logDir.resolve("voicespells-casts.log");
             String line = String.format(java.util.Locale.ROOT, "%s\t%s\t%s\t%s%n",

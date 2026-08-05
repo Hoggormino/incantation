@@ -84,9 +84,25 @@ public final class ApiSelfCheck {
         });
 
         if (classPresent("top.theillusivec4.curios.api.CuriosApi")) {
+//? if forge {
+/*            // Checks the RETURN TYPE, not just that the method exists. Curios hands back
+            // LazyOptional on 1.20.1 and Optional on 1.21.1, and getMethod() ignores return type
+            // — so the old existence-only probe passed on both while casting failed on one.
+            check(missing, "CuriosApi.getCuriosInventory", () -> {
+                java.lang.reflect.Method m = Class
+                    .forName("top.theillusivec4.curios.api.CuriosApi")
+                    .getMethod("getCuriosInventory", LivingEntity.class);
+                if (!CuriosCompat.returnTypeSupported(m)) {
+                    throw new NoSuchMethodException(
+                        "getCuriosInventory returns unsupported " + m.getReturnType().getName());
+                }
+                return m;
+            });
+*///?} else {
             check(missing, "CuriosApi.getCuriosInventory", () -> Class
                 .forName("top.theillusivec4.curios.api.CuriosApi")
                 .getMethod("getCuriosInventory", LivingEntity.class));
+//?}
             check(missing, "ICuriosItemHandler.findCurios", () -> Class
                 .forName("top.theillusivec4.curios.api.type.capability.ICuriosItemHandler")
                 .getMethod("findCurios", Predicate.class));

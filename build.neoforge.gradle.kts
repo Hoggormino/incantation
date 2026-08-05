@@ -109,12 +109,16 @@ val tokens = mapOf(
     "mod_version"             to property("mod.version") as String,
     "mod_authors"             to property("mod.authors") as String,
     "mod_description"         to property("mod.description") as String,
+    // pack_format differs per Minecraft version (15 on 1.20.1, 46 on 1.21.x).
+    // Templating it keeps ONE shared pack.mcmeta instead of a per-node copy,
+    // which also removes a duplicate-entry clash in sourcesJar.
+    "pack_format"             to property("deps.pack_format") as String,
 )
 
 tasks.named<ProcessResources>("processResources") {
     val replacements = tokens
     inputs.properties(replacements)
-    filesMatching("META-INF/neoforge.mods.toml") { expand(replacements) }
+    filesMatching(listOf("META-INF/neoforge.mods.toml", "pack.mcmeta")) { expand(replacements) }
     // The Forge target uses mods.toml at the same path; neither loader should ship the other's.
     exclude("META-INF/mods.toml")
 }
