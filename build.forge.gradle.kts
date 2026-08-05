@@ -75,6 +75,20 @@ legacyForge {
     }
 }
 
+// Vosk depends on JNA 5.7.0 and Gradle resolves that as a hard requirement, beating Minecraft's
+// "prefer 5.12.1" — so the runtime classpath ends up with jna 5.7.0 alongside jna-platform 5.12.1.
+// That mismatched pair breaks oshi, which calls Memory.close() (added in JNA 5.12) and dies with
+// NoSuchMethodError before the game finishes starting. Forcing the pair back together fixes it;
+// 5.12.1 satisfies Vosk, which only needs >= 5.7.
+//
+// Distinct from the jarJar exclusion below: that stops JNA being NESTED in the shipped jar, where
+// Minecraft already provides it. This governs the dev runtime classpath instead. Both are needed.
+configurations.all {
+    resolutionStrategy {
+        force("net.java.dev.jna:jna:5.12.1", "net.java.dev.jna:jna-platform:5.12.1")
+    }
+}
+
 repositories {
     mavenCentral()
     maven("https://maven.neoforged.net/releases") { name = "NeoForged" }
@@ -84,6 +98,38 @@ repositories {
 
 dependencies {
     compileOnly("de.maxhenkel.voicechat:voicechat-api:$voicechatApi")
+
+    // Dev-run mods for exercising the reflective Iron's Spells / Curios layer. These MUST go
+    // through modRuntimeOnly rather than being dropped into run/mods: published 1.20.1 jars are
+    // SRG-mapped, while this workspace uses Mojang official names, so an unremapped jar fails at
+    // mixin apply with "@Shadow method m_21244_ was not located in the target class". The
+    // remapping configuration translates them into the dev namespace.
+    //
+    // Sourced from local files rather than a maven so the run does not depend on network access
+    // or on Modrinth's occasionally-broken POMs for these artifacts.
+    // Dev-run mods for exercising the reflective Iron's Spells / Curios layer.
+    //
+    // These MUST use modRuntimeOnly and MUST be maven coordinates. Two separate constraints:
+    // published 1.20.1 jars are SRG-mapped while this workspace uses Mojang names, so an
+    // unremapped jar dies at mixin apply ("@Shadow method m_21244_ was not located in the target
+    // class"); and the remapping is an artifact transform keyed on module artifacts, so a local
+    // file dependency is rejected outright with "Cannot convert the provided notation to an
+    // object of type DependencyConstraint: file collection".
+    //
+    // Runtime only - every call into these mods is reflective, so nothing here is needed to
+    // compile. They exist purely so a dev run can exercise the integration layer.
+    // Pinned by Modrinth VERSION ID, not version number. Version numbers are not unique across
+    // loaders or Minecraft versions - asking for geckolib "4.8.3" returned a build whose reported
+    // mod version did not satisfy Iron's Spells' "1.20.1:4.8.2 or above" requirement. IDs are
+    // unambiguous.
+    "modRuntimeOnly"("maven.modrinth:irons-spells-n-spellbooks:9v34JOKI")  // 1.20.1-3.16.2
+    "modRuntimeOnly"("maven.modrinth:curios:IPQlZkz1")                     // 5.14.1+1.20.1
+    "modRuntimeOnly"("maven.modrinth:geckolib:aC5KMoNg")                   // 4.8.4, 1.20.1 forge
+    "modRuntimeOnly"("maven.modrinth:irons-lib:DbpRfa2k")                   // 1.20.1-2.1.0
+    // Slug is "playeranimator", but the artifact is player-animation-lib-forge-*.jar - a
+    // DIFFERENT mod from the similarly named PlayerAnimationLibNeoforge (modid
+    // player_animation_library). Matching the wrong one leaves Iron's Spells unsatisfied.
+    "modRuntimeOnly"("maven.modrinth:playeranimator:xe2EVE6q")              // 1.0.2-rc1+1.20-forge
 
     implementation("com.alphacephei:vosk:$voskVersion")
     "additionalRuntimeClasspath"("com.alphacephei:vosk:$voskVersion")
@@ -127,3 +173,4 @@ tasks.withType<JavaCompile>().configureEach {
 }
 
 java { withSourcesJar() }
+

@@ -420,8 +420,25 @@ public final class SpellIndex {
 
         Field registryField = registryClass.getField("REGISTRY");
         Object registryObj  = registryField.get(null);
-        if (!(registryObj instanceof Registry<?> registry)) {
-            throw new IllegalStateException("SpellRegistry.REGISTRY is not a Registry instance");
+
+        // SpellRegistry.REGISTRY is not the same type across Minecraft versions:
+        //   1.21.x NeoForge : net.minecraft.core.Registry<AbstractSpell>
+        //   1.20.1 Forge    : Supplier<net.minecraftforge.registries.IForgeRegistry<AbstractSpell>>
+        // Unwrap the supplier when present. Both end types implement Iterable<AbstractSpell>, and
+        // iteration is all this method needs, so accepting Iterable covers both with one code path
+        // instead of a version conditional.
+        //
+        // This mattered: requiring a vanilla Registry meant the mod loaded cleanly on 1.20.1,
+        // reported Iron's Spells as found, passed its own API self-check, and then indexed ZERO
+        // spells - a total functional failure that nothing short of running it with Iron's Spells
+        // actually installed could reveal.
+        if (registryObj instanceof java.util.function.Supplier<?> supplier) {
+            registryObj = supplier.get();
+        }
+        if (!(registryObj instanceof Iterable<?> registry)) {
+            throw new IllegalStateException(
+                "SpellRegistry.REGISTRY is not iterable (got "
+                + (registryObj == null ? "null" : registryObj.getClass().getName()) + ")");
         }
 
         Method getSpellId   = spellClass.getMethod("getSpellId");

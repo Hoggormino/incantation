@@ -79,6 +79,20 @@ neoForge {
     }
 }
 
+// Vosk depends on JNA 5.7.0 and Gradle resolves that as a hard requirement, beating Minecraft's
+// "prefer 5.12.1" — so the runtime classpath ends up with jna 5.7.0 alongside jna-platform 5.12.1.
+// That mismatched pair breaks oshi, which calls Memory.close() (added in JNA 5.12) and dies with
+// NoSuchMethodError before the game finishes starting. Forcing the pair back together fixes it;
+// 5.12.1 satisfies Vosk, which only needs >= 5.7.
+//
+// Distinct from the jarJar exclusion below: that stops JNA being NESTED in the shipped jar, where
+// Minecraft already provides it. This governs the dev runtime classpath instead. Both are needed.
+configurations.all {
+    resolutionStrategy {
+        force("net.java.dev.jna:jna:5.12.1", "net.java.dev.jna:jna-platform:5.12.1")
+    }
+}
+
 repositories {
     mavenCentral()
     maven("https://maven.neoforged.net/releases") { name = "NeoForged" }
