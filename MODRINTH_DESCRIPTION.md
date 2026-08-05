@@ -11,10 +11,16 @@ voice training, no extra keybind, no setup beyond unzipping a model into the con
 ## How it works
 
 When Simple Voice Chat is transmitting your audio, Incantation feeds the frames to a Vosk
-recognizer whose grammar is restricted to the names of spells you actually have equipped
-(spellbook in your Curios slot, spellbook in hand, or an imbued weapon you're holding).
-That means the recognizer literally cannot mis-hear you and accidentally fire a spell you
-don't have — background chatter just doesn't match anything in the grammar.
+recognizer built from the names of every spell in the registry. Whatever it hears is then
+checked against what you actually have equipped — spellbook in your Curios slot, spellbook
+in hand, or an imbued weapon you're holding — and anything you don't have equipped is
+rejected on your client before it ever reaches the server.
+
+The grammar deliberately stays broad. Narrowing it to just your equipped spells sounds
+safer, but with only two or three phrases left the recognizer force-matches *any* audio —
+a cough, a footstep, someone else talking — into whichever of them is closest. Keeping
+every spell name in there dilutes that, and the equipped check is what actually stops an
+unowned spell from casting.
 
 The whole pipeline runs locally. No network calls. No accounts. Your voice never leaves
 your PC.
@@ -66,7 +72,7 @@ your PC.
 
 ## Setup
 
-1. Drop `incantation-0.9.4.jar` in your `mods/` folder alongside SVC and Iron's Spells.
+1. Drop `incantation-0.9.5.jar` in your `mods/` folder alongside SVC and Iron's Spells.
 2. Grab a Vosk model from [alphacephei.com/vosk/models](https://alphacephei.com/vosk/models)
    — `vosk-model-small-en-us-0.15.zip` is plenty for vanilla spell names.
 3. Unzip and copy the **contents** of that folder into `config/voicespells/model/` so you

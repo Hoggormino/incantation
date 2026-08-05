@@ -278,11 +278,12 @@ public final class VoiceSpellsConfig {
                       "switch the active spell slot WITHOUT casting. Useful for combat where",
                       "you want to manually trigger the selected spell later.");
             voiceHotbarSelect = b.define("voiceHotbarSelect", false);
-            b.comment("Restrict recognition to spells the player currently has. Scans the",
-                      "Curios spellbook slot, both hands, and the hotbar for spellbooks and",
-                      "imbued weapons; the Vosk grammar is rebuilt to only include those.",
-                      "Stops Vosk from forcing background noise into the closest unowned",
-                      "spell name. Off = listen for every registered spell.");
+            b.comment("Only let a spell cast if you actually have it equipped. Scans the Curios",
+                      "spellbook slot, main hand, and off hand for spellbooks and imbued",
+                      "weapons; anything not found there is rejected at dispatch. The Vosk",
+                      "grammar itself stays broad on purpose - narrowing it to the couple of",
+                      "phrases you have equipped makes the recogniser force background noise",
+                      "into whichever one is closest. Off = any registered spell can cast.");
             restrictToOwned = b.define("restrictToOwned", true);
             b.comment("Custom phrase to spell mappings for spells the recognizer cannot say.",
                       "One entry per line, format: phrase=namespace:spell_id",
