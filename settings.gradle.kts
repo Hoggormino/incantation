@@ -30,8 +30,7 @@ stonecutter {
 
         version("1.20.1-forge",  "1.20.1").buildscript = "build.forge.gradle.kts"
 
-        // 1.21 is not ported yet - Stonecutter holds version differences, it does not find them.
-        //   version("1.21-neoforge", "1.21").buildscript = "build.neoforge.gradle.kts"
+        version("1.21-neoforge",   "1.21"  ).buildscript = "build.neoforge.gradle.kts"
 
         vcsVersion = "1.21.1-neoforge"
     }

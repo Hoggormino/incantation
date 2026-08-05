@@ -22,6 +22,17 @@ base {
 // 1.20.1 runs on Java 17. Forge 47 refuses class files above major 61.
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
+// Loader-shaped classes, shared by every node on this loader. The @Mod entrypoint, networking,
+// the config spec and the advancement triggers have genuinely different STRUCTURE per loader, so
+// they are separate files rather than per-line conditionals. They are keyed on the loader and not
+// on the node because 1.21 and 1.21.1 need byte-identical copies — per-node would mean maintaining
+// the same file twice, which is the duplication this migration exists to remove.
+//
+// This is a different directory from versions/<node>/src, which Stonecutter registers itself; only
+// re-registering THAT one causes duplicate-entry failures.
+sourceSets["main"].java.srcDir(rootProject.file("loader/forge/java"))
+
+
 // Loader-specific Java. Some classes are shaped by the loader rather than merely referencing it —
 // the @Mod entrypoint, networking, the config spec, and the advancement triggers have genuinely
 // different structure per loader, and expressing that with per-line conditionals would mean
