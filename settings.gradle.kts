@@ -30,7 +30,15 @@ stonecutter {
 
         version("1.20.1-forge",  "1.20.1").buildscript = "build.forge.gradle.kts"
 
-        version("1.21-neoforge",   "1.21"  ).buildscript = "build.neoforge.gradle.kts"
+        // Minecraft 1.21 is deliberately NOT a target. It builds fine, but the mod would be
+        // permanently inert there: Iron's Spells requires Curios as a MANDATORY dependency, and
+        // Curios has no 1.21 build at all - it went straight from 1.20.x to 1.21.1. Iron's Spells
+        // therefore cannot run on 1.21, so nothing would ever be castable.
+        //
+        // Note Modrinth tags several Iron's Spells builds as supporting 1.21; those tags are
+        // wrong. 3.12.3 is tagged 1.21 but its own metadata declares [1.21.1,1.21.2), and the one
+        // build that genuinely allows 1.21 (3.8.8) still hard-requires the Curios that does not
+        // exist. Trust the jar's declared ranges, not the storefront tags.
 
         vcsVersion = "1.21.1-neoforge"
     }

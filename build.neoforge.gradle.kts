@@ -109,6 +109,12 @@ dependencies {
     // additionalRuntimeClasspath and jarJar are configurations created by ModDevGradle, so they
     // have no generated Kotlin accessor — they are invoked by name.
     "additionalRuntimeClasspath"("com.alphacephei:vosk:$voskVersion")
+    // NOTE on dev-run mods: do NOT use additionalRuntimeClasspath for them. It puts a mod's
+    // CLASSES on the classpath without registering it with FML, so the game reports the mod as
+    // missing while this mod's reflection still finds its classes and tries to use them - the
+    // worst of both worlds. NeoForge needs no remapping, so dev mods simply go in the run
+    // directory's mods/ folder (versions/<node>/run/mods).
+
     "jarJar"("com.alphacephei:vosk") {
         this as ExternalModuleDependency
         version { strictly("[$voskVersion,1)"); prefer(voskVersion) }
@@ -153,3 +159,4 @@ tasks.withType<JavaCompile>().configureEach {
 }
 
 java { withSourcesJar() }
+
