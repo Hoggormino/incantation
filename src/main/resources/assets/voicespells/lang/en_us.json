@@ -26,6 +26,7 @@
   "voicespells.cast.blocked": "%s is blocked in the voice config",
   "voicespells.cast.no_iron_spells": "Iron's Spells is not loaded on the server",
   "voicespells.cast.error": "Cast error: %s",
+  "voicespells.cast.error_mod": "Cast blocked by %s - mod conflict, see the log",
   "voicespells.cast.cooldown": "%s is on cooldown",
   "voicespells.cast.no_mana": "Not enough mana for %s",
   "voicespells.cast.not_in_curios": "%s found but not in your Curios spellbook slot (switch to ANY_SPELLBOOK to allow hand-held)",

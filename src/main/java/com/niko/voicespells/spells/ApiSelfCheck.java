@@ -84,7 +84,8 @@ public final class ApiSelfCheck {
         });
 
         if (classPresent("top.theillusivec4.curios.api.CuriosApi")) {
-            // Checks the RETURN TYPE, not just that the method exists. Curios hands back
+//? if forge {
+/*            // Checks the RETURN TYPE, not just that the method exists. Curios hands back
             // LazyOptional on 1.20.1 and Optional on 1.21.1, and getMethod() ignores return type
             // — so the old existence-only probe passed on both while casting failed on one.
             check(missing, "CuriosApi.getCuriosInventory", () -> {
@@ -97,6 +98,11 @@ public final class ApiSelfCheck {
                 }
                 return m;
             });
+*///?} else {
+            check(missing, "CuriosApi.getCuriosInventory", () -> Class
+                .forName("top.theillusivec4.curios.api.CuriosApi")
+                .getMethod("getCuriosInventory", LivingEntity.class));
+//?}
             check(missing, "ICuriosItemHandler.findCurios", () -> Class
                 .forName("top.theillusivec4.curios.api.type.capability.ICuriosItemHandler")
                 .getMethod("findCurios", Predicate.class));

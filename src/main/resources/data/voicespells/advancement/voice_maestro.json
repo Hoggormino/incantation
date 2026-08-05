@@ -1,0 +1,19 @@
+{
+  "parent": "voicespells:voice_combo",
+  "display": {
+    "icon": { "id": "minecraft:beacon" },
+    "title": { "translate": "advancements.voicespells.voice_maestro.title" },
+    "description": { "translate": "advancements.voicespells.voice_maestro.description" },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "ten_streak": {
+      "trigger": "voicespells:voice_cast",
+      "conditions": { "min_streak": 10 }
+    }
+  },
+  "requirements": [["ten_streak"]]
+}

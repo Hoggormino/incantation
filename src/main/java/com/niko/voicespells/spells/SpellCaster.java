@@ -308,14 +308,39 @@ public final class SpellCaster {
             }
             VoiceSpells.LOGGER.error("Cast failed for {} — {}: {}", spellId,
                 cause.getClass().getName(), cause.getMessage(), cause);
-            VoiceSpells.LOGGER.error(
+//? if forge {
+/*            VoiceSpells.LOGGER.error(
                 "If the class above belongs to another mod, this is a conflict in that mod's "
                 + "hook on Iron's Spells' cast path, not in Incantation itself.");
+*///?} else {
+
+            String culprit = blameThirdPartyMod(cause);
+            if (culprit != null) {
+                VoiceSpells.LOGGER.error(
+                    "This failure came from {}, which hooks Iron's Spells' cast path. It is a "
+                    + "conflict between that mod and Iron's Spells, not a bug in Incantation — "
+                    + "the same error occurs on any cast that reaches its hook. Removing or "
+                    + "reconfiguring {} resolves it.", culprit, culprit);
+            } else {
+                VoiceSpells.LOGGER.error(
+                    "If the class above belongs to another mod, this is a conflict in that mod's "
+                    + "hook on Iron's Spells' cast path, not in Incantation itself.");
+            }
+
+//?}
             String detail = cause.getMessage() == null || cause.getMessage().isBlank()
                 ? cause.getClass().getSimpleName()
                 : cause.getClass().getSimpleName() + ": " + cause.getMessage();
             if (detail.length() > 90) detail = detail.substring(0, 90) + "…";
-            feedback(player, "voicespells.cast.error", detail);
+//? if forge {
+/*            feedback(player, "voicespells.cast.error", detail);
+*///?} else {
+            if (culprit != null) {
+                feedback(player, "voicespells.cast.error_mod", culprit);
+            } else {
+                feedback(player, "voicespells.cast.error", detail);
+            }
+//?}
             return false;
         }
     }
@@ -335,9 +360,14 @@ public final class SpellCaster {
         Class<?> slotResultCls  = Class.forName(CURIOS_SLOT_RES);
 
         Method getInventory = curiosApi.getMethod("getCuriosInventory", LivingEntity.class);
-        // NOT a direct cast to Optional — on 1.20.1 Forge this returns LazyOptional. See
+//? if forge {
+/*        // NOT a direct cast to Optional — on 1.20.1 Forge this returns LazyOptional. See
         // CuriosCompat for why that difference is invisible until the first cast fails.
         Optional<Object> invOpt = CuriosCompat.inventory(getInventory, player);
+*///?} else {
+        @SuppressWarnings("unchecked")
+        Optional<Object> invOpt = (Optional<Object>) getInventory.invoke(null, player);
+//?}
         if (invOpt.isEmpty()) return null;
         Object handler = invOpt.get();
 
@@ -537,7 +567,74 @@ public final class SpellCaster {
             return false;
         }
     }
+//? if !forge {
 
+    /**
+     * Work out which third-party mod a cast failure actually came from, by walking the stack trace
+     * for the first frame that is neither Minecraft, nor Iron's Spells, nor this mod, and asking
+     * NeoForge which loaded mod owns that class.
+     *
+     * <p>Worth the effort because the failure mode it addresses is genuinely misleading. Every cast
+     * goes through reflection, so a mod that mixes into Iron's Spells' cast path and throws
+     * surfaces as an error from Incantation — users reasonably conclude this mod is broken and
+     * report it here. One such report took weeks to trace, and was ultimately resolved by another
+     * user noticing a conflict with a progression mod that gates casting. Naming the mod turns that
+     * into a one-line answer.
+     *
+     * @return the offending mod's display name, or {@code null} if the failure looks like it came
+     *         from Iron's Spells or vanilla, where blaming a third party would be wrong
+     */
+    private static String blameThirdPartyMod(Throwable cause) {
+        try {
+            for (StackTraceElement frame : cause.getStackTrace()) {
+                String cls = frame.getClassName();
+                if (cls.startsWith("net.minecraft.")
+                    || cls.startsWith("com.mojang.")
+                    || cls.startsWith("net.neoforged.")
+                    || cls.startsWith("java.")
+                    || cls.startsWith("jdk.")
+                    || cls.startsWith("com.niko.voicespells.")) {
+                    continue;
+                }
+                // Iron's Spells' own code is not a third party here — but a mixin injected INTO it
+                // keeps the target's package name, so those are identified by the mixin marker
+                // rather than skipped outright.
+                boolean isIronsOwn = cls.startsWith("io.redspace.ironsspellbooks.")
+                    && !cls.toLowerCase(Locale.ROOT).contains("mixin");
+                if (isIronsOwn) continue;
+
+                String owner = modNameForClass(cls);
+                if (owner != null) return owner;
+            }
+        } catch (Throwable ignored) {
+            // Diagnostics must never themselves throw during error handling.
+        }
+        return null;
+    }
+
+    /** Map a class name to the display name of the mod that loaded it, if any. */
+    private static String modNameForClass(String className) {
+        try {
+            Class<?> cls = Class.forName(className, false, SpellCaster.class.getClassLoader());
+            String pkg = cls.getPackageName();
+            for (var mod : net.neoforged.fml.ModList.get().getMods()) {
+                String id = mod.getModId();
+                if (id.equals("minecraft") || id.equals("neoforge")
+                    || id.equals(VoiceSpells.MOD_ID)) continue;
+                // Mixin classes injected into another mod keep the TARGET's package, so also match
+                // on the mod id appearing in the package path — which is how a mixin package like
+                // "io.redspace.ironsspellbooks.ironsrestrictionsmixin" gives up its real owner.
+                String squashed = id.replace("_", "");
+                String pkgSquashed = pkg.toLowerCase(Locale.ROOT).replace("_", "");
+                if (pkgSquashed.contains(squashed) || pkg.contains(id)) {
+                    return mod.getDisplayName() + " (" + id + ")";
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+//?}
     private static void feedback(ServerPlayer player, String translationKey, Object... args) {
         player.displayClientMessage(Component.translatable(translationKey, args), true);
     }
@@ -570,7 +667,11 @@ public final class SpellCaster {
                                               int totalCasts, int streak) {
         try {
             String school = resolveSchool(spell, spellCls);
-            com.niko.voicespells.advancements.ModTriggers.VOICE_CAST
+//? if forge {
+/*            com.niko.voicespells.advancements.ModTriggers.VOICE_CAST
+*///?} else {
+            com.niko.voicespells.advancements.ModTriggers.VOICE_CAST.get()
+//?}
                 .fire(player, totalCasts, streak, school);
         } catch (Throwable t) {
             VoiceSpells.LOGGER.debug("Advancement trigger failed: {}", t.toString());
@@ -585,7 +686,11 @@ public final class SpellCaster {
             if (!com.niko.voicespells.VoiceSpellsServerConfig.SERVER.logVoiceCasts.get()) return;
             net.minecraft.server.MinecraftServer server = player.getServer();
             if (server == null) return;
-            java.nio.file.Path logDir = server.getServerDirectory().toPath().resolve("logs");
+//? if forge {
+/*            java.nio.file.Path logDir = server.getServerDirectory().toPath().resolve("logs");
+*///?} else {
+            java.nio.file.Path logDir = server.getServerDirectory().resolve("logs");
+//?}
             java.nio.file.Files.createDirectories(logDir);
             java.nio.file.Path logFile = logDir.resolve("voicespells-casts.log");
             String line = String.format(java.util.Locale.ROOT, "%s\t%s\t%s\t%s%n",

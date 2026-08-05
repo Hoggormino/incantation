@@ -458,7 +458,11 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         }
 
         @Override
-        public boolean mouseScrolled(double mx, double my, double sy) {
+//? if forge {
+/*        public boolean mouseScrolled(double mx, double my, double sy) {
+*///?} else {
+        public boolean mouseScrolled(double mx, double my, double sx, double sy) {
+//?}
             if (!isMouseOver(mx, my)) return false;
             scroll -= (int) Math.signum(sy);
             clampScroll();

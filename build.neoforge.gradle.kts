@@ -1,0 +1,162 @@
+plugins {
+    id("java-library")
+    id("net.neoforged.moddev")
+}
+
+val mcVersion       = property("deps.minecraft") as String
+val neoVersion      = property("deps.neoforge") as String
+val modId           = property("mod.id") as String
+val voicechatApi    = property("deps.voicechat_api") as String
+val voskVersion     = property("deps.vosk") as String
+
+version = "${property("mod.version")}+$mcVersion-neoforge"
+group   = property("mod.group") as String
+
+base {
+    // Display name for the published jar. Decoupled from mod.id (which stays "voicespells" so
+    // existing configs, advancements and packets still resolve).
+    archivesName = "incantation"
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+// Loader-shaped classes, shared by every node on this loader. The @Mod entrypoint, networking,
+// the config spec and the advancement triggers have genuinely different STRUCTURE per loader, so
+// they are separate files rather than per-line conditionals. They are keyed on the loader and not
+// on the node because 1.21 and 1.21.1 need byte-identical copies — per-node would mean maintaining
+// the same file twice, which is the duplication this migration exists to remove.
+//
+// This is a different directory from versions/<node>/src, which Stonecutter registers itself; only
+// re-registering THAT one causes duplicate-entry failures.
+sourceSets["main"].java.srcDir(rootProject.file("loader/neoforge/java"))
+
+
+// Loader-specific Java. Some classes are shaped by the loader rather than merely referencing it —
+// the @Mod entrypoint, networking, the config spec, and the advancement triggers have genuinely
+// different structure per loader, and expressing that with per-line conditionals would mean
+// wrapping nearly every declaration. Those live here; everything portable stays in the shared
+// tree at the repo root, which is the great majority of the codebase.
+// NOTE: versions/<node>/src/main/java is registered by Stonecutter's own convention - adding it
+// explicitly here registers it TWICE and fails sourcesJar with a duplicate-entry error. Loader-
+// shaped classes (the @Mod entrypoint, networking, config spec, advancement triggers) simply go
+// in that directory and are picked up; everything portable stays in the shared tree at the root.
+
+
+neoForge {
+    version = neoVersion
+
+    runs {
+        register("client") {
+            client()
+            systemProperty("neoforge.enabledGameTestNamespaces", modId)
+            // -PquickPlay=<world> boots straight into a world. Microphone capture only runs in a
+            // world, so this is what makes the audio path testable without clicking through menus.
+            if (project.hasProperty("quickPlay")) {
+                programArguments.addAll("--quickPlaySingleplayer", project.property("quickPlay").toString())
+            }
+        }
+        // Mandatory. This mod ships client-only UI but must load headless, and the "client GUI
+        // class on a dedicated server" crash regressed twice (0.9.0, then again in 0.9.3) purely
+        // because there was no way to test for it locally. Run before every release.
+        register("server") {
+            server()
+            systemProperty("neoforge.enabledGameTestNamespaces", modId)
+        }
+        register("data") {
+            data()
+            programArguments.addAll(
+                "--mod", modId, "--all",
+                "--output", file("src/generated/resources/").absolutePath,
+                "--existing", file("../../src/main/resources/").absolutePath
+            )
+        }
+    }
+
+    mods {
+        register(modId) {
+            sourceSet(sourceSets["main"])
+        }
+    }
+}
+
+// Vosk depends on JNA 5.7.0 and Gradle resolves that as a hard requirement, beating Minecraft's
+// "prefer 5.12.1" — so the runtime classpath ends up with jna 5.7.0 alongside jna-platform 5.12.1.
+// That mismatched pair breaks oshi, which calls Memory.close() (added in JNA 5.12) and dies with
+// NoSuchMethodError before the game finishes starting. Forcing the pair back together fixes it;
+// 5.12.1 satisfies Vosk, which only needs >= 5.7.
+//
+// Distinct from the jarJar exclusion below: that stops JNA being NESTED in the shipped jar, where
+// Minecraft already provides it. This governs the dev runtime classpath instead. Both are needed.
+configurations.all {
+    resolutionStrategy {
+        force("net.java.dev.jna:jna:5.12.1", "net.java.dev.jna:jna-platform:5.12.1")
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven("https://maven.neoforged.net/releases") { name = "NeoForged" }
+    maven("https://maven.maxhenkel.de/repository/public") { name = "Henkelmax (Simple Voice Chat)" }
+    maven("https://api.modrinth.com/maven") { name = "Modrinth" }
+}
+
+dependencies {
+    // Simple Voice Chat public API. compileOnly — SVC ships the API at runtime.
+    compileOnly("de.maxhenkel.voicechat:voicechat-api:$voicechatApi")
+
+    // Vosk offline speech recognition (JNA-backed; natives extract at runtime).
+    implementation("com.alphacephei:vosk:$voskVersion")
+    // additionalRuntimeClasspath and jarJar are configurations created by ModDevGradle, so they
+    // have no generated Kotlin accessor — they are invoked by name.
+    "additionalRuntimeClasspath"("com.alphacephei:vosk:$voskVersion")
+    // NOTE on dev-run mods: do NOT use additionalRuntimeClasspath for them. It puts a mod's
+    // CLASSES on the classpath without registering it with FML, so the game reports the mod as
+    // missing while this mod's reflection still finds its classes and tries to use them - the
+    // worst of both worlds. NeoForge needs no remapping, so dev mods simply go in the run
+    // directory's mods/ folder (versions/<node>/run/mods).
+
+    "jarJar"("com.alphacephei:vosk") {
+        this as ExternalModuleDependency
+        version { strictly("[$voskVersion,1)"); prefer(voskVersion) }
+        // Vosk pulls JNA transitively and jarJar will nest it. Do not let it: Minecraft already
+        // ships net.java.dev.jna 5.12.1 for oshi, and nesting an older copy risks it winning
+        // resolution and breaking either Vosk's natives or oshi.
+        exclude(group = "net.java.dev.jna")
+    }
+}
+
+// Resolved here, at project scope. Inside a task-configuration block `property(...)` resolves
+// against the TASK rather than the project, which fails with "unknown property" for every one of
+// these — the values must be captured before the block.
+val tokens = mapOf(
+    "minecraft_version"       to mcVersion,
+    "minecraft_version_range" to property("deps.minecraft_range") as String,
+    "neo_version"             to neoVersion,
+    "neo_version_range"       to property("deps.neoforge_range") as String,
+    "loader_version_range"    to property("deps.loader_range") as String,
+    "mod_id"                  to modId,
+    "mod_name"                to property("mod.name") as String,
+    "mod_license"             to property("mod.license") as String,
+    "mod_version"             to property("mod.version") as String,
+    "mod_authors"             to property("mod.authors") as String,
+    "mod_description"         to property("mod.description") as String,
+    // pack_format differs per Minecraft version (15 on 1.20.1, 46 on 1.21.x).
+    // Templating it keeps ONE shared pack.mcmeta instead of a per-node copy,
+    // which also removes a duplicate-entry clash in sourcesJar.
+    "pack_format"             to property("deps.pack_format") as String,
+)
+
+tasks.named<ProcessResources>("processResources") {
+    val replacements = tokens
+    inputs.properties(replacements)
+    filesMatching(listOf("META-INF/neoforge.mods.toml", "pack.mcmeta")) { expand(replacements) }
+    // The Forge target uses mods.toml at the same path; neither loader should ship the other's.
+    exclude("META-INF/mods.toml")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
+}
+
+java { withSourcesJar() }
+

@@ -1,0 +1,19 @@
+{
+  "parent": "voicespells:root",
+  "display": {
+    "icon": { "id": "minecraft:firework_rocket" },
+    "title": { "translate": "advancements.voicespells.voice_combo.title" },
+    "description": { "translate": "advancements.voicespells.voice_combo.description" },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "five_streak": {
+      "trigger": "voicespells:voice_cast",
+      "conditions": { "min_streak": 5 }
+    }
+  },
+  "requirements": [["five_streak"]]
+}
