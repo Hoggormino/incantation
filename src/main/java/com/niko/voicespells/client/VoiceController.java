@@ -493,6 +493,12 @@ public final class VoiceController {
         switch (VoiceSpellsConfig.cGatingMode) {
             case HOLD_KEY:  return ClientEvents.isPushToTalkDown();
             case HOLD_ITEM: return com.niko.voicespells.spells.OwnedSpells.holdingSpellFocus();
+            // Both, and this is the default. See the config comment: holding a staff is not
+            // evidence you meant to cast, because you are most likely to be talking to people
+            // exactly when you are armed.
+            case HOLD_KEY_AND_ITEM:
+                return ClientEvents.isPushToTalkDown()
+                    && com.niko.voicespells.spells.OwnedSpells.holdingSpellFocus();
             default:        return true;
         }
     }
