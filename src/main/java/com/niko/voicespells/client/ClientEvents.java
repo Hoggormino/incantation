@@ -93,7 +93,12 @@ public final class ClientEvents {
         // Wire the cross-package back-references that we deliberately kept off the static
         // import graph so common/server code can be loaded on a dedicated server without
         // dragging in the client-only Minecraft GUI chain (fixes the 0.9.0 server crash).
-        com.niko.voicespells.svc.VoiceSpellsVoicechatPlugin.micFrameSink = VoiceController::onMicFrame;
+        // MicFrameSink, NOT VoiceSpellsVoicechatPlugin. The plugin class implements
+        // VoicechatPlugin, so a putstatic on it initialises it and resolves SVC's API — and
+        // SVC is an OPTIONAL dependency. Touching it here crashed every client that did not
+        // have SVC installed with NoClassDefFoundError on de/maxhenkel/voicechat/api/
+        // VoicechatPlugin. MicFrameSink names neither side, so it is safe from both.
+        com.niko.voicespells.svc.MicFrameSink.sink = VoiceController::onMicFrame;
         com.niko.voicespells.VoiceSpellsConfig.themeApplier = () -> {
             com.niko.voicespells.VoiceSpellsConfig.Client c = com.niko.voicespells.VoiceSpellsConfig.CLIENT;
             Theme.applyPalette(c.uiPalette.get());
