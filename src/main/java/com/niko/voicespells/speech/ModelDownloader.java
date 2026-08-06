@@ -19,22 +19,21 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * First-run convenience: if no Vosk model is installed, fetch the larger
- * {@code vosk-model-en-us-0.22-lgraph} (~128 MB) so recognition works out of
- * the box instead of requiring a manual download of the weaker small model.
+ * First-run convenience: fetch the configured Vosk model if none is installed.
  *
- * Only triggers when {@code config/voicespells/model/} has no usable model AND
- * {@code recognition.autoDownloadModel} is on. An existing model (small or
- * large) is left untouched — users who deliberately installed one keep it.
+ * <p>Which model is decided by {@link ModelCatalog} from the {@code modelId} config, so any
+ * catalogued language can be installed from config alone. An existing model is always left
+ * untouched — a user who deliberately installed one keeps it.
  *
- * Runs on the Vosk loader thread (already off the main thread), streaming the
- * zip to disk with percentage callbacks and extracting it with a zip-slip
- * guard. A failed/partial download cleans up after itself so a retry is clean.
+ * <p>Only runs when {@code recognition.autoDownloadModel} is on. When it is off, or the download
+ * fails for any reason, the manual-install path and URL are logged so the user can drop the
+ * archive in by hand; a blocked download must never become a dead end with no instructions.
+ *
+ * <p>Runs on the Vosk loader thread (already off the main thread), streaming the zip to disk with
+ * percentage callbacks, verifying its SHA-256 where the catalog pins one, and extracting with a
+ * zip-slip guard. A failed or partial download cleans up after itself so a retry starts clean.
  */
 public final class ModelDownloader {
-
-    private static final String MODEL_URL =
-        "https://alphacephei.com/vosk/models/vosk-model-en-us-0.22-lgraph.zip";
 
     private static final AtomicBoolean inProgress = new AtomicBoolean(false);
 
@@ -42,7 +41,7 @@ public final class ModelDownloader {
 
     /** A directory is a usable model if it has the acoustic-model / config subdirs Vosk needs. */
     public static boolean looksLikeModel(Path dir) {
-        return Files.isDirectory(dir.resolve("am")) && Files.isDirectory(dir.resolve("conf"));
+        return ModelCatalog.looksLikeModel(dir);
     }
 
     /**
@@ -51,23 +50,54 @@ public final class ModelDownloader {
      */
     public static boolean ensureModel(Path modelDir, IntConsumer onPercent) {
         if (looksLikeModel(modelDir)) return true;
+
+        String id = VoiceSpellsConfig.cModelId;
+        ModelCatalog.Entry entry = ModelCatalog.byId(id);
+        if (entry == null) {
+            VoiceSpells.LOGGER.error("Unknown modelId \"{}\" - cannot download it. Known ids: {}",
+                id, ModelCatalog.all().stream().map(ModelCatalog.Entry::id).toList());
+            explainManualInstall(modelDir, null);
+            return false;
+        }
         if (!VoiceSpellsConfig.CLIENT.autoDownloadModel.get()) {
-            VoiceSpells.LOGGER.info("No Vosk model and autoDownloadModel is off — skipping fetch");
+            VoiceSpells.LOGGER.info("No Vosk model and autoDownloadModel is off - skipping fetch");
+            explainManualInstall(modelDir, entry);
             return false;
         }
         if (!inProgress.compareAndSet(false, true)) return false; // a download is already running
         try {
-            return download(modelDir, onPercent);
+            boolean ok = download(modelDir, entry, onPercent);
+            if (!ok) explainManualInstall(modelDir, entry);
+            return ok;
         } finally {
             inProgress.set(false);
         }
     }
 
-    private static boolean download(Path modelDir, IntConsumer onPercent) {
+    /**
+     * Tell the user exactly how to install by hand. Reached whenever the automatic path is
+     * unavailable - disabled, blocked by a firewall or proxy, or simply failed - because otherwise
+     * the mod just sits there reporting no model with no way forward.
+     */
+    private static void explainManualInstall(Path modelDir, ModelCatalog.Entry entry) {
+        VoiceSpells.LOGGER.info("To install a model by hand:");
+        if (entry != null) {
+            VoiceSpells.LOGGER.info("  1. Download {} ({})", entry.url(), entry.prettySize());
+        } else {
+            VoiceSpells.LOGGER.info("  1. Download a model from https://alphacephei.com/vosk/models");
+        }
+        VoiceSpells.LOGGER.info("  2. Unzip it, then copy the CONTENTS of the folder inside into:");
+        VoiceSpells.LOGGER.info("       {}", modelDir.toAbsolutePath());
+        VoiceSpells.LOGGER.info("  3. That directory should then directly contain am/ and conf/");
+    }
+
+    private static boolean download(Path modelDir, ModelCatalog.Entry entry, IntConsumer onPercent) {
+        final String MODEL_URL = entry.url();
         Path tmpZip = modelDir.resolveSibling("model-download.zip.part");
         try {
             Files.createDirectories(modelDir);
-            VoiceSpells.LOGGER.info("Downloading Vosk model (~128 MB) from {}", MODEL_URL);
+            VoiceSpells.LOGGER.info("Downloading Vosk model {} ({}) from {}",
+                entry.id(), entry.prettySize(), MODEL_URL);
 
             HttpClient client = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NORMAL)
@@ -102,6 +132,25 @@ public final class ModelDownloader {
                 }
             }
 
+            String digest = sha256(tmpZip);
+            String expected = entry.sha256();
+            if (expected != null && !expected.isBlank()) {
+                if (!expected.equalsIgnoreCase(digest)) {
+                    VoiceSpells.LOGGER.error(
+                        "Model checksum mismatch for {} - expected {}, got {}. Discarding.",
+                        entry.id(), expected, digest);
+                    Files.deleteIfExists(tmpZip);
+                    return false;
+                }
+                VoiceSpells.LOGGER.info("Model checksum verified ({})", digest);
+            } else {
+                // No pinned hash for this entry. Log the digest so a real value can be recorded in
+                // ModelCatalog from a fetch that is known to be good.
+                VoiceSpells.LOGGER.info(
+                    "Model {} has no pinned checksum; downloaded file SHA-256 is {}",
+                    entry.id(), digest);
+            }
+
             extractStrippingTopDir(tmpZip, modelDir);
             Files.deleteIfExists(tmpZip);
 
@@ -114,6 +163,21 @@ public final class ModelDownloader {
             VoiceSpells.LOGGER.error("Model download failed: {}", t.toString());
             try { Files.deleteIfExists(tmpZip); } catch (Throwable ignored) {}
             return false;
+        }
+    }
+
+    private static String sha256(Path file) {
+        try (InputStream in = Files.newInputStream(file)) {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] buf = new byte[1 << 16];
+            int r;
+            while ((r = in.read(buf)) != -1) md.update(buf, 0, r);
+            StringBuilder sb = new StringBuilder(64);
+            for (byte b : md.digest()) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.debug("Could not hash {}: {}", file, t.toString());
+            return "";
         }
     }
 

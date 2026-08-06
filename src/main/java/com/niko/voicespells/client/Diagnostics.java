@@ -18,13 +18,13 @@ import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Runtime self-checks. Probes every subsystem the mod depends on (SVC, Iron's Spells, Curios,
+ * Runtime self-checks. Probes every subsystem the mod depends on (microphone, Iron's Spells, Curios,
  * Vosk, spell index, recognition pipeline, config) and returns a structured report.
  *
  * Used by {@link DiagnosticsScreen} to surface problems to the user. Each check returns a
  * {@link Result} with one of four statuses:
  *   - OK      : working as expected
- *   - WARN    : working but degraded (e.g. SVC not transmitting yet, spell index small)
+ *   - WARN    : working but degraded (e.g. microphone not started yet, spell index small)
  *   - FAIL    : broken — cast / recognition can't function
  *   - INFO    : neutral diagnostic info, not a pass/fail
  */
@@ -38,7 +38,8 @@ public final class Diagnostics {
     public static List<Result> runAll() {
         List<Result> out = new ArrayList<>();
         // --- Integrations ---
-        out.add(checkSvc());
+        out.add(checkMicrophone());
+        out.add(checkCastPath());
         out.add(checkIronsSpells());
         out.add(checkCurios());
         // --- Recognition stack ---
@@ -90,21 +91,45 @@ public final class Diagnostics {
 
     // -------------------------------------------------------------------- Integrations
 
-    private static Result checkSvc() {
-        if (!ModList.get().isLoaded("voicechat")) {
-            return new Result("Simple Voice Chat", Status.FAIL,
-                "Not installed — no mic source, the mod will idle silently");
+    /** Microphone probe. Replaces the old Simple Voice Chat check now that the mod captures
+     *  audio itself — the question is no longer "is SVC installed" but "is a device delivering
+     *  samples". */
+    private static Result checkMicrophone() {
+        java.util.List<String> devices = com.niko.voicespells.speech.MicCapture.listDevices();
+        com.niko.voicespells.speech.MicCapture cap = VoiceController.captureEngine();
+        if (cap == null) {
+            return new Result("Microphone", Status.WARN,
+                devices.isEmpty()
+                    ? "Capture not started, and no devices detected"
+                    : "Capture not started (" + devices.size() + " device(s) available)");
         }
-        // Probe the plugin registration class — if our plugin failed to register, SVC won't
-        // route frames our way.
-        try {
-            Class.forName("com.niko.voicespells.VoiceSpellsVoicechatPlugin");
-            return new Result("Simple Voice Chat", Status.OK,
-                "Plugin registered, mic frames should route through");
-        } catch (Throwable t) {
-            return new Result("Simple Voice Chat", Status.WARN,
-                "SVC loaded but our plugin class isn't reachable: " + t.getClass().getSimpleName());
+        String status = cap.status();
+        if ("capturing".equals(status)) {
+            return new Result("Microphone", Status.OK,
+                "Capturing at " + com.niko.voicespells.speech.MicCapture.SAMPLE_RATE + " Hz");
         }
+        if ("no device".equals(status) || "device missing".equals(status)) {
+            return new Result("Microphone", Status.FAIL,
+                status + " — run /voicespells devices to see what is connected");
+        }
+        return new Result("Microphone", Status.WARN, status);
+    }
+
+    /** Which route casts actually take. The client path needs no server-side component; the
+     *  fallback does, and silently requires the mod on the server. Worth surfacing, because the
+     *  difference is invisible until someone joins a server without it. */
+    private static Result checkCastPath() {
+        Boolean avail = ClientCast.availability();
+        if (Boolean.TRUE.equals(avail)) {
+            return new Result("Cast path", Status.OK,
+                "Iron's Spells client path — no server-side mod needed");
+        }
+        if (Boolean.FALSE.equals(avail)) {
+            return new Result("Cast path", Status.WARN,
+                "Client path unavailable; using the fallback, which needs Incantation on the server");
+        }
+        return new Result("Cast path", Status.INFO,
+            "Untried — resolves on the first cast");
     }
 
     private static Result checkIronsSpells() {

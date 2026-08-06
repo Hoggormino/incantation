@@ -6,7 +6,6 @@ plugins {
 val mcVersion       = property("deps.minecraft") as String
 val neoVersion      = property("deps.neoforge") as String
 val modId           = property("mod.id") as String
-val voicechatApi    = property("deps.voicechat_api") as String
 val voskVersion     = property("deps.vosk") as String
 
 version = "${property("mod.version")}+$mcVersion-neoforge"
@@ -96,13 +95,11 @@ configurations.all {
 repositories {
     mavenCentral()
     maven("https://maven.neoforged.net/releases") { name = "NeoForged" }
-    maven("https://maven.maxhenkel.de/repository/public") { name = "Henkelmax (Simple Voice Chat)" }
     maven("https://api.modrinth.com/maven") { name = "Modrinth" }
 }
 
 dependencies {
     // Simple Voice Chat public API. compileOnly — SVC ships the API at runtime.
-    compileOnly("de.maxhenkel.voicechat:voicechat-api:$voicechatApi")
 
     // Vosk offline speech recognition (JNA-backed; natives extract at runtime).
     implementation("com.alphacephei:vosk:$voskVersion")

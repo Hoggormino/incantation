@@ -29,14 +29,13 @@ import java.util.Locale;
  *     because we enable {@code setWords(true)}; the consumer can run the lenient
  *     fuzzy/substring fallbacks but gate them behind an average-confidence floor.
  *
- * SVC delivers 48 kHz mono short[] frames; Vosk expects 16 kHz mono 16-bit PCM.
- * We downsample 3:1 with a 3-tap box filter — crude but adequate for speech.
+ * Audio arrives from MicCapture already at 16 kHz mono 16-bit — the rate Vosk wants — so there
+ * is no resampling anywhere in the path.
  *
  * Recognizer is not thread-safe; all entry points synchronize on this instance.
  */
 public final class VoskSession implements AutoCloseable {
     private static final float SAMPLE_RATE = 16_000f;
-    private static final int   DECIMATION  = 3; // 48 kHz → 16 kHz
 
     static {
         LibVosk.setLogLevel(LogLevel.WARNINGS);
@@ -93,9 +92,51 @@ public final class VoskSession implements AutoCloseable {
         VoiceSpells.LOGGER.info("Recognition grammar rebuilt ({} phrases)", phrases.size());
     }
 
-    public synchronized void feed(short[] frame48k) {
-        if (closed || frame48k == null || frame48k.length == 0) return;
-        byte[] bytes = downsampleAndPack(frame48k);
+    /**
+     * Swap in a recognizer with <b>no grammar at all</b> — free dictation over the model's whole
+     * lexicon.
+     *
+     * <p>This is the opposite of how the mod normally runs, and that is the point. With a grammar,
+     * the recognizer can only ever report phrases the grammar contains, so it cannot tell you what
+     * it actually heard — it tells you which of your spells your speech was closest to. For
+     * choosing aliases you need the unfiltered transcription: say the spell name, see the words the
+     * model genuinely produced, and bind those.
+     *
+     * <p>Far less accurate than grammar mode and not meant for casting. The caller is expected to
+     * suppress casting while this is active.
+     */
+    public synchronized void rebuildUnconstrained() {
+        if (closed) return;
+        Recognizer fresh;
+        try {
+            fresh = new Recognizer(model, SAMPLE_RATE);
+            fresh.setWords(true);
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.error("Could not open a free-dictation recognizer: {}", t.toString());
+            return;
+        }
+        Recognizer old = recognizer;
+        recognizer = fresh;
+        lastTriedPartial = "";
+        try { old.close(); } catch (Throwable ignored) {}
+        VoiceSpells.LOGGER.info("Recognition switched to free dictation (no grammar)");
+    }
+
+    /**
+     * Feed a frame that is already at the recognizer's rate.
+     *
+     * <p>The capture device is opened at 16 kHz, so frames need no conversion. The name keeps the
+     * rate explicit at every call site: feeding audio at any other rate here would stretch or
+     * compress every utterance and destroy recognition, and that failure is silent.
+     */
+    public synchronized void feed16k(short[] frame) {
+        if (closed || frame == null || frame.length == 0) return;
+        ByteBuffer bb = ByteBuffer.allocate(frame.length * 2).order(ByteOrder.LITTLE_ENDIAN);
+        for (short s : frame) bb.putShort(s);
+        accept(bb.array());
+    }
+
+    private void accept(byte[] bytes) {
         try {
             if (recognizer.acceptWaveForm(bytes, bytes.length)) {
                 emitFinal(recognizer.getResult());
@@ -216,16 +257,6 @@ public final class VoskSession implements AutoCloseable {
         if (!first) sb.append(',');
         sb.append("\"[unk]\"]");
         return sb.toString();
-    }
-
-    private static byte[] downsampleAndPack(short[] in) {
-        int outLen = in.length / DECIMATION;
-        ByteBuffer bb = ByteBuffer.allocate(outLen * 2).order(ByteOrder.LITTLE_ENDIAN);
-        for (int i = 0, j = 0; i < outLen; i++, j += DECIMATION) {
-            int sum = in[j] + in[j + 1] + in[j + 2];
-            bb.putShort((short) (sum / DECIMATION));
-        }
-        return bb.array();
     }
 
     public static Path defaultModelPath() {

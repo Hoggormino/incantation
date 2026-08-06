@@ -183,6 +183,34 @@ public final class OwnedSpells {
         return reliable ? Optional.of(out) : Optional.empty();
     }
 
+    /**
+     * Is the player holding something that carries spells — a spellbook, staff or imbued weapon?
+     *
+     * <p>Backs {@code gatingMode = HOLD_ITEM}. Deliberately looser than {@link #scan()}: it does
+     * not care <i>which</i> spells the item holds, only that the player is holding a spell focus at
+     * all, so drawing your book is what opens the microphone.
+     *
+     * <p>Fails open on any reflective problem, matching the rest of this class — a broken probe
+     * must not silently mute the mod.
+     */
+    public static boolean holdingSpellFocus() {
+        ensureReflection();
+        if (ironsAbsent) return true; // no Iron's Spells to ask; don't gate on it
+        Player p = Minecraft.getInstance().player;
+        if (p == null) return false;
+        try {
+            return isSpellContainer(p.getMainHandItem()) || isSpellContainer(p.getOffhandItem());
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.debug("Held-focus probe failed: {}", t.toString());
+            return true;
+        }
+    }
+
+    private static boolean isSpellContainer(ItemStack stack) throws Exception {
+        if (stack == null || stack.isEmpty()) return false;
+        return (boolean) isContainer.invoke(null, stack);
+    }
+
     private static void addSpellsFrom(ItemStack stack, Set<String> sink) {
         if (stack == null || stack.isEmpty()) return;
         try {

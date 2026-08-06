@@ -26,19 +26,19 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Client-side glue between Simple Voice Chat's mic stream, the Vosk recognizer and the server.
+ * Client-side glue between the microphone, the Vosk recognizer and the server.
  *
- * No keybind: every SVC mic frame is fed into Vosk for as long as SVC is transmitting. When SVC
- * stops transmitting it emits an empty {@code short[]} as an end-of-transmission marker; that's
- * when we flush the recognizer to get the final result and reset it for the next utterance.
+ * No keybind: audio is captured continuously by {@link com.niko.voicespells.speech.MicCapture}
+ * and fed into Vosk whenever the noise gate is open. Because a capture device never signals
+ * end-of-speech, the recognizer is flushed on the gate's open-to-closed edge instead.
  *
- * Threading: {@link #onMicFrame} runs on SVC's mic thread; phrase callbacks arrive on the same
+ * Threading: {@link #onMicFrame16k} runs on the capture thread; phrase callbacks arrive on the same
  * thread, and we hop to the Minecraft client thread before touching world state or sending
  * packets.
  */
 public final class VoiceController {
 
-    /** Frames within this window of the last received frame mean SVC is actively transmitting. */
+    /** Frames within this window of the last received frame mean the mic is delivering audio. */
     private static final long HEARING_WINDOW_NANOS = TimeUnit.MILLISECONDS.toNanos(300);
     /** How long the heard-spell toast stays visible (including fade). */
     public  static final long TOAST_DURATION_NANOS = TimeUnit.MILLISECONDS.toNanos(2400);
@@ -392,12 +392,7 @@ public final class VoiceController {
         int streakForTrigger = currentStreak();
         Minecraft.getInstance().execute(() -> {
             SpellSelector.select(dispatched);
-//? if forge {
-/*            Network.sendToServer(new CastSpellPayload(dispatched, 1.0f,
-*///?} else {
-            PacketDistributor.sendToServer(new CastSpellPayload(dispatched, 1.0f,
-//?}
-                totalForTrigger, streakForTrigger));
+            dispatchCast(dispatched, 1.0f, totalForTrigger, streakForTrigger);
             if (VoiceSpellsConfig.cEchoSfx) playEchoChime(dispatched);
         });
     }
@@ -430,7 +425,7 @@ public final class VoiceController {
         }
     }
 
-    /** True if we received a non-empty SVC frame in the recent past — i.e. mic is live. */
+    /** True if we received a frame in the recent past — i.e. capture is live. */
     public static boolean isHearingNow() {
         long t = lastFrameNanos;
         return t != 0L && (System.nanoTime() - t) < HEARING_WINDOW_NANOS;
@@ -465,25 +460,118 @@ public final class VoiceController {
         new Thread(VoiceController::loadModel, "VoiceSpells-Engine-Loader").start();
     }
 
-    /** Called from {@code VoiceSpellsVoicechatPlugin} on every SVC mic frame, including empty
+    /** Called on every captured mic frame, including empty
      *  arrays which signal end-of-transmission. */
-    public static void onMicFrame(short[] pcm) {
-        if (!listeningEnabled) return;
-        if (pcm.length == 0) {
-            // End of SVC transmission — flush so the pending utterance produces a final result.
-            VoskSession s = session;
-            if (s != null) {
-                Thread t = new Thread(() -> { s.flush(); s.reset(); }, "VoiceSpells-Flush");
-                t.setDaemon(true);
-                t.start();
+    /**
+     * OpenAL capture path — frames are already at the recognizer's 16 kHz, and the stream is
+     * continuous.
+     *
+     * <p>That continuity is the real difference from SVC. SVC hands us an empty frame to mark
+     * end-of-transmission, which is what triggers the flush that turns a pending utterance into a
+     * final result. A raw capture device never stops sending, so there is no such marker: instead
+     * the flush fires when the noise gate closes after having been open, which is the same
+     * "speech just ended" signal derived locally rather than handed to us.
+     */
+    /**
+     * Whether captured audio may reach the recognizer right now.
+     *
+     * <p>This is the capture-time gate, and it is deliberately stricter than the dispatch-time
+     * filters ({@code combatOnly}, {@code pauseWhenAfk}) which only discard results after the audio
+     * has already been recognised. In HOLD_KEY and HOLD_ITEM the recognizer never receives the
+     * audio at all — the difference matters for both CPU and for what "the mic is off" means.
+     *
+     * <p>Being outside a world counts as closed regardless of mode: there is nothing to cast at,
+     * and it means the mic is not live while sitting on the title screen.
+     */
+    private static boolean captureArmed() {
+        if (!listeningEnabled) return false;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null) return false;
+        if (VoiceSpellsConfig.cSuspendUnfocused && (!mc.isWindowActive() || mc.isPaused())) {
+            return false;
+        }
+        switch (VoiceSpellsConfig.cGatingMode) {
+            case HOLD_KEY:  return ClientEvents.isPushToTalkDown();
+            case HOLD_ITEM: return com.niko.voicespells.spells.OwnedSpells.holdingSpellFocus();
+            default:        return true;
+        }
+    }
+
+    /** Exposed for the HUD's mic-state icon and for diagnostics. */
+    public static boolean isArmed() { return captureArmed(); }
+
+    // ----- Calibration / transcription mode ------------------------------------------------
+
+    private static volatile boolean transcription = false;
+    private static volatile String lastTranscriptShown = "";
+
+    public static boolean isTranscribing() { return transcription; }
+
+    /**
+     * Toggle free-dictation mode: the recognizer drops its grammar and every result is printed to
+     * chat instead of being matched or cast.
+     *
+     * <p>Exists because grammar mode structurally cannot answer "what did it hear?". With a
+     * grammar the recognizer can only return phrases from that grammar, so a misheard spell tells
+     * you which of your spells you were closest to, not the words you actually produced. Choosing
+     * a good alias needs the latter.
+     *
+     * @return the new state
+     */
+    public static boolean toggleTranscription() {
+        transcription = !transcription;
+        lastTranscriptShown = "";
+        VoskSession s = session;
+        if (s != null) {
+            boolean on = transcription;
+            Thread t = new Thread(() -> {
+                if (on) s.rebuildUnconstrained();
+                else    s.rebuildGrammar(currentGrammar());
+            }, "VoiceSpells-Grammar-Calibrate");
+            t.setDaemon(true);
+            t.start();
+        }
+        return transcription;
+    }
+
+    private static void reportTranscription(String phrase, boolean isFinal, double confidence) {
+        if (phrase == null || phrase.isBlank()) return;
+        // Partials repeat every frame as the utterance grows; only surface changes, or chat
+        // becomes unreadable.
+        if (!isFinal && phrase.equals(lastTranscriptShown)) return;
+        lastTranscriptShown = phrase;
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> {
+            if (mc.player == null) return;
+            Component line = isFinal
+                ? Component.literal("heard: ")
+                    .withStyle(net.minecraft.ChatFormatting.DARK_GRAY)
+                    .append(Component.literal(phrase)
+                        .withStyle(net.minecraft.ChatFormatting.AQUA))
+                    .append(Component.literal(String.format(java.util.Locale.ROOT,
+                            "  (%.0f%%)", confidence * 100))
+                        .withStyle(net.minecraft.ChatFormatting.DARK_GRAY))
+                : Component.literal("  … " + phrase)
+                    .withStyle(net.minecraft.ChatFormatting.DARK_GRAY);
+            mc.player.displayClientMessage(line, false);
+        });
+    }
+
+    public static void onMicFrame16k(short[] pcm) {
+        if (pcm == null || pcm.length == 0) return;
+        if (!captureArmed()) {
+            // Gate closed. If speech was in flight, settle it rather than leaving a half-recognised
+            // utterance to bleed into whatever is said after the gate reopens.
+            if (gateWasOpen) {
+                gateWasOpen = false;
+                VoskSession s = session;
+                if (s != null) {
+                    Thread t = new Thread(() -> { s.flush(); s.reset(); }, "VoiceSpells-Flush");
+                    t.setDaemon(true);
+                    t.start();
+                }
             }
-            // Decay audio level on transmission end so the meter visibly drops to zero. Do
-            // NOT hard-reset lastLoudFrameNanos here — the sticky 600ms window will naturally
-            // close the gate, and forcing it to 0 means a brief SVC re-trigger (voice-
-            // activation hangover splits utterances into multiple SVC sessions) requires the
-            // VERY FIRST frame of the next utterance to cross the threshold from scratch,
-            // which clips word onset and makes "ages between casts" the lived experience.
-            audioLevel *= 0.2f;
+            audioLevel *= 0.5f;
             return;
         }
         long now = System.nanoTime();
@@ -491,25 +579,34 @@ public final class VoiceController {
         double rms = updateAudioLevel(pcm);
         sampleCalibration(rms);
         VoskSession s = session;
-        if (s != null) {
-            // Noise gate: skip frames quieter than the configured RMS floor — Vosk's grammar-
-            // restricted mode otherwise hallucinates phrases out of silence/breath.
-            //
-            // The gate is sticky: once a loud frame arrives it stays open for
-            // NOISE_GATE_STICKY_NANOS so mid-word phoneme dips don't sever the utterance.
-            if (rms >= VoiceSpellsConfig.cNoiseGateRms) {
-                lastLoudFrameNanos = now;
-            }
-            if (lastLoudFrameNanos == 0L
-                    || now - lastLoudFrameNanos > NOISE_GATE_STICKY_NANOS) {
-                return; // gate closed — sustained quiet
-            }
-            s.feed(pcm);
+        if (s == null) {
+            if (SpellIndex.isReady()) preloadAsync();
             return;
         }
-        // First frame and the engine isn't loaded yet — kick that off so we're ready for next time.
-        if (SpellIndex.isReady()) preloadAsync();
+        boolean loud = rms >= VoiceSpellsConfig.cNoiseGateRms;
+        if (loud) lastLoudFrameNanos = now;
+        boolean gateOpen = lastLoudFrameNanos != 0L
+            && (now - lastLoudFrameNanos) <= NOISE_GATE_STICKY_NANOS;
+
+        if (gateOpen) {
+            gateWasOpen = true;
+            s.feed16k(pcm);
+            return;
+        }
+        // Gate just closed after speech: flush so the pending utterance settles into a final
+        // result, exactly as SVC's empty frame used to do. Flushing off-thread keeps the capture
+        // thread free to keep reading the device.
+        if (gateWasOpen) {
+            gateWasOpen = false;
+            Thread t = new Thread(() -> { s.flush(); s.reset(); }, "VoiceSpells-Flush");
+            t.setDaemon(true);
+            t.start();
+            audioLevel *= 0.2f;
+        }
     }
+
+    /** Tracks the open→closed edge of the noise gate for the capture path's flush trigger. */
+    private static volatile boolean gateWasOpen = false;
 
     /**
      * Compute the frame's RMS energy and fold it into a smoothed level used by the HUD's audio
@@ -537,7 +634,7 @@ public final class VoiceController {
         SpellInfo.clearCache(); // drop cached display names so spell renames / aliases re-resolve
         VoskSession s = session;
         if (s != null) {
-            Thread t = new Thread(() -> s.rebuildGrammar(SpellIndex.getPhrases()),
+            Thread t = new Thread(() -> s.rebuildGrammar(currentGrammar()),
                 "VoiceSpells-Grammar-Reload");
             t.setDaemon(true);
             t.start();
@@ -732,7 +829,94 @@ public final class VoiceController {
         if (sig != lastOwnedSignature) {
             ownedSpellIds = fresh;
             lastOwnedSignature = sig;
+            // The castable set actually changed, so the grammar is now wrong. This is the only
+            // thing that triggers a rebuild — never per tick. Rebuilding is not free (it
+            // constructs a new Recognizer, though it keeps the loaded Model), so it is gated on a
+            // real equipment change rather than on time.
+            rebuildGrammarForOwned(fresh);
         }
+    }
+
+
+    /**
+     * Send the cast, preferring Iron's Spells' own client-to-server path.
+     *
+     * <p>{@link ClientCast} makes the server build the whole cast from its own view of the
+     * player's inventory, so nothing about the spell is taken on the client's word. It is also the
+     * path that lets this mod work without a server-side component at all.
+     *
+     * <p>The mod's own packet stays as the fallback, deliberately. The Iron's class it reflects
+     * against is internal rather than API, so an Iron's update can rename it out from under us; and
+     * the client path depends on both sides ordering their spell slots identically, which is an
+     * assumption rather than a guarantee. Falling back costs nothing and keeps casting working in
+     * both cases.
+     */
+    private static void dispatchCast(ResourceLocation spellId, float volume,
+                                     int totalForTrigger, int streakForTrigger) {
+        if (ClientCast.tryCast(spellId)) return;
+        // Single place the cast packet leaves the client, so the loader split lives here rather
+        // than at each of the three call sites it used to be duplicated across.
+//? if forge {
+/*        Network.sendToServer(
+            new CastSpellPayload(spellId, volume, totalForTrigger, streakForTrigger));
+*///?} else {
+        PacketDistributor.sendToServer(
+            new CastSpellPayload(spellId, volume, totalForTrigger, streakForTrigger));
+//?}
+    }
+
+    /**
+     * The grammar the recognizer should be using right now.
+     *
+     * <p>Falls back to the full phrase list whenever ownership is unknown or unreliable — a failed
+     * scan must never be allowed to shrink the grammar, because a grammar narrowed to the wrong
+     * set is far worse than one that is merely too broad: the spell the player is actually holding
+     * would not be in it at all.
+     */
+    /** Read-only view of the equipped-spell set, for /voicespells grammar. */
+    public static java.util.Set<String> ownedSpellIdsView() {
+        java.util.Set<String> owned = ownedSpellIds;
+        return owned == null ? java.util.Set.of() : java.util.Set.copyOf(owned);
+    }
+
+    /** The phrase list the recognizer is currently listening for, for /voicespells grammar. */
+    public static java.util.List<String> activeGrammarView() {
+        return currentGrammar();
+    }
+
+    /** True when this phrase resolves to a spell the player can actually cast right now — i.e.
+     *  it is a real target rather than one of the decoys padding the grammar to the floor. */
+    public static boolean phraseIsCastable(String phrase) {
+        // Exact match only: this is a display helper for a grammar phrase we generated ourselves,
+        // so the fuzzy/phonetic tiers would only add false positives to the listing.
+        var hit = SpellIndex.lookupExactWithTier(phrase);
+        if (hit.isEmpty()) return false;
+        java.util.Set<String> owned = ownedSpellIds;
+        return owned != null && owned.contains(hit.get().id().toString());
+    }
+
+    private static java.util.List<String> currentGrammar() {
+        java.util.Set<String> owned = ownedSpellIds;
+        if (!ownedScanReliable || owned == null || owned.isEmpty()) return SpellIndex.getPhrases();
+        return SpellIndex.phrasesFor(owned, VoiceSpellsConfig.cGrammarFloor);
+    }
+
+    /**
+     * Swap the recognizer onto a grammar narrowed to what the player can currently cast, padded to
+     * {@code grammarFloor} with decoys. Runs off-thread because building a Recognizer blocks, and
+     * this is called from the client tick.
+     */
+    private static void rebuildGrammarForOwned(java.util.Set<String> owned) {
+        VoskSession s = session;
+        if (s == null) return;
+        java.util.Set<String> snapshot = java.util.Set.copyOf(owned);
+        Thread t = new Thread(() -> {
+            java.util.List<String> phrases =
+                SpellIndex.phrasesFor(snapshot, VoiceSpellsConfig.cGrammarFloor);
+            s.rebuildGrammar(phrases);
+        }, "VoiceSpells-Grammar");
+        t.setDaemon(true);
+        t.start();
     }
 
     /**
@@ -789,12 +973,7 @@ public final class VoiceController {
         int streakForTrigger = currentStreak();
         Minecraft.getInstance().execute(() -> {
             SpellSelector.select(queued);
-//? if forge {
-/*            Network.sendToServer(new CastSpellPayload(queued, vol,
-*///?} else {
-            PacketDistributor.sendToServer(new CastSpellPayload(queued, vol,
-//?}
-                totalForTrigger, streakForTrigger));
+            dispatchCast(queued, vol, totalForTrigger, streakForTrigger);
             if (VoiceSpellsConfig.cEchoSfx) playEchoChime(queued);
         });
     }
@@ -818,10 +997,78 @@ public final class VoiceController {
     /** Closes the underlying session — call on client shutdown. */
     public static void shutdown() {
         lastFrameNanos = 0L;
+        stopCapture();
         VoskSession s = session;
         session = null;
         if (s != null) s.close();
     }
+
+    // ----- OpenAL capture lifecycle -------------------------------------------------------
+
+    /** Live capture engine; null before client setup or after shutdown. */
+    private static volatile com.niko.voicespells.speech.MicCapture capture;
+
+    /**
+     * Bring capture in line with the current config. Safe to call repeatedly — on config reload,
+     * on world join, and after a device change — and cheap when nothing has changed.
+     */
+    public static synchronized void syncCapture() {
+        com.niko.voicespells.speech.MicCapture c = capture;
+        // Restart when the selected device changed; the device name is baked in at construction.
+        if (c != null) {
+            if (java.util.Objects.equals(activeDevice, VoiceSpellsConfig.cCaptureDevice)) return;
+            stopCapture();
+        }
+        activeDevice = VoiceSpellsConfig.cCaptureDevice;
+        com.niko.voicespells.speech.MicCapture fresh =
+            new com.niko.voicespells.speech.MicCapture(activeDevice, VoiceController::onMicFrame16k);
+        capture = fresh;
+        fresh.start();
+        // The recognizer is loaded lazily elsewhere off the first frame, but starting it here
+        // means the model is usually ready before the player finishes their first sentence.
+        if (session == null && SpellIndex.isReady()) preloadAsync();
+    }
+
+    private static volatile String activeDevice = null;
+
+    /**
+     * Open or release the capture device according to whether the game is in a state where
+     * listening makes sense at all. Called once per client tick; idempotent and cheap.
+     *
+     * <p>Deliberately coarse. Only long-lived conditions release the device — no world, window
+     * unfocused, game paused — because opening a capture device is not instant, and thrashing it
+     * on something as fast as a push-to-talk keypress would clip the start of every utterance.
+     * Short-lived gating is handled per frame in {@code captureArmed()} instead.
+     */
+    public static void tickCaptureSuspension() {
+        Minecraft mc = Minecraft.getInstance();
+        boolean inWorld = mc.level != null && mc.player != null;
+        boolean suspended = !inWorld
+            || (VoiceSpellsConfig.cSuspendUnfocused && (!mc.isWindowActive() || mc.isPaused()));
+
+        if (suspended) {
+            if (capture != null) {
+                stopCapture();
+                // Drop any half-heard utterance so it cannot resurface after resuming.
+                VoskSession s = session;
+                if (s != null) s.reset();
+                gateWasOpen = false;
+                audioLevel = 0f;
+            }
+            return;
+        }
+        if (capture == null) syncCapture();
+    }
+
+    public static synchronized void stopCapture() {
+        com.niko.voicespells.speech.MicCapture c = capture;
+        capture = null;
+        activeDevice = null;
+        if (c != null) c.close();
+    }
+
+    /** Capture status for the HUD / diagnostics, or null when OpenAL capture is not in use. */
+    public static com.niko.voicespells.speech.MicCapture captureEngine() { return capture; }
 
     // ----- internal -----
 
@@ -843,11 +1090,11 @@ public final class VoiceController {
     }
 
     private static void loadVosk() {
-        // User-overridable model path; falls back to the default config/voicespells/model.
-        String override = VoiceSpellsConfig.CLIENT.modelPath.get();
-        Path modelPath = (override == null || override.isBlank())
-            ? VoskSession.defaultModelPath()
-            : Path.of(override.trim());
+        // Explicit modelPath wins; otherwise the legacy config/voicespells/model directory if it
+        // still holds a model (so an existing install is never re-downloaded), else the
+        // per-id models/<modelId> directory that downloads land in.
+        Path modelPath = com.niko.voicespells.speech.ModelCatalog.resolveModelDir(
+            VoiceSpellsConfig.CLIENT.modelPath.get(), VoiceSpellsConfig.cModelId);
         try {
             if (!com.niko.voicespells.speech.ModelDownloader.looksLikeModel(modelPath)) {
                 statusLine = "DOWNLOADING model…";
@@ -861,7 +1108,7 @@ public final class VoiceController {
             }
             VoskSession s = VoskSession.open(
                 modelPath,
-                SpellIndex.getPhrases(),
+                currentGrammar(),
                 VoiceController::onPhraseRecognized
             );
             session = s;
@@ -887,7 +1134,7 @@ public final class VoiceController {
     }
 
     /**
-     * Vosk callback — fires on the SVC mic thread.
+     * Vosk callback — fires on the capture thread.
      *
      * Partial (mid-utterance) results are matched <b>strictly</b> (exact phrase only): they're
      * the fast path and too noisy to run the lenient fallbacks against. Final results may use
@@ -896,6 +1143,11 @@ public final class VoiceController {
      * casting via a greedy substring grab.
      */
     private static void onPhraseRecognized(String phrase, boolean isFinal, double confidence) {
+        // Calibration mode short-circuits everything: report what the model heard and cast nothing.
+        if (transcription) {
+            reportTranscription(phrase, isFinal, confidence);
+            return;
+        }
         // Utterance-boundary detection: a partial that follows a final is the start of a new
         // utterance. Bump the counter so the dedup check below can tell "still the same thing
         // I was just hearing" from "the player said it again".
@@ -1082,7 +1334,7 @@ public final class VoiceController {
             recordEvent(phrase, spellKey + " (menu)", confidence);
             return;
         }
-        // Optional sneak gate so casual SVC chatter doesn't fire spells.
+        // Optional sneak gate so casual talking doesn't fire spells.
         if (VoiceSpellsConfig.cRequireSneak
                 && (mc.player == null || !mc.player.isShiftKeyDown())) {
             recordEvent(phrase, spellKey + " (no sneak)", confidence);
@@ -1100,7 +1352,7 @@ public final class VoiceController {
             return;
         }
         // Sliding-window dedup. Vosk emits one utterance as partial(s) → getResult → the
-        // flush getFinalResult; with the accurate model and SVC voice-activation hangover the
+        // flush getFinalResult; with the accurate model and a sticky noise gate the
         // gap between the first partial cast and the flush can exceed a fixed window, which is
         // exactly the "casts twice" bug. So on every *repeat* of the same spell we push the
         // timestamp forward — the window only lapses after the spell genuinely stops being
@@ -1134,7 +1386,7 @@ public final class VoiceController {
         // — worse — interrupt the current cast). Most recent wins on overflow.
         if (isClientCasting()) {
             // Multi-cast / long-channel spells take a few hundred ms to complete; during that
-            // time SVC's tail audio + the user's own continued vocalisation keep getting grammar-
+            // time trailing audio + the user's own continued vocalisation keep getting grammar-
             // forced into the same spell shape, and without this guard each repeat would stack
             // in the queue and fire again the moment the cast finishes. Block:
             //   - same spell as the one we just dispatched (lastDispatchedSpellId), and
@@ -1215,12 +1467,7 @@ public final class VoiceController {
             // Move the spellbook's selected spell to the one we're casting so the HUD bar
             // reflects it and a follow-up manual cast uses the same spell.
             SpellSelector.select(dispatched);
-//? if forge {
-/*            Network.sendToServer(new CastSpellPayload(dispatched, vol,
-*///?} else {
-            PacketDistributor.sendToServer(new CastSpellPayload(dispatched, vol,
-//?}
-                totalForTrigger, streakForTrigger));
+            dispatchCast(dispatched, vol, totalForTrigger, streakForTrigger);
             if (VoiceSpellsConfig.cEchoSfx) playEchoChime(dispatched);
         });
     }

@@ -1,9 +1,12 @@
 # Iron's Spells: Incantation
 
 **Cast Iron's Spells 'n Spellbooks spells by saying their names.** No training samples, no
-keybind to remember — Incantation piggybacks on your Simple Voice Chat mic and runs an offline
-speech recognizer (Vosk) restricted to a grammar of your installed spell names. Say `fireball`,
-it casts fireball.
+keybind to remember, and no other mod required — Incantation captures your microphone directly
+and runs an offline speech recognizer (Vosk) restricted to a grammar of your installed spell
+names. Say `fireball`, it casts fireball.
+
+Everything runs locally. Your microphone audio is never transmitted, never recorded, and never
+written to disk.
 
 NeoForge 1.21.1.
 
@@ -11,13 +14,14 @@ NeoForge 1.21.1.
 
 - **Minecraft 1.21.1**
 - **NeoForge 21.1.x**
-- **Simple Voice Chat** (henkelmax, 2.5.x+)
 - **Iron's Spells 'n Spellbooks** (iron431, 3.x+)
 - A small Vosk English model (~40 MB) — one-time setup, see below
 
-Simple Voice Chat and Iron's Spells must be present on both client and server. Curios is
-optional but recommended (without it, the Curios spellbook slot can't be checked and the mod
-degrades to hand-only).
+Iron's Spells must be present on both client and server. Curios is optional but recommended
+(without it, the Curios spellbook slot can't be checked and the mod degrades to hand-only).
+
+No voice-chat mod is needed. Incantation opens the microphone itself through OpenAL, which
+ships with Minecraft.
 
 ## Setup
 
@@ -30,9 +34,11 @@ degrades to hand-only).
    config/voicespells/model/conf/...
    config/voicespells/model/graph/...
    ```
-4. Launch the game and join a world. Make sure SVC is connected.
-5. Equip a spellbook (or an imbued weapon), trigger SVC the way you normally would, and say the
-   spell's name. Done.
+4. Launch the game and join a world.
+5. Equip a spellbook (or an imbued weapon) and say the spell's name. Done.
+
+Run `/voicespells devices` to list capture devices and see which one is in use; set
+`captureDevice` in the config to pick a specific one.
 
 For trickier spell names — Traveloptics, Cataclysm, anything with words the small model can't
 pronounce — switch to the medium model (`vosk-model-en-us-0.22-lgraph`, ~128 MB) or remap with
@@ -133,10 +139,10 @@ same-language Vosk model — install one from <https://alphacephei.com/vosk/mode
 
 - **HUD chip says `loading model`** — Vosk hasn't found a model under `config/voicespells/model/`.
   Recheck the layout: `am/`, `conf/`, `graph/` should be directly under that path.
-- **Mic indicator is dead** — SVC isn't transmitting. Confirm it works for chat first; Voice
-  Spells listens to the same audio stream.
+- **Mic indicator is dead** — run `/voicespells devices`. If no devices are listed, the game
+  cannot see a microphone at all; if yours is listed but not selected, set `captureDevice`.
 - **Spells aren't firing in-world** — open the More menu → Diagnostics. It runs a quick check
-  on each prerequisite (model, SVC, spellbook detection).
+  on each prerequisite (model, microphone, spellbook detection).
 - **Test Arena doesn't cast anything** — that's by design. The arena is a safe practice mode
   that records would-be casts without firing them. Close the screen to cast for real.
 - **"Recognized but rejected"** — confidence too low. Lower the global threshold, or set a
@@ -145,7 +151,6 @@ same-language Vosk model — install one from <https://alphacephei.com/vosk/mode
 ## Credits
 
 - **Vosk** — Alpha Cephei (Apache 2.0)
-- **Simple Voice Chat API** — Maximilian Henkel (MIT)
 - **Iron's Spells 'n Spellbooks** — iron431
 
 ## License

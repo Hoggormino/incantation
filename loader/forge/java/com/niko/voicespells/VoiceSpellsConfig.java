@@ -106,6 +106,22 @@ public final class VoiceSpellsConfig {
         cacheColors();
     }
 
+    /**
+     * When the microphone is allowed to feed the recognizer.
+     *
+     * <p>Distinct from the existing combatOnly / pauseWhenAfk options, which filter at dispatch —
+     * after audio has already been recognised. These gate at capture, so in HOLD_KEY and HOLD_ITEM
+     * the recognizer never sees the audio at all.
+     */
+    public enum GatingMode {
+        /** Microphone live whenever you are in a world. */
+        ALWAYS_ON,
+        /** Only while the push-to-talk keybind is held. */
+        HOLD_KEY,
+        /** Only while holding a spellbook, staff or imbued weapon. */
+        HOLD_ITEM
+    }
+
     public static final class Client {
         // --- position ---
         public final ForgeConfigSpec.EnumValue<Corner> hudCorner;
@@ -130,6 +146,8 @@ public final class VoiceSpellsConfig {
         public final ForgeConfigSpec.DoubleValue  minConfidence;
         public final ForgeConfigSpec.BooleanValue autoDownloadModel;
         public final ForgeConfigSpec.ConfigValue<String> modelPath;
+        /** Catalogued model to install and use, when modelPath is not set explicitly. */
+        public final ForgeConfigSpec.ConfigValue<String> modelId;
         public final ForgeConfigSpec.BooleanValue requireSneak;
         public final ForgeConfigSpec.ConfigValue<String> triggerWord;
         public final ForgeConfigSpec.ConfigValue<List<? extends String>> triggerWords;
@@ -146,6 +164,14 @@ public final class VoiceSpellsConfig {
         public final ForgeConfigSpec.EnumValue<UiPalette> uiPalette;
         public final ForgeConfigSpec.BooleanValue handsFreeConfirm;
         public final ForgeConfigSpec.DoubleValue  noiseGateRms;
+        /** When the mic is allowed to feed the recognizer. */
+        public final ForgeConfigSpec.EnumValue<GatingMode> gatingMode;
+        /** Release the mic while the window is unfocused or the game is paused. */
+        public final ForgeConfigSpec.BooleanValue suspendWhenUnfocused;
+        /** Minimum spell phrases kept in the Vosk grammar; short sets are padded with decoys. */
+        public final ForgeConfigSpec.IntValue     grammarFloor;
+        /** Exact capture device name, or blank for the system default. /voicespells devices lists them. */
+        public final ForgeConfigSpec.ConfigValue<String> captureDevice;
         public final ForgeConfigSpec.BooleanValue chatRankTag;
         public final ForgeConfigSpec.BooleanValue voiceHotbarSelect;
         public final ForgeConfigSpec.BooleanValue restrictToOwned;
@@ -190,7 +216,7 @@ public final class VoiceSpellsConfig {
             b.comment("Echo lockout window (ms) — hard absolute window where a same-spell repeat",
                       "is dropped regardless of inter-event gap. Catches slow Vosk emissions",
                       "where partial -> final spans longer than dedupMillis AND the tail-audio",
-                      "case where SVC's voice-activation hangover gets grammar-forced into the",
+                      "case where trailing audio after the word gets grammar-forced into the",
                       "just-cast spell. Set to 0 to disable. Lower this to ~600 if rapid-fire",
                       "incantation chants feel laggy; raise if same-spell double-casts still",
                       "slip through.");
@@ -210,6 +236,16 @@ public final class VoiceSpellsConfig {
                       "(config/voicespells/model). Set to an absolute path to point at a",
                       "shared model on disk — useful for trying different precision/speed models.");
             modelPath = b.define("modelPath", "");
+            b.comment("Which speech model to use, by id. Downloaded on demand into",
+                      "config/voicespells/models/<id>/ when autoDownloadModel is on.",
+                      "Known ids: vosk-model-small-en-us-0.15 (default, ~40 MB),",
+                      "vosk-model-en-us-0.22-lgraph (~128 MB, more accurate English),",
+                      "vosk-model-small-es-0.42, vosk-model-small-ru-0.22,",
+                      "vosk-model-small-fr-0.22, vosk-model-small-de-0.15.",
+                      "A model only recognises words in its own language: to play in another",
+                      "language you need both the matching model here AND translated phrases in",
+                      "config/voicespells/phrasebook.json. modelPath overrides this entirely.");
+            modelId = b.define("modelId", com.niko.voicespells.speech.ModelCatalog.DEFAULT_ID);
             b.comment("Only voice-cast while sneaking. Off = always (hands-free).");
             requireSneak = b.define("requireSneak", false);
             b.comment("If set, the spell must be preceded by this word to cast.",
@@ -271,6 +307,30 @@ public final class VoiceSpellsConfig {
                       "Raise this if you see phantom casts on background noise; lower if",
                       "soft speech is being missed. Set to 0 to disable the gate entirely.");
             noiseGateRms = b.defineInRange("noiseGateRms", 350.0, 0.0, 6000.0);
+            b.comment("When the microphone is allowed to listen.",
+                      "ALWAYS_ON - live whenever you are in a world.",
+                      "HOLD_KEY  - only while the push-to-talk keybind is held.",
+                      "HOLD_ITEM - only while holding a spellbook, staff or imbued weapon.",
+                      "Unlike combatOnly and pauseWhenAfk, which filter after recognition, this",
+                      "gates capture itself: in HOLD_KEY and HOLD_ITEM the recognizer never",
+                      "receives the audio at all.");
+            gatingMode = b.defineEnum("gatingMode", GatingMode.ALWAYS_ON);
+            b.comment("Close the microphone device entirely while the game window is unfocused or",
+                      "paused. Leave this on unless you specifically want to cast while tabbed out;",
+                      "it means the mic is not held open while you are doing something else.");
+            suspendWhenUnfocused = b.define("suspendWhenUnfocused", true);
+            b.comment("Minimum number of spell phrases in the speech grammar.",
+                      "The grammar is narrowed to spells you can actually cast, which is what makes",
+                      "recognition accurate. But a very small grammar is dangerous: the recognizer",
+                      "picks the closest match rather than rejecting, so with only one or two",
+                      "phrases almost any sound becomes a spell. Below this number the grammar is",
+                      "padded with names of spells you do NOT have, which act as decoys - if one",
+                      "wins, nothing casts. Raise it if you get false casts, lower it if a spell",
+                      "you own is being misheard as one you do not.");
+            grammarFloor = b.defineInRange("grammarFloor", 16, 1, 512);
+            b.comment("Capture device name, or blank for the system default.",
+                      "Run /voicespells devices in game to list the exact names.");
+            captureDevice = b.define("captureDevice", "");
             b.comment("Prefix chat messages with your voice-cast rank, e.g. '[Adept] hello'.",
                       "Cosmetic only — opt-in.");
             chatRankTag = b.define("chatRankTag", false);
@@ -352,6 +412,12 @@ public final class VoiceSpellsConfig {
     public static volatile boolean cAlwaysShowHeard = false;
     public static volatile boolean cHandsFreeConfirm = false;
     public static volatile double  cNoiseGateRms    = 350.0;
+    public static volatile String  cModelId         =
+        com.niko.voicespells.speech.ModelCatalog.DEFAULT_ID;
+    public static volatile GatingMode cGatingMode    = GatingMode.ALWAYS_ON;
+    public static volatile boolean cSuspendUnfocused = true;
+    public static volatile int     cGrammarFloor    = 16;
+    public static volatile String  cCaptureDevice    = "";
     public static volatile boolean cChatRankTag     = false;
     public static volatile boolean cVoiceHotbarSelect = false;
     public static volatile boolean cRestrictToOwned   = true;
@@ -403,6 +469,11 @@ public final class VoiceSpellsConfig {
         cAlwaysShowHeard  = c.alwaysShowHeard.get();
         cHandsFreeConfirm = c.handsFreeConfirm.get();
         cNoiseGateRms     = c.noiseGateRms.get();
+        cModelId          = c.modelId.get();
+        cGatingMode       = c.gatingMode.get();
+        cSuspendUnfocused = c.suspendWhenUnfocused.get();
+        cGrammarFloor     = c.grammarFloor.get();
+        cCaptureDevice    = c.captureDevice.get();
         cChatRankTag      = c.chatRankTag.get();
         cVoiceHotbarSelect = c.voiceHotbarSelect.get();
         cRestrictToOwned   = c.restrictToOwned.get();

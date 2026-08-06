@@ -32,7 +32,7 @@ public final class HelpScreen extends Screen {
         {
             "What this mod does",
             "Incantation lets you cast Iron's Spells by",
-            "speaking their names into your Simple Voice",
+            "speaking their names out loud. Incantation",
             "Chat microphone.",
             "",
             "No keybinds, no menus. Just say the spell",
@@ -94,7 +94,7 @@ public final class HelpScreen extends Screen {
         {
             "Troubleshooting",
             "Config → More... → Diagnostics runs 11",
-            "checks across SVC, Iron's Spells, Curios,",
+            "checks across the mic, Iron's Spells, Curios,",
             "the Vosk model, the spell index, and the",
             "cast pipeline.",
             "",

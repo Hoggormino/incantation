@@ -9,7 +9,6 @@ plugins {
 val mcVersion    = property("deps.minecraft") as String
 val forgeVersion = property("deps.forge") as String
 val modId        = property("mod.id") as String
-val voicechatApi = property("deps.voicechat_api") as String
 val voskVersion  = property("deps.vosk") as String
 
 version = "${property("mod.version")}+$mcVersion-forge"
@@ -92,12 +91,10 @@ configurations.all {
 repositories {
     mavenCentral()
     maven("https://maven.neoforged.net/releases") { name = "NeoForged" }
-    maven("https://maven.maxhenkel.de/repository/public") { name = "Henkelmax (Simple Voice Chat)" }
     maven("https://api.modrinth.com/maven") { name = "Modrinth" }
 }
 
 dependencies {
-    compileOnly("de.maxhenkel.voicechat:voicechat-api:$voicechatApi")
 
     // Dev-run mods for exercising the reflective Iron's Spells / Curios layer. These MUST go
     // through modRuntimeOnly rather than being dropped into run/mods: published 1.20.1 jars are

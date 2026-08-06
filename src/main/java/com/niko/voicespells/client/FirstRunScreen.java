@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Three-step welcome wizard. Designed to be opened <b>in-game</b>, after the Vosk model and
- * Simple Voice Chat are both live — that's the only context where the mic test and recent
+ * the microphone are both live — that's the only context where the mic test and recent
  * recognitions are actually meaningful.
  *
  *  1. <b>Welcome</b> — what the mod does, no-keybind flow.
@@ -167,7 +167,7 @@ public final class FirstRunScreen extends Screen {
         drawHeading(g, x, y, "What this does");
         drawLines(g, x, y + 14, new String[] {
             "Cast Iron's Spells by speaking their",
-            "names through your Simple Voice Chat",
+            "names out loud — no other mod needed.",
             "microphone.",
             "",
             "No keybinds — just talk like normal.",
@@ -184,7 +184,7 @@ public final class FirstRunScreen extends Screen {
         drawHeading(g, x, y, "Mic + model check");
         y += 14;
 
-        // Three live status pills: Model, SVC mic, Audio detected.
+        // Three live status pills: Model, microphone, Audio detected.
         String modelStatus = VoiceController.statusLine();
         if (modelStatus == null || modelStatus.isEmpty()) modelStatus = "warming up";
         boolean modelReady = "READY".equals(modelStatus);
@@ -194,7 +194,7 @@ public final class FirstRunScreen extends Screen {
         int pillY = y;
         drawPill(g, x,                       pillY, pillW, "Model",
             modelReady ? modelStatus : modelStatus + "…", modelReady);
-        drawPill(g, x + (pillW + 8),         pillY, pillW, "SVC mic",
+        drawPill(g, x + (pillW + 8),         pillY, pillW, "Microphone",
             micLive ? "transmitting" : "idle", micLive);
         drawPill(g, x + (pillW + 8) * 2,     pillY, pillW, "Audio",
             micDetectedThisVisit ? "detected" : "waiting", micDetectedThisVisit);

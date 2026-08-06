@@ -26,16 +26,6 @@ ordering = "NONE"
 side = "BOTH"
 
 [[dependencies.${mod_id}]]
-modId = "voicechat"
-# Optional: without SVC, the mod simply has no mic source and idles. The plugin class is only
-# loaded when SVC's annotation scanner runs, so missing SVC doesn't link-fail anything.
-type = "optional"
-# Mod publishes versions like "1.21.1-2.5.30" so the range must allow that.
-versionRange = "[1.21,)"
-ordering = "AFTER"
-side = "BOTH"
-
-[[dependencies.${mod_id}]]
 modId = "irons_spellbooks"
 # Optional: without Iron's Spells, SpellIndex finds zero spells via reflection and recognition
 # just never matches. Mod loads without it.

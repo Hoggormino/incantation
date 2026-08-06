@@ -2,7 +2,7 @@
 
 **Say a spell's name. Cast it.**
 
-Incantation listens to your Simple Voice Chat mic, runs the audio through an offline speech
+Incantation captures your microphone directly, runs the audio through an offline speech
 recognizer (Vosk), and casts whichever Iron's Spells 'n Spellbooks spell you just said. No
 voice training, no extra keybind, no setup beyond unzipping a model into the config folder.
 
@@ -10,14 +10,17 @@ voice training, no extra keybind, no setup beyond unzipping a model into the con
 
 ## How it works
 
-When Simple Voice Chat is transmitting your audio, Incantation feeds the frames to a Vosk
-recognizer whose grammar is restricted to the names of spells you actually have equipped
-(spellbook in your Curios slot, spellbook in hand, or an imbued weapon you're holding).
-That means the recognizer literally cannot mis-hear you and accidentally fire a spell you
-don't have — background chatter just doesn't match anything in the grammar.
+Incantation opens your microphone itself — no voice-chat mod involved — and feeds the audio
+straight to a Vosk recognizer whose grammar is built from the spell names your installed mods
+actually register. Anything that isn't a spell name resolves to "unknown" rather than snapping
+to the nearest spell, so background chatter doesn't fire anything.
 
-The whole pipeline runs locally. No network calls. No accounts. Your voice never leaves
-your PC.
+Casting is then gated on what you actually have equipped: a spellbook in your Curios slot, a
+spellbook in hand, or an imbued weapon you're holding. Saying the name of a spell you don't
+have does nothing.
+
+The whole pipeline runs locally. No network calls, no accounts, no telemetry. Your microphone
+audio is never transmitted, never recorded, and never written to disk.
 
 ## Features
 
@@ -58,7 +61,6 @@ your PC.
 
 - Minecraft 1.21.1
 - NeoForge 21.1.x
-- [Simple Voice Chat](https://modrinth.com/plugin/simple-voice-chat) by henkelmax (2.5.x+)
 - [Iron's Spells 'n Spellbooks](https://modrinth.com/mod/irons-spells-n-spellbooks) by
   iron431 (3.x+)
 - A small Vosk English model (~40 MB)
@@ -66,12 +68,12 @@ your PC.
 
 ## Setup
 
-1. Drop `incantation-0.9.4.jar` in your `mods/` folder alongside SVC and Iron's Spells.
+1. Drop `incantation-0.9.4.jar` in your `mods/` folder alongside Iron's Spells.
 2. Grab a Vosk model from [alphacephei.com/vosk/models](https://alphacephei.com/vosk/models)
    — `vosk-model-small-en-us-0.15.zip` is plenty for vanilla spell names.
 3. Unzip and copy the **contents** of that folder into `config/voicespells/model/` so you
    end up with `config/voicespells/model/am/`, `config/voicespells/model/conf/`, etc.
-4. Launch the game, join a world, trigger SVC, and say a spell you have equipped.
+4. Launch the game, join a world, and say a spell you have equipped.
 
 For tricky spell names (Traveloptics, Cataclysm, anything with unusual phonetics), either:
 
@@ -100,7 +102,7 @@ broadcast-nearby radius.
 
 - **HUD says "loading model"** — Vosk hasn't found a model under `config/voicespells/model/`.
   Recheck the layout: `am/`, `conf/`, `graph/` should sit directly under that path.
-- **Mic indicator is dead** — SVC isn't transmitting. Confirm SVC works for chat first.
+- **Mic indicator is dead** — run `/voicespells devices` to see what the game can find.
 - **Recognition feels slow** — open More → **Auto-calibrate noise gate** and say a few
   spell names. Or use the **Diagnostics** screen to verify each prerequisite.
 - **Test Arena doesn't cast** — by design. It records would-be casts so you can practice
@@ -113,5 +115,4 @@ MIT.
 ## Credits
 
 - **Vosk** — [Alpha Cephei](https://alphacephei.com/vosk/) (Apache 2.0)
-- **Simple Voice Chat API** — Maximilian Henkel (MIT)
 - **Iron's Spells 'n Spellbooks** — iron431

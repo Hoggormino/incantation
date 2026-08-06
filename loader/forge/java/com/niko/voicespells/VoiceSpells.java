@@ -72,23 +72,18 @@ public final class VoiceSpells {
     }
 
     /**
-     * Both Iron's Spells and Simple Voice Chat are optional. Log a compact status line so the
-     * user can see at a glance whether the mod has a mic source, a spell registry, both, or
-     * neither. Iron's Spells addons register into the same registry and are picked up by
-     * SpellIndex automatically — no explicit per-addon check needed here.
+     * Iron's Spells is optional. Log a compact status line so the user can see at a glance whether
+     * the mod has a spell registry to listen for. Addons register into the same registry and are
+     * picked up by SpellIndex automatically — no explicit per-addon check needed here.
+     *
+     * <p>There is no microphone check here: capture is client-only and reports its own state
+     * through /voicespells devices and the HUD.
      */
     private static void logIntegrationStatus() {
-        ModList list = ModList.get();
-        boolean svc  = list.isLoaded("voicechat");
-        boolean iron = list.isLoaded("irons_spellbooks");
-        LOGGER.info("Integrations — Simple Voice Chat: {}, Iron's Spells: {}",
-            svc ? "found" : "missing", iron ? "found" : "missing");
-        if (!svc && !iron) {
-            LOGGER.info("Neither integration installed; Incantation will be inactive.");
-        } else if (!svc) {
-            LOGGER.info("No mic source (SVC missing); spells are indexed but won't be triggered by speech.");
-        } else if (!iron) {
-            LOGGER.info("No spells (Iron's Spells missing); mic events are received but nothing to match against.");
+        boolean iron = ModList.get().isLoaded("irons_spellbooks");
+        LOGGER.info("Iron's Spells: {}", iron ? "found" : "missing");
+        if (!iron) {
+            LOGGER.info("No spells to listen for; Incantation will be inactive until Iron's Spells is installed.");
         }
     }
 }
