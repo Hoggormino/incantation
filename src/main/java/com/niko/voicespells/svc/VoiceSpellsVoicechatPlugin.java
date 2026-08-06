@@ -16,8 +16,8 @@ import java.util.function.Consumer;
  *
  * <p><b>Server-safe by design.</b> SVC loads plugin classes on BOTH the client and the dedicated
  * server (the annotation scan doesn't discriminate). This class therefore never statically
- * references the client-only {@code VoiceController} — instead the client init wires a
- * {@link #micFrameSink} consumer at startup, and on a dedicated server the sink stays {@code null}
+ * references the client-only {@code VoiceController} — instead the client init wires
+ * {@link MicFrameSink#sink} at startup, and on a dedicated server the sink stays {@code null}
  * so we no-op. Without this indirection the JVM verifier would resolve the client class chain
  * (Minecraft, GuiGraphics, etc.) when SVC instantiates the plugin server-side, which is exactly
  * the "loads up a gui issue" crash users hit in 0.9.0.
@@ -32,8 +32,10 @@ public final class VoiceSpellsVoicechatPlugin implements VoicechatPlugin {
 
     private static final short[] EMPTY_FRAME = new short[0];
 
-    /** Wired client-side at startup to {@code VoiceController::onMicFrame}; stays {@code null}
-     *  on a dedicated server so the {@link #onClientSound} body never resolves a client class. */
+    /** @deprecated the sink now lives on {@link MicFrameSink}, which references neither SVC nor
+     *  the client. Writing this field would have required loading this class, and this class
+     *  cannot load without SVC present — see {@link MicFrameSink} for why that mattered. */
+    @Deprecated
     public static volatile Consumer<short[]> micFrameSink;
 
     private volatile VoicechatClientApi clientApi;
@@ -60,7 +62,7 @@ public final class VoiceSpellsVoicechatPlugin implements VoicechatPlugin {
     }
 
     private void onClientSound(ClientSoundEvent event) {
-        Consumer<short[]> sink = micFrameSink;
+        Consumer<short[]> sink = MicFrameSink.sink;
         if (sink == null) return; // Dedicated server, or client not initialised yet — no mic source.
 
         VoicechatClientApi api = clientApi;
