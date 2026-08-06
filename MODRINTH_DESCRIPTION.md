@@ -26,21 +26,22 @@ the model yourself if you would rather it didn't.
 
 ## When it listens
 
-**By default the microphone is only open while you're holding a spellbook, staff or imbued
-weapon.** Put it away and the mic closes — no keybind involved.
+**By default the microphone is only open while you have a spellbook, staff or imbued weapon —
+in either hand, or in your Curios slot.** Stow it and the mic closes. No keybind involved.
 
-That means ordinary conversation while you're unarmed can never cast anything, which matters
-because a lot of people run a voice-chat mod on the same microphone. If you also talk to friends
-*while armed*, use `HOLD_KEY_AND_ITEM`: holding a staff isn't on its own evidence you meant to
-cast, and that mode requires a held key as well, so speech never reaches the recognizer unless you
-asked for it.
+That means conversation with your spellbook stowed can never cast anything, which matters because
+a lot of people run a voice-chat mod on the same microphone. **But if you keep a spellbook in your
+Curios slot permanently, this is close to `ALWAYS_ON` in practice** — so if you talk to friends
+mid-fight, use `HOLD_KEY_AND_ITEM`. Carrying a spellbook isn't on its own evidence you meant to
+cast; that mode requires a held key too, so speech never reaches the recognizer unless you asked.
 
 Set `gatingMode` to taste:
 
 | Mode | Microphone is open |
 |---|---|
-| `HOLD_ITEM` | while holding a spellbook, staff or imbued weapon *(default)* |
+| `HOLD_ITEM` | while a spell focus is in your hands **or Curios slot** *(default)* |
 | `HOLD_KEY_AND_ITEM` | while holding the cast key **and** a spell focus |
+
 | `HOLD_KEY` | while holding the cast key |
 | `ALWAYS_ON` | whenever you are in a world — fully hands-free |
 
@@ -100,7 +101,7 @@ beside it.
 1. Drop the Incantation jar in your `mods/` folder alongside Iron's Spells.
 2. Launch the game. On first run Incantation downloads `vosk-model-small-en-us-0.15` (~40 MB) into
    `config/voicespells/` for you.
-3. Join a world, hold a spellbook, and say a spell you have equipped.
+3. Join a world, equip a spellbook (hand or Curios slot), and say a spell it carries.
 
 Prefer to install the model yourself? Set `autoDownloadModel = false`, grab one from
 [alphacephei.com/vosk/models](https://alphacephei.com/vosk/models), and unzip its **contents** into
@@ -135,8 +136,8 @@ Server settings (`config/voicespells-server.toml`): cast mode (`CURIO_SPELLBOOK`
 ## Troubleshooting
 
 - **Nothing happens when you speak** — check the gating mode first. By default the mic is only
-  open while you're holding a spellbook, staff or imbued weapon. The HUD mic dot tells you: dim
-  means closed.
+  open while a spellbook, staff or imbued weapon is in your hands or Curios slot. The HUD mic dot
+  tells you: dim means closed.
 - **Chat says "Vosk model not found"** (or Diagnostics shows `Vosk model: FAIL`) — no model under
   `config/voicespells/model/`. Recheck the layout: `am/`, `conf/`, `graph/` should sit directly
   under that path.

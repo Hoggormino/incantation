@@ -199,11 +199,41 @@ public final class OwnedSpells {
         Player p = Minecraft.getInstance().player;
         if (p == null) return false;
         try {
-            return isSpellContainer(p.getMainHandItem()) || isSpellContainer(p.getOffhandItem());
+            if (isSpellContainer(p.getMainHandItem()) || isSpellContainer(p.getOffhandItem())) {
+                return true;
+            }
+            // Curios counts as "holding". The default server castMode is CURIO_SPELLBOOK, so the
+            // intended setup is a spellbook worn in the Curios slot rather than carried — gating
+            // on hands alone meant the two defaults contradicted each other and the microphone
+            // never opened for exactly the loadout the mod expects you to use.
+            return hasCuriosSpellContainer(p);
         } catch (Throwable t) {
             VoiceSpells.LOGGER.debug("Held-focus probe failed: {}", t.toString());
             return true;
         }
+    }
+
+    /** Whether any Curios slot holds a spell container. Same reflective path as {@link #scan()},
+     *  short-circuiting on the first hit since we only need a yes/no here. */
+    private static boolean hasCuriosSpellContainer(Player p) throws Throwable {
+        if (!curiosAvailable) return false;
+//? if forge {
+/*        // NOT a direct cast to Optional — 1.20.1 Forge returns LazyOptional here.
+        Optional<Object> invOpt = CuriosCompat.inventory(curiosGetInventory, p);
+*///?} else {
+        @SuppressWarnings("unchecked")
+        Optional<Object> invOpt = (Optional<Object>) curiosGetInventory.invoke(null, p);
+//?}
+        if (invOpt.isEmpty()) return false;
+        Predicate<ItemStack> isAnySpellContainer = stack -> {
+            try {
+                return stack != null && !stack.isEmpty() && (boolean) isContainer.invoke(null, stack);
+            } catch (Throwable t) { return false; }
+        };
+        @SuppressWarnings("unchecked")
+        java.util.List<Object> results = (java.util.List<Object>)
+            curiosFindCurios.invoke(invOpt.get(), isAnySpellContainer);
+        return results != null && !results.isEmpty();
     }
 
     private static boolean isSpellContainer(ItemStack stack) throws Exception {

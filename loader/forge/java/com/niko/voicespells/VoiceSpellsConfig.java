@@ -118,7 +118,7 @@ public final class VoiceSpellsConfig {
         ALWAYS_ON,
         /** Only while the push-to-talk keybind is held. */
         HOLD_KEY,
-        /** Only while holding a spellbook, staff or imbued weapon. */
+        /** Only while a spellbook, staff or imbued weapon is in your hands or Curios slot. */
         HOLD_ITEM,
         /** Only while holding the push-to-talk key AND a spellbook, staff or imbued weapon. */
         HOLD_KEY_AND_ITEM
@@ -314,14 +314,17 @@ public final class VoiceSpellsConfig {
             b.comment("When the microphone is allowed to listen.",
                       "ALWAYS_ON         - live whenever you are in a world.",
                       "HOLD_KEY          - only while the push-to-talk keybind is held.",
-                      "HOLD_ITEM         - only while holding a spellbook, staff or imbued weapon.",
+                      "HOLD_ITEM         - only while a spellbook, staff or imbued weapon is in your",
+                      "                    hands or your Curios slot.",
                       "HOLD_KEY_AND_ITEM - both of the above at once.",
                       "Unlike combatOnly and pauseWhenAfk, which filter after recognition, this",
                       "gates capture itself: in every mode but ALWAYS_ON the recognizer never",
                       "receives the audio at all.",
-                      "HOLD_ITEM is the default: it needs no keybind, and putting your spellbook",
-                      "away is enough to stop the mic listening, so ordinary conversation while",
-                      "you are unarmed can never cast anything.",
+                      "HOLD_ITEM is the default: it needs no keybind, and stowing your spellbook is",
+                      "enough to stop the mic listening. Note it counts the Curios slot too --",
+                      "the default castMode is CURIO_SPELLBOOK, so hands-only would never open",
+                      "the mic for the loadout this mod expects. If you keep a book in Curios",
+                      "permanently, that makes this close to ALWAYS_ON in practice.",
                       "If you talk to friends over a voice-chat mod WHILE armed, use",
                       "HOLD_KEY_AND_ITEM -- holding a staff is not on its own evidence you meant to",
                       "cast, and that mode requires the key as well so speech never reaches the",
