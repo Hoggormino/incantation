@@ -34,3 +34,4 @@ desktop.ini
 *.env
 secrets/
 *.key
+to-upload/

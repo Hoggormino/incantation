@@ -1,0 +1,39 @@
+<meta charset="utf-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:1920px; height:1080px; overflow:hidden; }
+body { background:#0a0714; font-family:Arial,"Helvetica Neue",Helvetica,sans-serif;
+       -webkit-font-smoothing:antialiased; position:relative; }
+body::before { content:""; position:absolute; inset:0;
+  background:
+    radial-gradient(1100px 760px at 42% 50%, rgba(88,66,148,.26), rgba(88,66,148,0) 70%),
+    radial-gradient(700px 520px at 78% 46%, rgba(120,90,190,.12), rgba(120,90,190,0) 70%); }
+.wrap { position:relative; width:1920px; height:1080px; }
+h1 { position:absolute; left:820px; top:396px; font-size:112px; font-weight:700;
+     color:#ede9fe; letter-spacing:-2px; }
+.tag { position:absolute; left:826px; top:536px; font-size:47px; font-weight:700;
+       color:#e5a6f7; letter-spacing:-.5px; }
+.sub { position:absolute; left:826px; top:622px; font-size:40px; line-height:1.28;
+       color:#938ea6; }
+svg { position:absolute; left:310px; top:290px; }
+</style>
+<div class="wrap">
+  <h1>Incantation</h1>
+  <div class="tag">Say a spell. Cast it.</div>
+  <div class="sub">Voice-cast Iron's Spells 'n Spellbooks<br>no voice-chat mod &middot; offline &middot; no training</div>
+  <svg width="620" height="500" viewBox="0 0 620 500">
+    <defs>
+      <radialGradient id="g">
+        <stop offset="0%"   stop-color="#c9a7f5" stop-opacity=".50"/>
+        <stop offset="100%" stop-color="#c9a7f5" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <circle cx="250" cy="250" r="140" fill="url(#g)"/>
+    <g fill="none" stroke-linecap="round">
+      <path d="M304 148.5 A115 115 0 0 1 304 351.5"  stroke="#c9a7f5" stroke-width="26"/>
+      <path d="M332  95.5 A175 175 0 0 1 332 404.5"  stroke="#8a68c6" stroke-width="26"/>
+      <path d="M360  42.5 A235 235 0 0 1 360 457.5"  stroke="#574183" stroke-width="26"/>
+    </g>
+    <circle cx="250" cy="250" r="48" fill="#d5b8f7" stroke="#ffffff" stroke-width="6"/>
+  </svg>
+</div>
