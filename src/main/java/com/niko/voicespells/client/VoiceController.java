@@ -1132,6 +1132,15 @@ public final class VoiceController {
                     return;
                 }
             }
+            // Before the first grammar is built, teach the index which words this particular
+            // model can actually say. Iron's Spells names are largely compounds the lexicon does
+            // not carry (firebolt, counterspell, heartstop) and Vosk drops them with only a native
+            // stderr warning, leaving those spells quietly uncastable. This adds a spaced spelling
+            // alongside each one. Must happen before currentGrammar() or the additions miss this
+            // session's grammar.
+            com.niko.voicespells.speech.Lexicon.load(modelPath);
+            SpellIndex.registerRespellings();
+
             VoskSession s = VoskSession.open(
                 modelPath,
                 currentGrammar(),

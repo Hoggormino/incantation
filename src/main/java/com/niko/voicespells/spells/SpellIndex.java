@@ -721,6 +721,64 @@ public final class SpellIndex {
         }
     }
 
+    /**
+     * Add a sayable spelling for every indexed phrase the speech model cannot pronounce.
+     *
+     * <p>Called once the model directory is known, because it needs the model's own vocabulary to
+     * decide what "cannot pronounce" means. Purely additive: the original phrase stays mapped, and
+     * the respelling is only inserted when nothing already claims it, so custom phrases and
+     * phrasebook overrides always win.
+     *
+     * <p>Without this, a spell whose name is a compound the lexicon lacks — {@code firebolt},
+     * {@code counterspell}, {@code heartstop} — is dropped from the grammar by Vosk with only a
+     * native stderr warning, and is simply uncastable with no symptom the player can see.
+     *
+     * @return how many respellings were added
+     */
+    public static int registerRespellings() {
+        if (!com.niko.voicespells.speech.Lexicon.ready()) return 0;
+        State current = STATE.get();
+        Map<String, ResourceLocation> existing = current.phraseToId();
+        if (existing.isEmpty()) return 0;
+
+        Map<String, ResourceLocation> merged = new HashMap<>(existing);
+        List<String> examples = new ArrayList<>();
+        List<String> unfixable = new ArrayList<>();
+        int added = 0;
+        for (Map.Entry<String, ResourceLocation> e : existing.entrySet()) {
+            String phrase = e.getKey();
+            String respelled = com.niko.voicespells.speech.Lexicon.respell(phrase);
+            if (respelled == null) {
+                // Only worth reporting when the model genuinely can't say it as written.
+                if (!sayable(phrase) && unfixable.size() < 10) unfixable.add(phrase);
+                continue;
+            }
+            if (merged.putIfAbsent(respelled, e.getValue()) == null) {
+                added++;
+                if (examples.size() < 6) examples.add(phrase + " -> " + respelled);
+            }
+        }
+        if (added > 0) {
+            STATE.set(new State(Collections.unmodifiableMap(merged)));
+            VoiceSpells.LOGGER.info("Added {} spoken spelling(s) for spell names the model cannot "
+                + "pronounce: {}", added, String.join(", ", examples));
+        }
+        if (!unfixable.isEmpty()) {
+            VoiceSpells.LOGGER.warn("These spell names are not in the speech model's vocabulary "
+                + "and could not be respelled automatically: {}. Bind an alias for them in "
+                + "config/voicespells-client.toml or phrasebook.json.", String.join(", ", unfixable));
+        }
+        return added;
+    }
+
+    /** Whether every word of a phrase is already in the model's vocabulary. */
+    private static boolean sayable(String phrase) {
+        for (String w : phrase.split(" ")) {
+            if (!w.isEmpty() && !com.niko.voicespells.speech.Lexicon.knows(w)) return false;
+        }
+        return true;
+    }
+
     private static String phraseFromPath(String path) {
         // Spell paths are lowercase snake_case (e.g. "ray_of_siphoning").
         // Underscores → spaces gives a phonetic phrase suitable for Vosk grammar.
