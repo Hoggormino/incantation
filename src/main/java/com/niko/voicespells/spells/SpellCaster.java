@@ -308,12 +308,6 @@ public final class SpellCaster {
             }
             VoiceSpells.LOGGER.error("Cast failed for {} — {}: {}", spellId,
                 cause.getClass().getName(), cause.getMessage(), cause);
-//? if forge {
-/*            VoiceSpells.LOGGER.error(
-                "If the class above belongs to another mod, this is a conflict in that mod's "
-                + "hook on Iron's Spells' cast path, not in Incantation itself.");
-*///?} else {
-
             String culprit = blameThirdPartyMod(cause);
             if (culprit != null) {
                 VoiceSpells.LOGGER.error(
@@ -326,21 +320,15 @@ public final class SpellCaster {
                     "If the class above belongs to another mod, this is a conflict in that mod's "
                     + "hook on Iron's Spells' cast path, not in Incantation itself.");
             }
-
-//?}
             String detail = cause.getMessage() == null || cause.getMessage().isBlank()
                 ? cause.getClass().getSimpleName()
                 : cause.getClass().getSimpleName() + ": " + cause.getMessage();
             if (detail.length() > 90) detail = detail.substring(0, 90) + "…";
-//? if forge {
-/*            feedback(player, "voicespells.cast.error", detail);
-*///?} else {
             if (culprit != null) {
                 feedback(player, "voicespells.cast.error_mod", culprit);
             } else {
                 feedback(player, "voicespells.cast.error", detail);
             }
-//?}
             return false;
         }
     }
@@ -567,12 +555,11 @@ public final class SpellCaster {
             return false;
         }
     }
-//? if !forge {
 
     /**
      * Work out which third-party mod a cast failure actually came from, by walking the stack trace
      * for the first frame that is neither Minecraft, nor Iron's Spells, nor this mod, and asking
-     * NeoForge which loaded mod owns that class.
+     * the mod loader which loaded mod owns that class.
      *
      * <p>Worth the effort because the failure mode it addresses is genuinely misleading. Every cast
      * goes through reflection, so a mod that mixes into Iron's Spells' cast path and throws
@@ -591,6 +578,7 @@ public final class SpellCaster {
                 if (cls.startsWith("net.minecraft.")
                     || cls.startsWith("com.mojang.")
                     || cls.startsWith("net.neoforged.")
+                    || cls.startsWith("net.minecraftforge.")
                     || cls.startsWith("java.")
                     || cls.startsWith("jdk.")
                     || cls.startsWith("com.niko.voicespells.")) {
@@ -617,9 +605,13 @@ public final class SpellCaster {
         try {
             Class<?> cls = Class.forName(className, false, SpellCaster.class.getClassLoader());
             String pkg = cls.getPackageName();
+//? if forge {
+/*            for (var mod : net.minecraftforge.fml.ModList.get().getMods()) {
+*///?} else {
             for (var mod : net.neoforged.fml.ModList.get().getMods()) {
+//?}
                 String id = mod.getModId();
-                if (id.equals("minecraft") || id.equals("neoforge")
+                if (id.equals("minecraft") || id.equals("neoforge") || id.equals("forge")
                     || id.equals(VoiceSpells.MOD_ID)) continue;
                 // Mixin classes injected into another mod keep the TARGET's package, so also match
                 // on the mod id appearing in the package path — which is how a mixin package like
@@ -634,7 +626,6 @@ public final class SpellCaster {
         return null;
     }
 
-//?}
     private static void feedback(ServerPlayer player, String translationKey, Object... args) {
         player.displayClientMessage(Component.translatable(translationKey, args), true);
     }
