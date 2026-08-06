@@ -1019,6 +1019,15 @@ public final class VoiceController {
      * on world join, and after a device change — and cheap when nothing has changed.
      */
     public static synchronized void syncCapture() {
+        // Refuse to open the device when listening makes no sense. Every caller used to be
+        // trusted to check this, and one of them didn't: a freshly-written config file fires a
+        // reload event, whose callback calls straight through to here, so the microphone opened
+        // during startup while the player was still on the title screen. Guarding the open itself
+        // means no future caller can reintroduce that.
+        if (!captureAllowedNow()) {
+            stopCapture();
+            return;
+        }
         com.niko.voicespells.speech.MicCapture c = capture;
         // Restart when the selected device changed; the device name is baked in at construction.
         if (c != null) {
@@ -1038,6 +1047,22 @@ public final class VoiceController {
     private static volatile String activeDevice = null;
 
     /**
+     * The long-lived conditions under which the microphone may be open at all: in a world, and
+     * (unless configured otherwise) with the window focused and the game unpaused.
+     *
+     * <p>Shared by {@link #syncCapture()} and {@link #tickCaptureSuspension()} so that opening and
+     * releasing the device are decided by exactly one predicate. Short-lived gating — push-to-talk,
+     * holding a spell focus — is deliberately not here; that is {@code captureArmed()}, checked per
+     * frame, because opening a capture device is slow enough that thrashing it on a keypress would
+     * clip the start of every utterance.
+     */
+    private static boolean captureAllowedNow() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null) return false;
+        return !(VoiceSpellsConfig.cSuspendUnfocused && (!mc.isWindowActive() || mc.isPaused()));
+    }
+
+    /**
      * Open or release the capture device according to whether the game is in a state where
      * listening makes sense at all. Called once per client tick; idempotent and cheap.
      *
@@ -1047,12 +1072,7 @@ public final class VoiceController {
      * Short-lived gating is handled per frame in {@code captureArmed()} instead.
      */
     public static void tickCaptureSuspension() {
-        Minecraft mc = Minecraft.getInstance();
-        boolean inWorld = mc.level != null && mc.player != null;
-        boolean suspended = !inWorld
-            || (VoiceSpellsConfig.cSuspendUnfocused && (!mc.isWindowActive() || mc.isPaused()));
-
-        if (suspended) {
+        if (!captureAllowedNow()) {
             if (capture != null) {
                 stopCapture();
                 // Drop any half-heard utterance so it cannot resurface after resuming.

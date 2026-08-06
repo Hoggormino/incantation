@@ -180,9 +180,15 @@ public final class ClientEvents {
         // SpellIndex is populated in common setup which has already fired by now, so kicking off
         // the Vosk load here means the model is usually ready before the player's first sentence.
         event.enqueueWork(VoiceController::preloadAsync);
-        // Bring the microphone up if OpenAL capture is the configured source. Safe when it is
-        // not — syncCapture() is a no-op unless audioSource is OPENAL.
-        event.enqueueWork(VoiceController::syncCapture);
+        // Deliberately does NOT open the microphone here. This used to call syncCapture(), guarded
+        // by a comment claiming it was a no-op unless audioSource was OPENAL — but that config
+        // went away with the Simple Voice Chat path, so the call became unconditional and opened
+        // the capture device during client setup, i.e. while sitting on the title screen. The mic
+        // then closed again on the first client tick, which made it easy to miss.
+        //
+        // tickCaptureSuspension() already owns the whole lifecycle: it opens the device once you
+        // are in a world and releases it whenever you are not. Letting it be the only thing that
+        // opens capture is what makes "the mic is not live on the title screen" actually true.
     }
 
     private static void onRegisterKeys(RegisterKeyMappingsEvent event) {
