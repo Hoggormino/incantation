@@ -315,17 +315,18 @@ public final class VoiceSpellsConfig {
                       "ALWAYS_ON         - live whenever you are in a world.",
                       "HOLD_KEY          - only while the push-to-talk keybind is held.",
                       "HOLD_ITEM         - only while holding a spellbook, staff or imbued weapon.",
-                      "HOLD_KEY_AND_ITEM - both of the above at once (default).",
+                      "HOLD_KEY_AND_ITEM - both of the above at once.",
                       "Unlike combatOnly and pauseWhenAfk, which filter after recognition, this",
                       "gates capture itself: in every mode but ALWAYS_ON the recognizer never",
                       "receives the audio at all.",
-                      "The default requires both because most people run a voice-chat mod to talk",
-                      "to friends on the same microphone. Holding a staff is not evidence you meant",
-                      "to cast -- you are most likely to be talking exactly when you are armed --",
-                      "so on its own it would still fire spells mid-conversation. Requiring the key",
-                      "as well means normal speech can never reach the recognizer. Set ALWAYS_ON if",
-                      "you play without voice chat and want it fully hands-free.");
-            gatingMode = b.defineEnum("gatingMode", GatingMode.HOLD_KEY_AND_ITEM);
+                      "HOLD_ITEM is the default: it needs no keybind, and putting your spellbook",
+                      "away is enough to stop the mic listening, so ordinary conversation while",
+                      "you are unarmed can never cast anything.",
+                      "If you talk to friends over a voice-chat mod WHILE armed, use",
+                      "HOLD_KEY_AND_ITEM -- holding a staff is not on its own evidence you meant to",
+                      "cast, and that mode requires the key as well so speech never reaches the",
+                      "recognizer unless you asked for it. ALWAYS_ON is fully hands-free.");
+            gatingMode = b.defineEnum("gatingMode", GatingMode.HOLD_ITEM);
             b.comment("Close the microphone device entirely while the game window is unfocused or",
                       "paused. Leave this on unless you specifically want to cast while tabbed out;",
                       "it means the mic is not held open while you are doing something else.");
@@ -425,7 +426,7 @@ public final class VoiceSpellsConfig {
     public static volatile double  cNoiseGateRms    = 350.0;
     public static volatile String  cModelId         =
         com.niko.voicespells.speech.ModelCatalog.DEFAULT_ID;
-    public static volatile GatingMode cGatingMode    = GatingMode.HOLD_KEY_AND_ITEM;
+    public static volatile GatingMode cGatingMode    = GatingMode.HOLD_ITEM;
     public static volatile boolean cSuspendUnfocused = true;
     public static volatile int     cGrammarFloor    = 16;
     public static volatile String  cCaptureDevice    = "";
