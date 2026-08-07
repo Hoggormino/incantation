@@ -53,7 +53,7 @@ custom phrases (see Configuration).
 - **HUD chip** showing model status, mic state, last heard phrase, and a live audio meter.
   Configurable corner, offset, opacity. Toggle with **B**.
 - **Themes + palettes.** Cycle the accent color (Arcane, Blossom, Ocean, Mint, Gold, …) and
-  switch the base palette between Dark, Midnight, Light, and Slate. Some themes unlock as you
+  switch the base palette between Dark, Midnight, and Slate. Some themes unlock as you
   voice-cast more.
 - **Vanilla advancements.** Voice-cast milestones (1, 10, 50, 200, 1000) and combo casts surface
   as standard Minecraft advancements.

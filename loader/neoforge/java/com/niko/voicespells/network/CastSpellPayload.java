@@ -31,7 +31,18 @@ public record CastSpellPayload(ResourceLocation spellId, float volumeScale,
         ByteBufCodecs.FLOAT,       CastSpellPayload::volumeScale,
         ByteBufCodecs.VAR_INT,     CastSpellPayload::totalCasts,
         ByteBufCodecs.VAR_INT,     CastSpellPayload::streak,
-        (s, v, total, streak) -> new CastSpellPayload(ResourceLocation.parse(s), v, total, streak)
+        // tryParse, not parse: this string arrives from the client and a modified one can send
+        // anything. parse() throws on an illegal id, and it throws on the netty decode thread —
+        // which disconnects the sender with an "Internal Exception" and a stack trace in the
+        // server log, per attempt. An unresolvable id is harmless here because SpellCaster
+        // already answers an unknown spell with voicespells.cast.unknown. The Forge decoder has
+        // always done this; the two had drifted.
+        (s, v, total, streak) -> {
+            ResourceLocation id = ResourceLocation.tryParse(s);
+            return new CastSpellPayload(
+                id != null ? id : ResourceLocation.withDefaultNamespace("empty"),
+                v, total, streak);
+        }
     );
 
     @Override

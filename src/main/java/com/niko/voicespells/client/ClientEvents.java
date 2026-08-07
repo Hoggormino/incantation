@@ -346,28 +346,44 @@ public final class ClientEvents {
      *  cooldown indicator and cast vignette burned measurable CPU in long sessions. Resolve
      *  once on first use, then call through the cached Method handle every frame. */
     private static final class IronsSpellsRefl {
-        static final Class<?> CMD;                // ClientMagicData
+        /** Iron's Spells' client-side magic state. The package matters and has been wrong before:
+         *  it is {@code ...ironsspellbooks.player.ClientMagicData}, NOT {@code ...api.magic.}.
+         *  Confirmed against the shipped jar (irons_spellbooks-1.21.1-3.16.2.jar contains
+         *  io/redspace/ironsspellbooks/player/ClientMagicData.class and no api/magic equivalent).
+         *  The old name resolved to nothing, so every lookup below failed and each caller quietly
+         *  took its fallback — which is why it went unnoticed across four releases. */
+        private static final String CLIENT_MAGIC_DATA =
+            "io.redspace.ironsspellbooks.player.ClientMagicData";
+
         static final java.lang.reflect.Method GET_COOLDOWNS;
         static final java.lang.reflect.Method IS_CASTING;
         static volatile java.lang.reflect.Method GET_PCT;        // (String) -> float
         static volatile java.lang.reflect.Method IS_ON_COOLDOWN; // (String) -> boolean fallback
         static volatile boolean cooldownReady = false;
         static {
-            Class<?> cmd = null;
             java.lang.reflect.Method getCd = null;
             java.lang.reflect.Method isCast = null;
             try {
-                cmd = Class.forName("io.redspace.ironsspellbooks.api.magic.ClientMagicData");
+                Class<?> cmd = Class.forName(CLIENT_MAGIC_DATA);
                 for (String m : new String[]{ "getPlayerCooldowns", "getCooldowns" }) {
                     try { getCd = cmd.getMethod(m); break; }
                     catch (NoSuchMethodException ignored) {}
                 }
                 try { isCast = cmd.getMethod("isCasting"); }
                 catch (NoSuchMethodException ignored) {}
-            } catch (Throwable ignored) {}
-            CMD = cmd;
+            } catch (Throwable t) {
+                // Never silently: a swallowed failure here is invisible for releases at a time.
+                // Debug rather than warn — a missing optional integration is not the user's problem.
+                VoiceSpells.LOGGER.debug("ClientMagicData reflection unavailable ({}); "
+                    + "cooldown and is-casting hints are disabled", t.toString());
+            }
             GET_COOLDOWNS = getCd;
             IS_CASTING = isCast;
+            if (getCd == null || isCast == null) {
+                VoiceSpells.LOGGER.debug("ClientMagicData resolved but members missing "
+                    + "(cooldowns={}, isCasting={}); hints degrade to defaults",
+                    getCd != null, isCast != null);
+            }
         }
         private IronsSpellsRefl() {}
     }

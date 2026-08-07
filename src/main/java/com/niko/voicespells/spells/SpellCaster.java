@@ -744,7 +744,13 @@ public final class SpellCaster {
     }
 
     /** Players who have opted in to live voice-cast notifications via {@code /voicespells follow}.
-     *  Stored as UUIDs so the subscription survives reconnect. Cleared on server stop. */
+     *  Stored as UUIDs so the subscription survives reconnect.
+     *
+     *  <p>NOT cleared on server stop, despite what this comment used to claim — there is no
+     *  ServerStoppedEvent or PlayerLoggedOutEvent listener anywhere in the mod. This set, together
+     *  with {@code RECENT_CASTS}, {@code PLAYER_TOTALS} and {@code PLAYER_NAMES}, grows with the
+     *  number of distinct players ever seen and is only reclaimed when the JVM exits. Small and
+     *  bounded in practice, but it is a leak; wiring logout/stop listeners is the real fix. */
     private static final java.util.Set<java.util.UUID> SUBSCRIBERS = java.util.concurrent.ConcurrentHashMap.newKeySet();
     public static boolean toggleSubscriber(java.util.UUID uuid) {
         if (SUBSCRIBERS.remove(uuid)) return false;

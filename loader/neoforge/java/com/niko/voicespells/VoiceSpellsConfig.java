@@ -48,7 +48,7 @@ public final class VoiceSpellsConfig {
 
     /** Base surface palette. The {@link ThemePreset} above only swaps the accent (purple →
      *  pink → blue …); this swaps the underlying surfaces and text colours so the screens can
-     *  be flipped between dark / light / extra-dark without recompiling.
+     *  be flipped between dark, extra-dark and neutral-grey without recompiling.
      *  <p>Like ThemePreset, this lives in the config class so it can be referenced by the
      *  config spec without dragging in the client-only Theme renderer. */
     public enum UiPalette {
@@ -279,8 +279,8 @@ public final class VoiceSpellsConfig {
             streamerMode = b.define("streamerMode", false);
             b.comment("Sass mode - occasional snarky 'was that even a spell?' toast on miss.");
             sassMode = b.define("sassMode", false);
-            b.comment("Combat-only mode - recognition only fires when the player took or dealt",
-                      "damage in the last ~10 seconds. Keeps casual SVC chatter from misfiring.");
+            b.comment("Combat-only mode - recognition only fires when the player took damage",
+                      "from a mob in the last ~10 seconds. Damage you deal does not count.");
             combatOnly = b.define("combatOnly", false);
             b.comment("Pause recognition when AFK (no movement for afkSeconds).");
             pauseWhenAfk = b.define("pauseWhenAfk", false);
@@ -305,8 +305,8 @@ public final class VoiceSpellsConfig {
             handsFreeConfirm = b.define("handsFreeConfirm", false);
             b.comment("Noise gate: skip mic frames quieter than this RMS (0..32767) before",
                       "feeding them to Vosk. Stops the grammar-restricted recogniser from",
-                      "hallucinating spells out of silence / breath / SVC transmission tail.",
-                      "The gate is sticky: once a loud frame arrives it stays open for ~600ms,",
+                      "hallucinating spells out of silence or breath.",
+                      "The gate is sticky: once a loud frame arrives it stays open for ~450ms,",
                       "so phoneme dips inside a word don't cut the utterance.",
                       "Raise this if you see phantom casts on background noise; lower if",
                       "soft speech is being missed. Set to 0 to disable the gate entirely.");
