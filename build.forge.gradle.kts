@@ -64,6 +64,11 @@ legacyForge {
         register("server") {
             server()
             programArguments.add("--nogui")
+            // Separate game directory, same reasoning as the NeoForge node: a client and a
+            // dedicated server sharing run/ cannot both be up, and the collision surfaces as a
+            // DirectoryLock IOException that looks like a mod fault. Keep the two loaders'
+            // layouts identical so a test procedure written for one works on the other.
+            gameDirectory = file("run-server")
         }
     }
 

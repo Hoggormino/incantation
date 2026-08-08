@@ -60,6 +60,14 @@ neoForge {
         register("server") {
             server()
             systemProperty("neoforge.enabledGameTestNamespaces", modId)
+            // Its own game directory, separate from the client's run/. This mod is client-server
+            // by nature -- the client hears the spell, the server casts it -- so the useful test
+            // is a client connected to a dedicated server, both running at once. Sharing run/
+            // makes that impossible: whichever starts second dies on a DirectoryLock over the
+            // level, or cannot even rotate logs/latest.log, and the failure reads like a mod bug
+            // rather than two processes fighting over one folder. It has already cost real time
+            // twice.
+            gameDirectory = file("run-server")
         }
         register("data") {
             data()

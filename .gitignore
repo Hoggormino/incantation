@@ -24,6 +24,9 @@ src/generated/
 # Vosk model (huge). Keep it strictly local — never commit.
 run/
 !run/.gitkeep
+# Same for the dedicated-server run directory. It is deliberately separate from run/ so a client
+# and a server can be up at the same time — see the gameDirectory setting in the build scripts.
+run-server/
 
 # --- macOS / Windows junk ---
 .DS_Store
