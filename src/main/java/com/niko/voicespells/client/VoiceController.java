@@ -1060,8 +1060,26 @@ public final class VoiceController {
      * frame, because opening a capture device is slow enough that thrashing it on a keypress would
      * clip the start of every utterance.
      */
+    /** Set while a screen is actively asking the player to talk into the mic (the first-run
+     *  wizard's mic check). Those screens live at the title screen, where there is no level and
+     *  no player, so the in-world guard below would otherwise keep the device shut and the meter
+     *  dead while the UI says "talk into your mic now" — which is exactly what it did after the
+     *  title-screen fix landed. Not a config: it follows the screen's lifetime, nothing else. */
+    private static volatile boolean diagnosticCaptureOverride = false;
+
+    /** Open the microphone regardless of gating, for as long as a mic-test screen is showing.
+     *  Always pair the {@code true} call with a {@code false} in the screen's close path. */
+    public static void setDiagnosticCapture(boolean on) {
+        if (diagnosticCaptureOverride == on) return;
+        diagnosticCaptureOverride = on;
+        syncCapture();
+    }
+
     private static boolean captureAllowedNow() {
         Minecraft mc = Minecraft.getInstance();
+        // The override deliberately precedes the in-world check: a mic test is the one case where
+        // capturing outside a world is the whole point.
+        if (diagnosticCaptureOverride) return true;
         if (mc.level == null || mc.player == null) return false;
         return !(VoiceSpellsConfig.cSuspendUnfocused && (!mc.isWindowActive() || mc.isPaused()));
     }

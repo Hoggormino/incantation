@@ -55,6 +55,12 @@ public final class FirstRunScreen extends Screen {
 
     @Override
     protected void init() {
+        // This wizard normally runs from the title screen, where there is no level and no player,
+        // so the ordinary capture gate keeps the device closed. The mic check explicitly asks the
+        // player to speak, so hold the device open for as long as the wizard is showing. Released
+        // in finish(), which every exit path goes through.
+        VoiceController.setDiagnosticCapture(true);
+
         // Clamp the panel to the available screen so a large GUI Scale doesn't push the Next /
         // Skip buttons off the bottom or the title off the right edge.
         panelW = Theme.fit(PANEL_W_PREF, width);
@@ -102,6 +108,10 @@ public final class FirstRunScreen extends Screen {
     }
 
     private void finish() {
+        // Drop the mic before anything else — if a write below throws, the device must still be
+        // released rather than left open behind the title screen.
+        try { VoiceController.setDiagnosticCapture(false); } catch (Throwable ignored) {}
+
         // Belt-and-braces persistence: TOML write is async and can be lost on a fast exit,
         // so we also flip a sticky flag in VoiceStats (which writes stats.dat immediately).
         // The trigger checks BOTH, so as long as either landed the wizard won't re-pop.
@@ -115,6 +125,16 @@ public final class FirstRunScreen extends Screen {
 
     @Override
     public void onClose() { finish(); }
+
+    @Override
+    public void removed() {
+        // Safety net. finish() covers the normal exits, but a screen can be swapped out without
+        // it — another mod calling setScreen, a disconnect, a resource reload. Leaving the device
+        // open behind the title screen is precisely the bug the gating work set out to kill, so
+        // release it unconditionally here too. setDiagnosticCapture is idempotent.
+        try { VoiceController.setDiagnosticCapture(false); } catch (Throwable ignored) {}
+        super.removed();
+    }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
