@@ -10,6 +10,11 @@ authors = "${mod_authors}"
 description = '''${mod_description}'''
 logoFile = "icon.png"
 logoBlur = false
+# The mod is not required on the client. A server running Incantation must accept players who
+# do not have it — they just cannot voice-cast. Without this, the default MATCH_VERSION makes
+# such a server show as incompatible in the multiplayer list even though the acceptMissingOr
+# channel would let them connect. Keep this in step with Network.CHANNEL's acceptors.
+displayTest = "IGNORE_ALL_VERSION"
 
 [[dependencies.${mod_id}]]
 modId = "forge"

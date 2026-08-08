@@ -12,13 +12,18 @@ NeoForge 1.21.1.
 
 ## Requirements
 
-- **Minecraft 1.21.1**
-- **NeoForge 21.1.x**
+- **Minecraft 1.21.1** on **NeoForge 21.1.x**, or **Minecraft 1.20.1** on **Forge 47.x**
 - **Iron's Spells 'n Spellbooks** (iron431, 3.x+)
-- A small Vosk English model (~40 MB) — one-time setup, see below
+- A microphone. A small Vosk English model (~40 MB) downloads itself on first launch
 
 Iron's Spells must be present on both client and server. Curios is optional but recommended
 (without it, the Curios spellbook slot can't be checked and the mod degrades to hand-only).
+
+**Incantation is not required on the client.** A server can run it and still accept players who
+don't have it — they join and play normally, they just can't voice-cast. The payload channel is
+registered optional on both loaders and `displayTest` is `IGNORE_ALL_VERSION`, so the server does
+not show as incompatible to a vanilla client. To voice-cast yourself you need it on both sides:
+the client captures the microphone, the server validates and performs the cast.
 
 No voice-chat mod is needed. Incantation opens the microphone itself through OpenAL, which
 ships with Minecraft.

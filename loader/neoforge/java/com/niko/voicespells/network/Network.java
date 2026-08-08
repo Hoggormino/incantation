@@ -14,7 +14,15 @@ public final class Network {
     }
 
     private static void onRegister(RegisterPayloadHandlersEvent event) {
-        PayloadRegistrar r = event.registrar("1");
+        // optional(), NOT a plain registrar. A non-optional payload makes the channel part of
+        // login negotiation, so a server running Incantation disconnects every client that does
+        // not have it — vanilla clients included — with an "Incompatible" screen. Nothing here
+        // is clientbound, so requiring the mod on the client buys the server nothing.
+        //
+        // Optional means: clients that have Incantation negotiate the channel and voice-cast as
+        // normal; clients that don't simply never register it, join fine, and play without voice
+        // casting. Their casts are the only thing they lose.
+        PayloadRegistrar r = event.registrar("1").optional();
         r.playToServer(CastSpellPayload.TYPE, CastSpellPayload.CODEC, (payload, ctx) -> {
             if (ctx.player() instanceof ServerPlayer sp) {
                 ctx.enqueueWork(() -> SpellCaster.cast(sp,

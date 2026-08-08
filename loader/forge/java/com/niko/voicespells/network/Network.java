@@ -17,9 +17,17 @@ import net.minecraftforge.network.simple.SimpleChannel;
  * and there is no {@code RegisterPayloadHandlersEvent} — the channel is a static singleton and
  * messages are registered from common setup (see {@code VoiceSpells#onCommonSetup}).
  *
- * <p>The protocol version string is compared between client and server on connect. Both sides run
- * the same build, so an exact match is required in both directions; a mismatched pair is rejected
- * with a clear message rather than desyncing.
+ * <p>The channel is OPTIONAL in both directions. It used to require an exact protocol match on
+ * both sides, on the reasoning that "both sides run the same build" — but that reasoning only
+ * holds if every player is forced to install the mod. In practice it meant a server running
+ * Incantation rejected every client without it, vanilla included, with a bare
+ * "Connection closed - mismatched mod channel list". Nothing on this channel is clientbound,
+ * so the requirement bought the server nothing.
+ *
+ * <p>{@link NetworkRegistry#acceptMissingOr} accepts either the matching protocol version or the
+ * absence of the channel entirely. Clients with Incantation negotiate it and voice-cast as usual;
+ * clients without it join and play normally, and simply never send a cast. This mirrors
+ * {@code registrar("1").optional()} on the NeoForge side — the two must stay in step.
  */
 public final class Network {
     private Network() {}
@@ -29,8 +37,8 @@ public final class Network {
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
         new ResourceLocation(VoiceSpells.MOD_ID, "main"),
         () -> PROTOCOL,
-        PROTOCOL::equals,
-        PROTOCOL::equals
+        NetworkRegistry.acceptMissingOr(PROTOCOL),
+        NetworkRegistry.acceptMissingOr(PROTOCOL)
     );
 
     /** Kept for symmetry with the 1.21.1 entry point; the channel itself needs no bus listener. */
