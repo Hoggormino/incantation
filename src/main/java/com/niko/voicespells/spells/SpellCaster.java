@@ -737,6 +737,34 @@ public final class SpellCaster {
         }
     }
 
+    /**
+     * Drop the per-player state that has no meaning once a player is gone.
+     *
+     * <p>Only the rate-limit window. {@code SUBSCRIBERS} is deliberately kept — a /voicespells
+     * follow subscription is documented to survive reconnect — and {@code PLAYER_TOTALS} /
+     * {@code PLAYER_NAMES} back the /voicespells top leaderboard, which would be pointless if it
+     * forgot everyone who logged off. Those are released on server stop instead.
+     */
+    public static void forgetPlayer(UUID uuid) {
+        if (uuid != null) RECENT_CASTS.remove(uuid);
+    }
+
+    /**
+     * Release everything held for the lifetime of a server.
+     *
+     * <p>These are static, so on a client they outlive the integrated server: open a world, quit
+     * to title, open another, and without this the previous world's subscribers and totals would
+     * still be here. On a dedicated server it only matters at shutdown, but the client case is
+     * real and is why this is wired to ServerStopped rather than left to process exit.
+     */
+    public static void clearServerState() {
+        RECENT_CASTS.clear();
+        SUBSCRIBERS.clear();
+        PLAYER_TOTALS.clear();
+        PLAYER_NAMES.clear();
+        synchronized (RECENT_LOG) { RECENT_LOG.clear(); }
+    }
+
     /** Most recent ~50 voice cast lines, newest first. Drives /voicespells diag. */
     private static final java.util.Deque<String> RECENT_LOG = new java.util.ArrayDeque<>();
     public static java.util.List<String> recentLog() {
@@ -744,13 +772,9 @@ public final class SpellCaster {
     }
 
     /** Players who have opted in to live voice-cast notifications via {@code /voicespells follow}.
-     *  Stored as UUIDs so the subscription survives reconnect.
-     *
-     *  <p>NOT cleared on server stop, despite what this comment used to claim — there is no
-     *  ServerStoppedEvent or PlayerLoggedOutEvent listener anywhere in the mod. This set, together
-     *  with {@code RECENT_CASTS}, {@code PLAYER_TOTALS} and {@code PLAYER_NAMES}, grows with the
-     *  number of distinct players ever seen and is only reclaimed when the JVM exits. Small and
-     *  bounded in practice, but it is a leak; wiring logout/stop listeners is the real fix. */
+     *  Stored as UUIDs so the subscription deliberately survives reconnect — which is why logout
+     *  does NOT drop it. Cleared on server stop by {@link #clearServerState()}, wired up in
+     *  {@link com.niko.voicespells.server.ServerLifecycle}. */
     private static final java.util.Set<java.util.UUID> SUBSCRIBERS = java.util.concurrent.ConcurrentHashMap.newKeySet();
     public static boolean toggleSubscriber(java.util.UUID uuid) {
         if (SUBSCRIBERS.remove(uuid)) return false;

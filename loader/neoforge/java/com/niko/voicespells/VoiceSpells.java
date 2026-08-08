@@ -29,6 +29,10 @@ public final class VoiceSpells {
 
         // Admin commands (/voicespells diag, /voicespells rank) — game-bus listener.
         com.niko.voicespells.server.VoiceSpellsCommands.register();
+        // Releases SpellCaster's static per-player state on logout / server stop. Matters
+        // most for the integrated server: statics outlive a world, so without this one
+        // world's subscribers and leaderboard leaked into the next.
+        com.niko.voicespells.server.ServerLifecycle.register();
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
             // Client-only config. Register on the mod bus so values are available before
