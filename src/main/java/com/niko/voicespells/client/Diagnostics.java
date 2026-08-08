@@ -95,8 +95,8 @@ public final class Diagnostics {
      *  audio itself — the question is no longer "is SVC installed" but "is a device delivering
      *  samples". */
     private static Result checkMicrophone() {
-        java.util.List<String> devices = com.niko.voicespells.speech.MicCapture.listDevices();
-        com.niko.voicespells.speech.MicCapture cap = VoiceController.captureEngine();
+        java.util.List<String> devices = com.niko.voicespells.client.MicCapture.listDevices();
+        com.niko.voicespells.client.MicCapture cap = VoiceController.captureEngine();
         if (cap == null) {
             return new Result("Microphone", Status.WARN,
                 devices.isEmpty()
@@ -106,7 +106,7 @@ public final class Diagnostics {
         String status = cap.status();
         if ("capturing".equals(status)) {
             return new Result("Microphone", Status.OK,
-                "Capturing at " + com.niko.voicespells.speech.MicCapture.SAMPLE_RATE + " Hz");
+                "Capturing at " + com.niko.voicespells.client.MicCapture.SAMPLE_RATE + " Hz");
         }
         if ("no device".equals(status) || "device missing".equals(status)) {
             return new Result("Microphone", Status.FAIL,
@@ -187,7 +187,7 @@ public final class Diagnostics {
     private static Result checkVoskModel() {
         String override = VoiceSpellsConfig.CLIENT.modelPath.get();
         Path p = (override == null || override.isBlank())
-            ? com.niko.voicespells.speech.VoskSession.defaultModelPath()
+            ? com.niko.voicespells.client.VoskSession.defaultModelPath()
             : Path.of(override.trim());
         if (!Files.isDirectory(p)) {
             return new Result("Vosk model", Status.FAIL,

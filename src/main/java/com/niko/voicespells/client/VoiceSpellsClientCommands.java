@@ -2,7 +2,6 @@ package com.niko.voicespells.client;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.niko.voicespells.VoiceSpellsConfig;
-import com.niko.voicespells.speech.MicCapture;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;

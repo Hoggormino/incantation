@@ -1,7 +1,11 @@
-package com.niko.voicespells.speech;
+package com.niko.voicespells.client;
 
 import com.niko.voicespells.VoiceSpells;
 import com.niko.voicespells.VoiceSpellsConfig;
+// ModelCatalog stays in the common `speech` package: the config specs on both loaders reference
+// it, and config is loaded on a dedicated server. Only the download/capture/recognition side moved
+// to `client`, so this import now crosses a package boundary that is deliberate.
+import com.niko.voicespells.speech.ModelCatalog;
 
 import java.io.InputStream;
 import java.io.OutputStream;

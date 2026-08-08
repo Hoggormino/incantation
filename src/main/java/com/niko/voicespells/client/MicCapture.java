@@ -1,4 +1,4 @@
-package com.niko.voicespells.speech;
+package com.niko.voicespells.client;
 
 import com.niko.voicespells.VoiceSpells;
 import org.lwjgl.openal.AL10;

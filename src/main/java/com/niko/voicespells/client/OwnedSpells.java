@@ -1,4 +1,4 @@
-package com.niko.voicespells.spells;
+package com.niko.voicespells.client;
 
 import com.niko.voicespells.VoiceSpells;
 import net.minecraft.client.Minecraft;
@@ -151,7 +151,7 @@ public final class OwnedSpells {
             try {
 //? if forge {
 /*                // NOT a direct cast to Optional — 1.20.1 Forge returns LazyOptional here.
-                Optional<Object> invOpt = CuriosCompat.inventory(curiosGetInventory, p);
+                Optional<Object> invOpt = com.niko.voicespells.spells.CuriosCompat.inventory(curiosGetInventory, p);
 *///?} else {
                 @SuppressWarnings("unchecked")
                 Optional<Object> invOpt = (Optional<Object>) curiosGetInventory.invoke(null, p);
@@ -219,7 +219,7 @@ public final class OwnedSpells {
         if (!curiosAvailable) return false;
 //? if forge {
 /*        // NOT a direct cast to Optional — 1.20.1 Forge returns LazyOptional here.
-        Optional<Object> invOpt = CuriosCompat.inventory(curiosGetInventory, p);
+        Optional<Object> invOpt = com.niko.voicespells.spells.CuriosCompat.inventory(curiosGetInventory, p);
 *///?} else {
         @SuppressWarnings("unchecked")
         Optional<Object> invOpt = (Optional<Object>) curiosGetInventory.invoke(null, p);

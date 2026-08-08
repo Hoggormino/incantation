@@ -1,4 +1,4 @@
-package com.niko.voicespells.speech;
+package com.niko.voicespells.client;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;

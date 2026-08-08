@@ -3,7 +3,6 @@ package com.niko.voicespells.client;
 import com.niko.voicespells.VoiceSpells;
 import com.niko.voicespells.VoiceSpellsConfig;
 import com.niko.voicespells.network.CastSpellPayload;
-import com.niko.voicespells.speech.VoskSession;
 import com.niko.voicespells.spells.SpellCaster;
 import com.niko.voicespells.spells.SpellIndex;
 import com.niko.voicespells.spells.SpellInfo;
@@ -28,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Client-side glue between the microphone, the Vosk recognizer and the server.
  *
- * Capture is gated, not continuous. {@link com.niko.voicespells.speech.MicCapture} only holds the
+ * Capture is gated, not continuous. {@link com.niko.voicespells.client.MicCapture} only holds the
  * device while {@code captureAllowedNow()} says so, which follows {@code gatingMode}: HOLD_ITEM
  * (the default — a spell focus in hand or Curios), HOLD_KEY, HOLD_KEY_AND_ITEM, or ALWAYS_ON. So
  * there IS a keybind, and three of the four modes depend on it; this javadoc used to say
@@ -496,13 +495,13 @@ public final class VoiceController {
         }
         switch (VoiceSpellsConfig.cGatingMode) {
             case HOLD_KEY:  return ClientEvents.isPushToTalkDown();
-            case HOLD_ITEM: return com.niko.voicespells.spells.OwnedSpells.holdingSpellFocus();
+            case HOLD_ITEM: return com.niko.voicespells.client.OwnedSpells.holdingSpellFocus();
             // Both, and this is the default. See the config comment: holding a staff is not
             // evidence you meant to cast, because you are most likely to be talking to people
             // exactly when you are armed.
             case HOLD_KEY_AND_ITEM:
                 return ClientEvents.isPushToTalkDown()
-                    && com.niko.voicespells.spells.OwnedSpells.holdingSpellFocus();
+                    && com.niko.voicespells.client.OwnedSpells.holdingSpellFocus();
             default:        return true;
         }
     }
@@ -824,7 +823,7 @@ public final class VoiceController {
         if (now - lastOwnedScanNanos < OWNED_SCAN_INTERVAL_NANOS) return;
         lastOwnedScanNanos = now;
         java.util.Optional<java.util.Set<String>> result =
-            com.niko.voicespells.spells.OwnedSpells.scan();
+            com.niko.voicespells.client.OwnedSpells.scan();
         if (result.isEmpty()) {
             // Couldn't scan reliably this tick (player not loaded yet, Iron's reflection
             // unavailable, or a reflection mismatch). Mark the owned data UNRELIABLE so the
@@ -1016,7 +1015,7 @@ public final class VoiceController {
     // ----- OpenAL capture lifecycle -------------------------------------------------------
 
     /** Live capture engine; null before client setup or after shutdown. */
-    private static volatile com.niko.voicespells.speech.MicCapture capture;
+    private static volatile com.niko.voicespells.client.MicCapture capture;
 
     /**
      * Bring capture in line with the current config. Safe to call repeatedly — on config reload,
@@ -1032,15 +1031,15 @@ public final class VoiceController {
             stopCapture();
             return;
         }
-        com.niko.voicespells.speech.MicCapture c = capture;
+        com.niko.voicespells.client.MicCapture c = capture;
         // Restart when the selected device changed; the device name is baked in at construction.
         if (c != null) {
             if (java.util.Objects.equals(activeDevice, VoiceSpellsConfig.cCaptureDevice)) return;
             stopCapture();
         }
         activeDevice = VoiceSpellsConfig.cCaptureDevice;
-        com.niko.voicespells.speech.MicCapture fresh =
-            new com.niko.voicespells.speech.MicCapture(activeDevice, VoiceController::onMicFrame16k);
+        com.niko.voicespells.client.MicCapture fresh =
+            new com.niko.voicespells.client.MicCapture(activeDevice, VoiceController::onMicFrame16k);
         capture = fresh;
         fresh.start();
         // The recognizer is loaded lazily elsewhere off the first frame, but starting it here
@@ -1109,14 +1108,14 @@ public final class VoiceController {
     }
 
     public static synchronized void stopCapture() {
-        com.niko.voicespells.speech.MicCapture c = capture;
+        com.niko.voicespells.client.MicCapture c = capture;
         capture = null;
         activeDevice = null;
         if (c != null) c.close();
     }
 
     /** Capture status for the HUD / diagnostics, or null when OpenAL capture is not in use. */
-    public static com.niko.voicespells.speech.MicCapture captureEngine() { return capture; }
+    public static com.niko.voicespells.client.MicCapture captureEngine() { return capture; }
 
     // ----- internal -----
 
@@ -1144,9 +1143,9 @@ public final class VoiceController {
         Path modelPath = com.niko.voicespells.speech.ModelCatalog.resolveModelDir(
             VoiceSpellsConfig.CLIENT.modelPath.get(), VoiceSpellsConfig.cModelId);
         try {
-            if (!com.niko.voicespells.speech.ModelDownloader.looksLikeModel(modelPath)) {
+            if (!com.niko.voicespells.client.ModelDownloader.looksLikeModel(modelPath)) {
                 statusLine = "DOWNLOADING model…";
-                boolean ok = com.niko.voicespells.speech.ModelDownloader.ensureModel(
+                boolean ok = com.niko.voicespells.client.ModelDownloader.ensureModel(
                     modelPath, pct -> statusLine = "DOWNLOADING model " + pct + "%");
                 if (!ok) {
                     statusLine = "ERROR no Vosk model — see chat";
