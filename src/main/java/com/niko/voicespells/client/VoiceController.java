@@ -28,9 +28,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Client-side glue between the microphone, the Vosk recognizer and the server.
  *
- * No keybind: audio is captured continuously by {@link com.niko.voicespells.speech.MicCapture}
- * and fed into Vosk whenever the noise gate is open. Because a capture device never signals
- * end-of-speech, the recognizer is flushed on the gate's open-to-closed edge instead.
+ * Capture is gated, not continuous. {@link com.niko.voicespells.speech.MicCapture} only holds the
+ * device while {@code captureAllowedNow()} says so, which follows {@code gatingMode}: HOLD_ITEM
+ * (the default — a spell focus in hand or Curios), HOLD_KEY, HOLD_KEY_AND_ITEM, or ALWAYS_ON. So
+ * there IS a keybind, and three of the four modes depend on it; this javadoc used to say
+ * "No keybind", which predates the gating work. Frames that pass the gate are fed to Vosk when
+ * the noise gate is open. Because a capture device never signals end-of-speech, the recognizer
+ * is flushed on the noise gate's open-to-closed edge instead.
  *
  * Threading: {@link #onMicFrame16k} runs on the capture thread; phrase callbacks arrive on the same
  * thread, and we hop to the Minecraft client thread before touching world state or sending

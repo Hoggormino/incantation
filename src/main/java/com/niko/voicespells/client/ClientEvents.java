@@ -437,10 +437,17 @@ public final class ClientEvents {
             g.drawString(font, Component.literal(label), x + 6, y + 2, 0xFFEAE6FA, false);
         }
 
-        /** Returns 0..1 cooldown remaining (1.0 = full cooldown active, 0.0 = ready). Returns
-         *  -1 when we can't determine (Iron's Spells absent / API mismatch). All reflection
-         *  is resolved once via {@link IronsSpellsRefl} and cached — the per-frame path is
-         *  just two virtual calls. */
+        /** Returns 0..1 cooldown remaining (1.0 = full cooldown active, 0.0 = ready).
+         *
+         *  <p>Returns {@code 0f} when we can't determine it — Iron's Spells absent, API
+         *  mismatch, reflection failure. This javadoc used to promise -1 for that case; no
+         *  such path exists, and callers were never checking for it. Be aware of what the
+         *  fallback means: 0f reads as "ready", so an unavailable cooldown is indistinguishable
+         *  from no cooldown, and the HUD will happily show a spell as castable when it has no
+         *  idea. That is the safe direction for a hint, but it is a guess, not a reading.
+         *
+         *  <p>All reflection is resolved once via {@link IronsSpellsRefl} and cached — the
+         *  per-frame path is just two virtual calls. */
         private static float getCooldownPercent(String spellId) {
             if (IronsSpellsRefl.GET_COOLDOWNS == null) return 0f;
             try {

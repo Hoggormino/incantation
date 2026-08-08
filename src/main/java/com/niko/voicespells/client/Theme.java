@@ -111,7 +111,7 @@ public final class Theme {
             }
             case SLATE -> {
                 // True neutral grey — zero blue/purple bleed. Distinctly lighter than DARK
-                // and clearly cooler than LIGHT. Reads as gunmetal / aluminum.
+                // than DARK and cooler than MIDNIGHT. Reads as gunmetal / aluminum.
                 C_SCRIM    = 0xCC202020;
                 C_PANEL    = 0xFF454545;     // visibly lighter than DARK's 0x101020
                 C_HEADER_T = 0xFF555555;
@@ -142,8 +142,8 @@ public final class Theme {
                 C_FAINT    = 0xFF6A6390;
             }
         }
-        // Re-derive accent layers immediately if the palette flipped (e.g. LIGHT needs darker
-        // accent variants than DARK). Skipped on first call (before applyPreset has been
+        // Re-derive accent layers immediately if the palette flipped (SLATE needs different
+        // accent variants than MIDNIGHT). Skipped on first call (before applyPreset has been
         // invoked at all) — the static initializer drives that path.
         if (changed) applyPreset(currentPreset);
     }
