@@ -506,6 +506,13 @@ public final class ClientEvents {
 *///?} else {
         public void render(GuiGraphics g, net.minecraft.client.DeltaTracker delta) {
 //?}
+            // Off by default. This effect was written early but never actually drew: the
+            // reflection it depends on (IronsSpellsRefl.IS_CASTING) resolved against a
+            // ClientMagicData class that does not exist, so isCasting() always answered false.
+            // Correcting that class name switched the effect on for the first time in any build,
+            // which is a visual change nobody opted into — hence a config flag rather than a
+            // silent new default. Checked before isCasting() so the common path is one boolean.
+            if (!VoiceSpellsConfig.cCastVignette) return;
             if (!isCasting()) return;
             Minecraft mc = Minecraft.getInstance();
             if (mc.options.hideGui) return;

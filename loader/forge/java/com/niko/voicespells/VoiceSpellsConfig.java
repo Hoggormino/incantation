@@ -158,6 +158,7 @@ public final class VoiceSpellsConfig {
         public final ForgeConfigSpec.BooleanValue enableEchoSfx;
         public final ForgeConfigSpec.BooleanValue streamerMode;
         public final ForgeConfigSpec.BooleanValue sassMode;
+        public final ForgeConfigSpec.BooleanValue castVignette;
         public final ForgeConfigSpec.BooleanValue combatOnly;
         public final ForgeConfigSpec.BooleanValue pauseWhenAfk;
         public final ForgeConfigSpec.IntValue     afkSeconds;
@@ -279,6 +280,14 @@ public final class VoiceSpellsConfig {
             streamerMode = b.define("streamerMode", false);
             b.comment("Sass mode - occasional snarky 'was that even a spell?' toast on miss.");
             sassMode = b.define("sassMode", false);
+            b.comment("Cinematic accent bars top and bottom of the screen, plus corner",
+                      "glows, while you are casting a long spell. Tinted by themePreset,",
+                      "so it is purple on the default ARCANE.",
+                      "Off by default: the code existed since early builds but never ran,",
+                      "because the reflection behind it named a class that does not exist.",
+                      "Fixing that name switched it on for the first time, so leaving it",
+                      "enabled would push a visual change on people who never had it.");
+            castVignette = b.define("castVignette", false);
             b.comment("Combat-only mode - recognition only fires when the player took damage",
                       "from a mob in the last ~10 seconds. Damage you deal does not count.");
             combatOnly = b.define("combatOnly", false);
@@ -421,6 +430,7 @@ public final class VoiceSpellsConfig {
     public static volatile boolean cEchoSfx         = true;
     public static volatile boolean cStreamerMode    = false;
     public static volatile boolean cSassMode        = false;
+    public static volatile boolean cCastVignette    = false;
     public static volatile boolean cCombatOnly      = false;
     public static volatile boolean cPauseWhenAfk    = false;
     public static volatile long    cAfkNanos        = 60L * 1_000_000_000L;
@@ -478,6 +488,7 @@ public final class VoiceSpellsConfig {
         cEchoSfx          = c.enableEchoSfx.get();
         cStreamerMode     = c.streamerMode.get();
         cSassMode         = c.sassMode.get();
+        cCastVignette     = c.castVignette.get();
         cCombatOnly       = c.combatOnly.get();
         cPauseWhenAfk     = c.pauseWhenAfk.get();
         cAfkNanos         = (long) c.afkSeconds.get() * 1_000_000_000L;
