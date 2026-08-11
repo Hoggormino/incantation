@@ -862,9 +862,62 @@ public final class VoiceController {
      */
     private static void dispatchCast(ResourceLocation spellId, float volume,
                                      int totalForTrigger, int streakForTrigger) {
+        // Order matters, and it used to be wrong. ClientCast.tryCast() was tried FIRST and
+        // returned early on success, so on NeoForge — the published target — a voice cast went out
+        // as Iron's Spells' own packet and this mod's server side never saw it. Everything
+        // SpellCaster.cast() does was therefore silently inert: serverBlockedSpells, the
+        // allowlist, maxCastsPerSecond, castMode, the voice_cast advancements, the admin log and
+        // /voicespells follow. An operator could ban a spell, see it listed as banned in the toml,
+        // and still be voice-cast. Forge never had the problem only because tryCast() is a
+        // no-op there.
+        //
+        // So: if the server runs Incantation, always send our own payload and let it validate.
+        // The Iron's Spells path stays for the case it was actually added for — a client casting
+        // on a server that does not have this mod, where there is no server-side config to
+        // enforce in the first place.
+        if (serverHandlesCasts()) {
+            sendCastPayload(spellId, volume, totalForTrigger, streakForTrigger);
+            return;
+        }
         if (ClientCast.tryCast(spellId)) return;
-        // Single place the cast packet leaves the client, so the loader split lives here rather
-        // than at each of the three call sites it used to be duplicated across.
+        // Neither route is open: no server-side Incantation, and Iron's own path unavailable
+        // (spell not in an equipped container, or its internals moved). Sending the payload now
+        // would throw, since the channel is not negotiated.
+        VoiceSpells.LOGGER.debug(
+            "Cast {} not dispatched: server has no Incantation channel and the Iron's Spells "
+            + "client path was unavailable", spellId);
+    }
+
+    /**
+     * True when the connected server can actually handle {@link CastSpellPayload} — i.e. it runs
+     * Incantation and will validate the cast.
+     *
+     * <p>Since 0.10.2 the channel is optional, so a client can be connected to a server without
+     * this mod. Sending into a channel the server never negotiated throws, so this is also what
+     * keeps the fallback from becoming a crash.
+     */
+    private static boolean serverHandlesCasts() {
+        try {
+            net.minecraft.client.multiplayer.ClientPacketListener conn =
+                Minecraft.getInstance().getConnection();
+            if (conn == null) return false;
+//? if forge {
+/*            return Network.CHANNEL.isRemotePresent(conn.getConnection());
+*///?} else {
+            return net.neoforged.neoforge.network.registration.NetworkRegistry
+                .hasChannel(conn, CastSpellPayload.TYPE.id());
+//?}
+        } catch (Throwable t) {
+            // Never let a probe decide a cast fails outright; fall through to the Iron's path.
+            VoiceSpells.LOGGER.debug("Channel probe failed: {}", t.toString());
+            return false;
+        }
+    }
+
+    /** Single place the cast packet leaves the client, so the loader split lives here rather than
+     *  at each of the call sites it used to be duplicated across. */
+    private static void sendCastPayload(ResourceLocation spellId, float volume,
+                                        int totalForTrigger, int streakForTrigger) {
 //? if forge {
 /*        Network.sendToServer(
             new CastSpellPayload(spellId, volume, totalForTrigger, streakForTrigger));
