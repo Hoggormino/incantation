@@ -41,6 +41,22 @@ modId = "irons_spellbooks"
 # Against them the mod loads, indexes nothing, and silently never casts. 3.15.0 is the floor that
 # guarantees the API this mod reflects against.
 mandatory = false
-versionRange = "[1.20.1-3.15.0,)"
+# NO version floor here, deliberately, despite the API note above.
+#
+# "mandatory = false" does NOT mean "ignore the range if the version is wrong" on Forge 1.20.1.
+# ModSorter.verifyDependencyVersions() compiles to
+#     (mv.isMandatory() || modVersions.containsKey(mv.getModId())) && modVersionNotContained(...)
+# so optional exempts an ABSENT mod and nothing else. Iron's Spells installed but BELOW the floor
+# is a hard failure: EarlyLoadingException("failure to validate mod list"), mod loading aborts,
+# and because it happens before the crash reporter exists the player gets no crash report at all —
+# just a dead launch. A floor meant to prevent "loads but never casts" was instead preventing the
+# game from starting, which is far worse and is the likely cause of the 1.20.1 load crashes
+# reported against 0.10.0 and 0.10.1 by users who had tried older Iron's Spells builds.
+#
+# The 1.21.1 build never had this because its range is the loose "[1.21,)".
+#
+# The API floor is real, so it is enforced at runtime instead, where "too old" degrades to a log
+# line and no voice casting rather than a broken installation.
+versionRange = "[1.20.1,)"
 ordering = "AFTER"
 side = "BOTH"

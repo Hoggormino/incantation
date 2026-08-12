@@ -40,6 +40,24 @@ public final class VoiceSpells {
         // per-world and authoritative for SpellCaster).
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, VoiceSpellsServerConfig.SERVER_SPEC);
 
+        // Do not require this mod on the client to join a server that has it.
+        //
+        // The mods.toml `displayTest` key does NOT work here: it is a NeoForge-only key. A grep
+        // over the whole of fmlloader-1.20.1-47.4.10 finds zero occurrences, and ModInfo's
+        // constructor reads modId, namespace, version, displayName, description, logoFile,
+        // logoBlur, updateJSONURL, modUrl, modproperties, features and dependencies — never
+        // displayTest. NightConfig parses it and nothing ever looks at it: no error, no warning,
+        // no effect. So 0.10.2 shipped this fix working on NeoForge and silently inert on Forge.
+        //
+        // The Forge equivalent is this extension point. IGNORESERVERONLY tells the client not to
+        // compare versions, and the (remote, isServer) predicate accepting everything means a
+        // server carrying this mod does not mark itself incompatible to a client without it.
+        ModLoadingContext.get().registerExtensionPoint(
+            net.minecraftforge.fml.IExtensionPoint.DisplayTest.class,
+            () -> new net.minecraftforge.fml.IExtensionPoint.DisplayTest(
+                () -> net.minecraftforge.fml.IExtensionPoint.DisplayTest.IGNORESERVERONLY,
+                (remote, isServer) -> true));
+
         // Admin commands (/voicespells diag, /voicespells rank) — game-bus listener.
         com.niko.voicespells.server.VoiceSpellsCommands.register();
         // Releases SpellCaster's static per-player state on logout / server stop. Matters
