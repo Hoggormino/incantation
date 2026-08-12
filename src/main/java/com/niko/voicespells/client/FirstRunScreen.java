@@ -112,11 +112,19 @@ public final class FirstRunScreen extends Screen {
         // released rather than left open behind the title screen.
         try { VoiceController.setDiagnosticCapture(false); } catch (Throwable ignored) {}
 
-        // Belt-and-braces persistence: TOML write is async and can be lost on a fast exit,
-        // so we also flip a sticky flag in VoiceStats (which writes stats.dat immediately).
-        // The trigger checks BOTH, so as long as either landed the wizard won't re-pop.
+        // Belt-and-braces persistence. saveToDisk() below writes the toml synchronously, but
+        // it can still fail (read-only config dir, IO error), so we also flip a sticky flag in
+        // VoiceStats, which writes stats.dat separately. The trigger checks BOTH, so as long as
+        // either landed the wizard won't re-pop.
+        //
+        // This used to say the toml write was "async and can be lost on a fast exit". That was
+        // not the real mechanism: on NeoForge the write simply never happened at all, because
+        // set() does not persist and nothing called save(). The stats latch is the only reason
+        // the wizard did not greet 1.21.1 players on every single launch.
         try {
             VoiceSpellsConfig.CLIENT.firstRun.set(false);
+            // Persist immediately; the VoiceStats latch is the backup, not the record.
+            VoiceSpellsConfig.saveToDisk();
             VoiceSpellsConfig.refreshCache();
         } catch (Throwable ignored) { /* close even if write fails */ }
         try { VoiceStats.markWizardSeen(); } catch (Throwable ignored) {}

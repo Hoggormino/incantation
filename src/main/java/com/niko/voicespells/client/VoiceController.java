@@ -136,6 +136,8 @@ public final class VoiceController {
         double threshold = Math.max(100, Math.min(3000, mean * 0.5));
         try {
             VoiceSpellsConfig.CLIENT.noiseGateRms.set(threshold);
+            // A calibration the player has to redo every launch is worse than none.
+            VoiceSpellsConfig.saveToDisk();
             VoiceSpellsConfig.refreshCache();
         } catch (Throwable ignored) {}
         lastCalibThreshold = threshold;

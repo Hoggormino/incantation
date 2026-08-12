@@ -311,6 +311,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
         }
         c.themePreset.set(workTheme);
         c.uiPalette.set(workPalette);
+        // set() alone does not reach the disk on NeoForge - see VoiceSpellsConfig.saveToDisk().
+        VoiceSpellsConfig.saveToDisk();
         // set() persists but the reload event is debounced — refresh cache now so the mic
         // thread and the HUD pick up new values immediately, and rebuild the recognizer
         // grammar live so customPhrase / index changes apply without a restart.

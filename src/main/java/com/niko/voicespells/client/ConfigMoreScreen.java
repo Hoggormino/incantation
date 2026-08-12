@@ -223,6 +223,9 @@ public final class ConfigMoreScreen extends Screen {
                 if (applyKv(c, key, val)) applied++;
             } catch (Throwable ignored) {}
         }
+        // An imported profile that evaporates on restart is the worst kind of silent failure -
+        // see VoiceSpellsConfig.saveToDisk().
+        VoiceSpellsConfig.saveToDisk();
         VoiceSpellsConfig.refreshCache();
         VoiceController.onConfigChanged();
         flashStatus("Applied " + applied + " setting(s)", Theme.F_MATCH);

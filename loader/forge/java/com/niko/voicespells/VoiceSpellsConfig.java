@@ -68,6 +68,36 @@ public final class VoiceSpellsConfig {
 
     private VoiceSpellsConfig() {}
 
+    /**
+     * Write the client config to disk.
+     *
+     * <p>MUST be called after any {@code CLIENT.<value>.set(...)}. On NeoForge 21.x,
+     * {@code ModConfigSpec.ConfigValue.set()} does NOT persist: its bytecode writes the
+     * in-memory CommentedConfig, updates the cached value, and returns — there is no call to
+     * ILoadedConfig.save() anywhere in it. NeoForge also stopped building the config as an
+     * autosaving CommentedFileConfig; ConfigTracker now holds a plain CommentedConfig and
+     * persists only through an explicit LoadedConfig.save() (TomlWriter, REPLACE_ATOMIC).
+     *
+     * <p>The effect of the missing call was that every setting written through the config
+     * screen, every alias added, the noise-gate calibration result and the firstRun latch all
+     * survived the session and were silently lost on restart. It looked like it worked, which
+     * is why it went unnoticed. The Forge 1.20.1 build was never affected — there the file
+     * IS built with .autosave() (verified in ConfigFileTypeHandler bytecode) — but the same
+     * helper exists on both sides so callers do not have to care.
+     *
+     * <p>Guarded by isLoaded(): save() throws if no config object is assigned yet, which is
+     * the case if something writes a value before the config has loaded.
+     */
+    public static void saveToDisk() {
+        try {
+            if (CLIENT_SPEC.isLoaded()) CLIENT_SPEC.save();
+        } catch (Throwable t) {
+            com.niko.voicespells.VoiceSpells.LOGGER.warn(
+                "Could not persist client config: {}", t.toString());
+        }
+    }
+
+
     public static void onConfigLoad(ModConfigEvent.Loading e) {
         if (e.getConfig().getType() == ModConfig.Type.CLIENT) {
             cacheColors();

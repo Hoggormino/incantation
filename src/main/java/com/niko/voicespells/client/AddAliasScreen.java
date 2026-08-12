@@ -238,6 +238,8 @@ public final class AddAliasScreen extends Screen {
         String entry = phrase + "=" + spellId;
         if (!updated.contains(entry)) updated.add(entry);
         VoiceSpellsConfig.CLIENT.customPhrases.set(updated);
+        // Without this the new alias is lost on restart - see VoiceSpellsConfig.saveToDisk().
+        VoiceSpellsConfig.saveToDisk();
         VoiceSpellsConfig.refreshCache();
         VoiceController.onConfigChanged();
         onClose();
