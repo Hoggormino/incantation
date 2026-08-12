@@ -27,7 +27,7 @@ public final class VoiceSpells {
         // per-world and authoritative for SpellCaster).
         container.registerConfig(ModConfig.Type.SERVER, VoiceSpellsServerConfig.SERVER_SPEC);
 
-        // Admin commands (/voicespells diag, /voicespells rank) — game-bus listener.
+        // Admin commands (/voicespells diag, follow, top) — game-bus listener.
         com.niko.voicespells.server.VoiceSpellsCommands.register();
         // Releases SpellCaster's static per-player state on logout / server stop. Matters
         // most for the integrated server: statics outlive a world, so without this one

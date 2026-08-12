@@ -707,29 +707,45 @@ public final class SpellCaster {
      *  what their teammate just yelled. */
     private static void broadcastNearby(ServerPlayer player, ResourceLocation spellId) {
         try {
-            if (!com.niko.voicespells.VoiceSpellsServerConfig.SERVER.broadcastVoiceCasts.get()) return;
-            int radius = com.niko.voicespells.VoiceSpellsServerConfig.SERVER.broadcastRadius.get();
+            boolean broadcast = com.niko.voicespells.VoiceSpellsServerConfig.SERVER.broadcastVoiceCasts.get();
+            // /voicespells follow is an admin tool and is deliberately independent of the
+            // broadcastVoiceCasts server option: an admin who explicitly asked to follow casts
+            // should keep receiving them on a server that has ambient broadcasting switched off
+            // (which is the default). So build the message first and only return early when
+            // there is nobody at all to send it to.
+            if (!broadcast && SUBSCRIBERS.isEmpty()) return;
+
             String name = player.getName().getString();
             String pretty = prettyName(spellId);
             Component msg = Component.literal("◈ ")
                 .append(Component.literal(name).withStyle(net.minecraft.ChatFormatting.AQUA))
                 .append(Component.literal(" cast "))
                 .append(Component.literal(pretty).withStyle(net.minecraft.ChatFormatting.LIGHT_PURPLE));
-            if (radius == 0) {
-                player.sendSystemMessage(msg);
-            } else {
-                double r2 = (double) radius * radius;
-                for (ServerPlayer other : player.serverLevel().players()) {
-                    if (other == player) { other.sendSystemMessage(msg); continue; }
-                    if (other.distanceToSqr(player) <= r2) other.sendSystemMessage(msg);
+
+            // Track who already received it, so a subscriber standing next to the caster is not
+            // told twice.
+            java.util.Set<java.util.UUID> sent = new java.util.HashSet<>();
+            if (broadcast) {
+                int radius = com.niko.voicespells.VoiceSpellsServerConfig.SERVER.broadcastRadius.get();
+                if (radius == 0) {
+                    player.sendSystemMessage(msg);
+                    sent.add(player.getUUID());
+                } else {
+                    double r2 = (double) radius * radius;
+                    for (ServerPlayer other : player.serverLevel().players()) {
+                        if (other != player && other.distanceToSqr(player) > r2) continue;
+                        other.sendSystemMessage(msg);
+                        sent.add(other.getUUID());
+                    }
                 }
             }
-            // Also notify any /voicespells follow subscribers regardless of distance —
+            // Notify any /voicespells follow subscribers regardless of distance —
             // intended for admins watching from the lobby.
             if (!SUBSCRIBERS.isEmpty() && player.getServer() != null) {
                 for (java.util.UUID uuid : SUBSCRIBERS) {
+                    if (uuid.equals(player.getUUID()) || sent.contains(uuid)) continue;
                     ServerPlayer admin = player.getServer().getPlayerList().getPlayer(uuid);
-                    if (admin != null && admin != player) admin.sendSystemMessage(msg);
+                    if (admin != null) admin.sendSystemMessage(msg);
                 }
             }
         } catch (Throwable t) {

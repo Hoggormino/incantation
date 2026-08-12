@@ -55,14 +55,16 @@ public final class VoiceStats {
     private static final int FLUSH_EVERY = 5; // disk write every 5 casts
 
     // ---- accessors ---------------------------------------------------------
-    public static synchronized int totalCasts() { return totalCasts; }
-    public static synchronized int longestStreak() { return longestStreak; }
-    public static synchronized long firstCastMs() { return firstCastMs; }
-    public static synchronized long lastCastMs() { return lastCastMs; }
+    public static synchronized int totalCasts() { ensureLoaded(); return totalCasts; }
+    public static synchronized int longestStreak() { ensureLoaded(); return longestStreak; }
+    public static synchronized long firstCastMs() { ensureLoaded(); return firstCastMs; }
+    public static synchronized long lastCastMs() { ensureLoaded(); return lastCastMs; }
     public static synchronized int castCount(String spellId) {
+        ensureLoaded();
         return COUNTS.getOrDefault(spellId, 0);
     }
     public static synchronized long lastCastMsFor(String spellId) {
+        ensureLoaded();
         return LAST_CAST_MS.getOrDefault(spellId, 0L);
     }
 
@@ -85,14 +87,14 @@ public final class VoiceStats {
     }
 
     /** Casts of today's challenge spell since the last day-roll. */
-    public static synchronized int spellOfTheDayCasts() { return sotdCasts; }
+    public static synchronized int spellOfTheDayCasts() { ensureLoaded(); return sotdCasts; }
 
     /** SOTD challenge streak — number of consecutive days the player has completed the
      *  daily challenge. Updated on disk when the day rolls and the previous day's count
      *  reached the target; resets when a day is skipped. */
     private static int  sotdStreak             = 0;
     private static long sotdLastCompletedDay   = 0L;
-    public static synchronized int sotdStreak() { return sotdStreak; }
+    public static synchronized int sotdStreak() { ensureLoaded(); return sotdStreak; }
 
     /** Welcome-wizard "seen" flag, mirrored from the config TOML. We persist it here because
      *  the config TOML write is asynchronous and can be lost if the user exits quickly after
@@ -111,6 +113,7 @@ public final class VoiceStats {
      *  advancements drive the milestone toasts, but this short label is convenient to display
      *  inline (chat prefix, codex header, etc). */
     public static synchronized String currentRank() {
+        ensureLoaded();
         if (totalCasts >= 1000) return "Archmage";
         if (totalCasts >= 200)  return "Magus";
         if (totalCasts >= 50)   return "Adept";
@@ -119,11 +122,13 @@ public final class VoiceStats {
         return "Unranked";
     }
     public static synchronized List<Map.Entry<String, Integer>> topSpells(int limit) {
+        ensureLoaded();
         List<Map.Entry<String, Integer>> entries = new ArrayList<>(COUNTS.entrySet());
         entries.sort(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue).reversed());
         return entries.subList(0, Math.min(limit, entries.size()));
     }
     public static synchronized int distinctSchoolsCast() {
+        ensureLoaded();
         Set<String> set = new HashSet<>();
         for (String id : COUNTS.keySet()) {
             String s = com.niko.voicespells.spells.SpellInfo.of(id).school;
@@ -274,6 +279,7 @@ public final class VoiceStats {
 
     /** Read-only snapshot for the codex screen. */
     public static synchronized List<Map.Entry<String, Integer>> snapshotAll() {
+        ensureLoaded();
         return new ArrayList<>(COUNTS.entrySet());
     }
 

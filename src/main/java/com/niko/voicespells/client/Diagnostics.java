@@ -238,7 +238,7 @@ public final class Diagnostics {
 
     private static Result checkClientMagicData() {
         try {
-            Class<?> cmd = Class.forName("io.redspace.ironsspellbooks.api.magic.ClientMagicData");
+            Class<?> cmd = Class.forName("io.redspace.ironsspellbooks.player.ClientMagicData");
             Method m = cmd.getMethod("isCasting");
             m.invoke(null);
             return new Result("ClientMagicData", Status.OK,

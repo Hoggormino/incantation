@@ -20,9 +20,12 @@ import java.util.List;
 /**
  * Server-side /voicespells admin commands.
  *
- *  - {@code /voicespells diag} prints the most recent voice-triggered casts on this server,
- *    one line per cast, newest first. Requires operator permission level 2.
- *  - {@code /voicespells rank} prints the current server config snapshot.
+ * All of these require operator permission level 2.
+ *
+ *  - {@code /voicespells diag} prints the live server config plus the most recent
+ *    voice-triggered casts on this server, one line per cast, newest first.
+ *  - {@code /voicespells follow} toggles a subscription to voice-cast events at any distance.
+ *  - {@code /voicespells top} prints the voice-cast leaderboard.
  *
  * Registered manually on {@link NeoForge#EVENT_BUS} from {@link com.niko.voicespells.VoiceSpells}'
  * constructor (the @EventBusSubscriber bus enum is deprecated in NeoForge 1.21).
@@ -47,6 +50,21 @@ public final class VoiceSpellsCommands {
 
         root.then(Commands.literal("diag").executes(ctx -> {
             CommandSourceStack src = ctx.getSource();
+            // Live server settings. This used to be two separate commands — "rank", which
+            // printed no rank of any kind, and "reload", which reloaded nothing (the config
+            // is reloaded by NeoForge's file watcher; the command only announced that fact).
+            // Both printed exactly these two values, and "reload" additionally collided with
+            // the client-side /voicespells reload, which does perform a real reload. Folded
+            // into diag, which is where an admin looks for server state anyway.
+            int max = com.niko.voicespells.VoiceSpellsServerConfig.SERVER.maxCastsPerSecond.get();
+            String mode = com.niko.voicespells.VoiceSpellsServerConfig.SERVER.castMode.get().name();
+            src.sendSuccess(() -> Component.literal(
+                "Server config — castMode=" + mode + ", maxCastsPerSecond=" + max)
+                .withStyle(ChatFormatting.AQUA), false);
+            src.sendSuccess(() -> Component.literal(
+                "  (the toml is re-read automatically when it changes on disk)")
+                .withStyle(ChatFormatting.DARK_GRAY), false);
+
             List<String> recent = SpellCaster.recentLog();
             if (recent.isEmpty()) {
                 src.sendSuccess(() -> Component.literal("No voice casts logged this session.")
@@ -97,31 +115,6 @@ public final class VoiceSpellsCommands {
                         .withStyle(ChatFormatting.GRAY), false);
                 }
             }
-            return 1;
-        }));
-
-        root.then(Commands.literal("reload").executes(ctx -> {
-            // NeoForge's ConfigTracker watches the toml file and auto-reloads on disk change.
-            // Print a confirmation so the admin knows the file watcher is active; we re-read
-            // the live values defensively to surface anything that might have been edited
-            // since the last reload event.
-            int max = com.niko.voicespells.VoiceSpellsServerConfig.SERVER.maxCastsPerSecond.get();
-            String mode = com.niko.voicespells.VoiceSpellsServerConfig.SERVER.castMode.get().name();
-            ctx.getSource().sendSuccess(() -> Component.literal(
-                "Server config is auto-reloaded by the file watcher when the toml changes.\n"
-                + "  current castMode=" + mode + ", maxCastsPerSecond=" + max)
-                .withStyle(ChatFormatting.AQUA), false);
-            return 1;
-        }));
-
-        root.then(Commands.literal("rank").executes(ctx -> {
-            // Tiny convenience — print the current per-process rate-limit setting so admins
-            // can confirm their server config is loaded.
-            int max = com.niko.voicespells.VoiceSpellsServerConfig.SERVER.maxCastsPerSecond.get();
-            String mode = com.niko.voicespells.VoiceSpellsServerConfig.SERVER.castMode.get().name();
-            ctx.getSource().sendSuccess(() -> Component.literal(
-                "VoiceSpells server config — castMode=" + mode + ", maxCastsPerSecond=" + max)
-                .withStyle(ChatFormatting.AQUA), false);
             return 1;
         }));
 

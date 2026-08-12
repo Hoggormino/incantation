@@ -188,7 +188,6 @@ public final class FirstRunScreen extends Screen {
         drawLines(g, x, y + 14, new String[] {
             "Cast Iron's Spells by speaking their",
             "names out loud — no other mod needed.",
-            "microphone.",
             "",
             "No keybinds — just talk like normal.",
             "When you say a spell name you have",

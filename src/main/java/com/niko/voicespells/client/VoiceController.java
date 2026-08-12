@@ -109,6 +109,25 @@ public final class VoiceController {
         if (System.nanoTime() - calibStartNanos >= CALIB_DURATION_NANOS) finishCalibration();
     }
 
+    /**
+     * Ends a calibration whose window has elapsed, from the client tick.
+     *
+     * <p>Calibration used to be closed only by {@link #sampleCalibration}, i.e. only by the
+     * arrival of the next microphone frame. If capture stopped delivering frames — mic muted at
+     * the OS level, device unplugged, or capture failing to start at all — nothing ever ran the
+     * end-of-window check: {@code calibrating} stayed true indefinitely, the HUD sat on
+     * "calibrating", and casting stayed suppressed until the game was restarted. Precisely the
+     * situation a user reaches for calibration in is the one where no frames arrive.
+     *
+     * <p>Ticking it here means the window always closes on time. With no samples the mean is 0
+     * and the clamp in {@link #finishCalibration} yields the 100 floor, which leaves the gate
+     * effectively open rather than deaf — the safe direction when we learned nothing.
+     */
+    public static void tickCalibration() {
+        if (!calibrating) return;
+        if (System.nanoTime() - calibStartNanos >= CALIB_DURATION_NANOS) finishCalibration();
+    }
+
     private static void finishCalibration() {
         double mean = calibCount > 0 ? calibSum / calibCount : 0;
         // Half the mean works well as a gate floor — it sits between observed silence and
@@ -640,14 +659,17 @@ public final class VoiceController {
      */
     public static void onConfigChanged() {
         SpellIndex.reindex();
+        // reindex() rebuilds the phrase map from scratch, which throws away the respellings
+        // registerRespellings() added at model load — it derives phrases only from spell paths,
+        // the hardcoded ALIASES map and the user's own phrases, and never consults the Lexicon.
+        // Without this line, the first config save of a session permanently drops the spaced
+        // spellings for every name the speech model cannot pronounce, and those spells go quietly
+        // uncastable until the game restarts. Nothing else calls it: loadVosk() is the only other
+        // caller and the model is never reloaded in-process. Safe to repeat — it no-ops when no
+        // model vocabulary is loaded and uses putIfAbsent, so custom phrases still win.
+        SpellIndex.registerRespellings();
         SpellInfo.clearCache(); // drop cached display names so spell renames / aliases re-resolve
-        VoskSession s = session;
-        if (s != null) {
-            Thread t = new Thread(() -> s.rebuildGrammar(currentGrammar()),
-                "VoiceSpells-Grammar-Reload");
-            t.setDaemon(true);
-            t.start();
-        }
+        rebuildRecognizer("VoiceSpells-Grammar-Reload", VoiceController::currentGrammar);
     }
 
     // Resolved once at class init — looked up every tick via tryDrainCastQueue, and once per
@@ -657,7 +679,7 @@ public final class VoiceController {
     static {
         java.lang.reflect.Method m = null;
         try {
-            Class<?> cmd = Class.forName("io.redspace.ironsspellbooks.api.magic.ClientMagicData");
+            Class<?> cmd = Class.forName("io.redspace.ironsspellbooks.player.ClientMagicData");
             m = cmd.getMethod("isCasting");
         } catch (Throwable ignored) {}
         IS_CASTING_M = m;
@@ -682,7 +704,7 @@ public final class VoiceController {
     private static boolean clientCanCast(ResourceLocation spellId) {
         if (!VoiceSpellsConfig.cClientPreflight) return true;
         try {
-            Class<?> cmdCls = Class.forName("io.redspace.ironsspellbooks.api.magic.ClientMagicData");
+            Class<?> cmdCls = Class.forName("io.redspace.ironsspellbooks.player.ClientMagicData");
             Class<?> registryCls = Class.forName("io.redspace.ironsspellbooks.api.registry.SpellRegistry");
             Class<?> spellCls = Class.forName("io.redspace.ironsspellbooks.api.spells.AbstractSpell");
 
@@ -731,7 +753,7 @@ public final class VoiceController {
     private static ResourceLocation pickCastableFromLoadout(List<ResourceLocation> ids) {
         if (ids == null || ids.isEmpty()) return null;
         try {
-            Class<?> cmdCls      = Class.forName("io.redspace.ironsspellbooks.api.magic.ClientMagicData");
+            Class<?> cmdCls      = Class.forName("io.redspace.ironsspellbooks.player.ClientMagicData");
             Class<?> registryCls = Class.forName("io.redspace.ironsspellbooks.api.registry.SpellRegistry");
             Class<?> spellCls    = Class.forName("io.redspace.ironsspellbooks.api.spells.AbstractSpell");
 
@@ -969,14 +991,33 @@ public final class VoiceController {
      * this is called from the client tick.
      */
     private static void rebuildGrammarForOwned(java.util.Set<String> owned) {
+        java.util.Set<String> snapshot = java.util.Set.copyOf(owned);
+        rebuildRecognizer("VoiceSpells-Grammar",
+            () -> SpellIndex.phrasesFor(snapshot, VoiceSpellsConfig.cGrammarFloor));
+    }
+
+    /**
+     * The single place a recognizer is rebuilt outside the transcription toggle itself.
+     *
+     * <p>Every rebuild has to respect the current mode. Both callers used to go straight to
+     * {@code rebuildGrammar(...)}, so anything that triggered a rebuild while free dictation was
+     * on silently dropped the player back onto the spell grammar: the periodic owned-spell
+     * rescan did it on its own timer, and saving the config did it too. Dictation is what the
+     * alias-capture flow reads phrases from, so it would stop producing usable text partway
+     * through with nothing on screen to explain why. Routing both through here means the mode
+     * is re-checked at the moment the rebuild actually runs.
+     *
+     * <p>Off-thread because constructing a Recognizer blocks and these are called from the
+     * client tick. The grammar is supplied lazily so it is computed on that thread too.
+     */
+    private static void rebuildRecognizer(String threadName,
+                                          java.util.function.Supplier<java.util.List<String>> grammar) {
         VoskSession s = session;
         if (s == null) return;
-        java.util.Set<String> snapshot = java.util.Set.copyOf(owned);
         Thread t = new Thread(() -> {
-            java.util.List<String> phrases =
-                SpellIndex.phrasesFor(snapshot, VoiceSpellsConfig.cGrammarFloor);
-            s.rebuildGrammar(phrases);
-        }, "VoiceSpells-Grammar");
+            if (transcription) s.rebuildUnconstrained();
+            else               s.rebuildGrammar(grammar.get());
+        }, threadName);
         t.setDaemon(true);
         t.start();
     }

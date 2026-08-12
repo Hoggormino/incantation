@@ -57,8 +57,6 @@ public final class MicCapture implements AutoCloseable {
     private volatile boolean running;
     private volatile long device = 0L;
 
-    /** Latest RMS (0..1-ish, scaled off 16-bit full range) for the HUD level meter. */
-    private volatile float level = 0f;
     /** Human-readable state for the HUD / diagnostics: "closed", "capturing", "no device", … */
     private volatile String status = "closed";
     /** Set once per failure episode so a missing mic warns once, not every retry. */
@@ -96,9 +94,7 @@ public final class MicCapture implements AutoCloseable {
         }
     }
 
-    public float level()      { return level; }
     public String status()    { return status; }
-    public boolean isRunning() { return running; }
 
     /** Start the capture thread. Safe to call repeatedly; a second call is a no-op. */
     public synchronized void start() {
@@ -125,7 +121,6 @@ public final class MicCapture implements AutoCloseable {
         }
         closeDevice();
         status = "closed";
-        level = 0f;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -174,7 +169,6 @@ public final class MicCapture implements AutoCloseable {
 
                 ShortBuffer sb = pcm.asShortBuffer();
                 sb.get(frame, 0, CHUNK_SAMPLES);
-                level = rms(frame);
 
                 // Copy before handing off: `frame` is reused next iteration, so passing it
                 // directly would let the consumer observe audio being overwritten underneath it.
@@ -246,7 +240,6 @@ public final class MicCapture implements AutoCloseable {
         }
         closeDevice();
         status = "reconnecting";
-        level = 0f;
     }
 
     private void closeDevice() {
@@ -281,14 +274,6 @@ public final class MicCapture implements AutoCloseable {
         if (warnedThisEpisode) return;
         warnedThisEpisode = true;
         VoiceSpells.LOGGER.warn(message);
-    }
-
-    private static float rms(short[] frame) {
-        long sum = 0;
-        for (short s : frame) sum += (long) s * s;
-        double mean = (double) sum / frame.length;
-        // Scale against 16-bit full range so the value is comparable across devices.
-        return (float) Math.min(1.0, Math.sqrt(mean) / 32768.0 * 4.0);
     }
 
     private static void sleep(long ms) {

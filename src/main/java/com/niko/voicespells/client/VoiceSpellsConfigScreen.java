@@ -61,6 +61,18 @@ public final class VoiceSpellsConfigScreen extends Screen {
      *  when the player picks a large Minecraft GUI Scale. Recomputed every {@link #init()}. */
     private int panelX, panelY, panelW, panelH;
 
+    /** Theme and palette as they were when the screen opened, plus whether Save ran.
+     *
+     *  <p>Cycling the theme or palette applies it immediately so the player can see the change
+     *  on the panel in front of them. That preview is a live global mutation of {@link Theme},
+     *  not screen-local state, so leaving via Cancel or Escape used to walk away with the
+     *  previewed look still applied while the config on disk said something else — the whole
+     *  UI stayed the wrong colour until something happened to reload the config. Restoring
+     *  these in {@link #onClose()} makes Cancel mean cancel. */
+    private VoiceSpellsConfig.ThemePreset origTheme;
+    private VoiceSpellsConfig.UiPalette origPalette;
+    private boolean saved = false;
+
     public VoiceSpellsConfigScreen(Screen parent) {
         super(Component.translatable("voicespells.config.title"));
         this.parent = parent;
@@ -81,6 +93,9 @@ public final class VoiceSpellsConfigScreen extends Screen {
             workOpacityPct = (int) Math.round(c.globalOpacity.get() * 100);
             workTheme      = c.themePreset.get();
             workPalette    = c.uiPalette.get();
+            // Remembered so Cancel can undo the live theme preview — see onClose().
+            origTheme      = workTheme;
+            origPalette    = workPalette;
             initializedOnce = true;
         }
 
@@ -301,11 +316,17 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // grammar live so customPhrase / index changes apply without a restart.
         VoiceSpellsConfig.refreshCache();
         VoiceController.onConfigChanged();
+        saved = true;
         onClose();
     }
 
     @Override
     public void onClose() {
+        // Cancel / Escape: drop the live theme preview back to what is actually persisted.
+        if (!saved) {
+            if (origPalette != null) Theme.applyPalette(origPalette);
+            if (origTheme != null) Theme.applyPreset(origTheme);
+        }
         if (minecraft != null) minecraft.setScreen(parent);
     }
 

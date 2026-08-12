@@ -266,6 +266,11 @@ public final class ClientEvents {
         // the OpenAL device is closed, not merely ignored, while you are tabbed out, paused, or on
         // a menu. Cheap to evaluate and idempotent, so running it every tick is fine.
         VoiceController.tickCaptureSuspension();
+        // Above the mc.player null-check on purpose: calibration can be started from the
+        // first-run wizard or the config screen with no world loaded, and its window has to be
+        // able to close there too. Also the only thing that ends calibration when the mic
+        // delivers no frames at all — see VoiceController.tickCalibration.
+        VoiceController.tickCalibration();
         if (mc.player == null) {
             firstRunEligibleSinceMs = 0L; // reset settle timer between worlds
             return;
@@ -355,34 +360,55 @@ public final class ClientEvents {
         private static final String CLIENT_MAGIC_DATA =
             "io.redspace.ironsspellbooks.player.ClientMagicData";
 
-        static final java.lang.reflect.Method GET_COOLDOWNS;
+        /** {@code ClientMagicData.getCooldownPercent(AbstractSpell)} — static, returns
+         *  remaining/total, so 1.0 right after a cast decaying to exactly 0 when ready. */
+        static final java.lang.reflect.Method GET_CD_PERCENT;
+        /** {@code SpellRegistry.getSpell(String)} — static, resolves an id to the AbstractSpell
+         *  that {@link #GET_CD_PERCENT} needs. */
+        static final java.lang.reflect.Method GET_SPELL;
+        /** {@code AbstractSpell.getSpellId()} — used only to reject the NoneSpell sentinel. */
+        static final java.lang.reflect.Method SPELL_ID;
         static final java.lang.reflect.Method IS_CASTING;
-        static volatile java.lang.reflect.Method GET_PCT;        // (String) -> float
-        static volatile java.lang.reflect.Method IS_ON_COOLDOWN; // (String) -> boolean fallback
-        static volatile boolean cooldownReady = false;
+
+        /** spellId → AbstractSpell. The indicator resolves the same handful of ids every frame;
+         *  a registry lookup per frame would be wasteful. Values are registry singletons. */
+        static final java.util.Map<String, Object> SPELL_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
+
         static {
-            java.lang.reflect.Method getCd = null;
+            java.lang.reflect.Method pct = null;
             java.lang.reflect.Method isCast = null;
+            java.lang.reflect.Method getSpell = null;
+            java.lang.reflect.Method spellId = null;
             try {
                 Class<?> cmd = Class.forName(CLIENT_MAGIC_DATA);
-                for (String m : new String[]{ "getPlayerCooldowns", "getCooldowns" }) {
-                    try { getCd = cmd.getMethod(m); break; }
-                    catch (NoSuchMethodException ignored) {}
+                // Matched by name + arity rather than by parameter type, so we never have to load
+                // AbstractSpell ourselves just to describe the signature.
+                for (java.lang.reflect.Method m : cmd.getMethods()) {
+                    if (m.getName().equals("getCooldownPercent")
+                        && m.getParameterCount() == 1
+                        && java.lang.reflect.Modifier.isStatic(m.getModifiers())) { pct = m; break; }
                 }
                 try { isCast = cmd.getMethod("isCasting"); }
                 catch (NoSuchMethodException ignored) {}
+
+                Class<?> reg = Class.forName("io.redspace.ironsspellbooks.api.registry.SpellRegistry");
+                getSpell = reg.getMethod("getSpell", String.class);
+                spellId = Class.forName("io.redspace.ironsspellbooks.api.spells.AbstractSpell")
+                    .getMethod("getSpellId");
             } catch (Throwable t) {
                 // Never silently: a swallowed failure here is invisible for releases at a time.
                 // Debug rather than warn — a missing optional integration is not the user's problem.
-                VoiceSpells.LOGGER.debug("ClientMagicData reflection unavailable ({}); "
+                VoiceSpells.LOGGER.debug("Iron's Spells reflection unavailable ({}); "
                     + "cooldown and is-casting hints are disabled", t.toString());
             }
-            GET_COOLDOWNS = getCd;
+            GET_CD_PERCENT = pct;
+            GET_SPELL = getSpell;
+            SPELL_ID = spellId;
             IS_CASTING = isCast;
-            if (getCd == null || isCast == null) {
-                VoiceSpells.LOGGER.debug("ClientMagicData resolved but members missing "
-                    + "(cooldowns={}, isCasting={}); hints degrade to defaults",
-                    getCd != null, isCast != null);
+            if (pct == null || isCast == null || getSpell == null) {
+                VoiceSpells.LOGGER.debug("Iron's Spells resolved but members missing "
+                    + "(cooldownPercent={}, isCasting={}, getSpell={}); hints degrade to defaults",
+                    pct != null, isCast != null, getSpell != null);
             }
         }
         private IronsSpellsRefl() {}
@@ -404,7 +430,11 @@ public final class ClientEvents {
             Minecraft mc = Minecraft.getInstance();
             if (mc.player == null || mc.options.hideGui) return;
             float percent = getCooldownPercent(spellId);
-            if (percent <= 0f || percent >= 1f) return; // 1.0 = no cooldown, 0 = unknown
+            // percent is the fraction of the cooldown REMAINING. 0 means ready (or unknown —
+            // see getCooldownPercent), so there is nothing to show; > 1 can't happen but is
+            // clamped as a guard.
+            if (percent <= 0f) return;
+            percent = Math.min(1f, percent);
             int w = mc.getWindow().getGuiScaledWidth();
             int h = mc.getWindow().getGuiScaledHeight();
             String name = com.niko.voicespells.spells.SpellInfo.of(spellId).name;
@@ -412,7 +442,10 @@ public final class ClientEvents {
                 int colon = spellId.indexOf(':');
                 name = (colon >= 0 ? spellId.substring(colon + 1) : spellId).replace('_', ' ');
             }
-            String label = name + "  " + Math.round(percent * 100) + "%";
+            // Shown as readiness, not as remaining, so the number and the bar below it move in
+            // the same direction: both climb to 100% as the spell comes off cooldown.
+            int ready = Math.round((1f - percent) * 100);
+            String label = name + "  " + ready + "%";
             Font font = mc.font;
             int tw = font.width(label);
             int chipW = tw + 12;
@@ -437,7 +470,8 @@ public final class ClientEvents {
             g.drawString(font, Component.literal(label), x + 6, y + 2, 0xFFEAE6FA, false);
         }
 
-        /** Returns 0..1 cooldown remaining (1.0 = full cooldown active, 0.0 = ready).
+        /** Returns the 0..1 fraction of the cooldown still to run: 1.0 the instant the spell is
+         *  cast, decaying to exactly 0 the moment it is ready again.
          *
          *  <p>Returns {@code 0f} when we can't determine it — Iron's Spells absent, API
          *  mismatch, reflection failure. This javadoc used to promise -1 for that case; no
@@ -446,39 +480,45 @@ public final class ClientEvents {
          *  from no cooldown, and the HUD will happily show a spell as castable when it has no
          *  idea. That is the safe direction for a hint, but it is a guess, not a reading.
          *
-         *  <p>All reflection is resolved once via {@link IronsSpellsRefl} and cached — the
-         *  per-frame path is just two virtual calls. */
+         *  <p>This used to probe {@code PlayerCooldowns} for a {@code (String)} overload of
+         *  {@code getCooldownPercent} / {@code isOnCooldown}. No such overload exists on either
+         *  1.20.1 or 1.21.1 — both take an {@code AbstractSpell} (verified with javap against
+         *  irons-spells-n-spellbooks 3.16.2 for both versions) — so neither handle ever bound,
+         *  every call fell through to {@code return 0f}, and this indicator had never once
+         *  rendered. We now resolve the spell through {@code SpellRegistry.getSpell(String)}
+         *  and call the static {@code ClientMagicData.getCooldownPercent(AbstractSpell)}. */
         private static float getCooldownPercent(String spellId) {
-            if (IronsSpellsRefl.GET_COOLDOWNS == null) return 0f;
+            if (IronsSpellsRefl.GET_CD_PERCENT == null || IronsSpellsRefl.GET_SPELL == null) return 0f;
             try {
-                Object cooldowns = IronsSpellsRefl.GET_COOLDOWNS.invoke(null);
-                if (cooldowns == null) return 0f;
-                if (!IronsSpellsRefl.cooldownReady) {
-                    // First time we see a non-null cooldowns object — bind the per-spell
-                    // method handles. Synchronized once; subsequent frames skip this branch.
-                    synchronized (IronsSpellsRefl.class) {
-                        if (!IronsSpellsRefl.cooldownReady) {
-                            Class<?> cls = cooldowns.getClass();
-                            for (String m : new String[]{ "getCooldownPercent", "getCurrentCooldownPercent" }) {
-                                try { IronsSpellsRefl.GET_PCT = cls.getMethod(m, String.class); break; }
-                                catch (NoSuchMethodException ignored) {}
-                            }
-                            try { IronsSpellsRefl.IS_ON_COOLDOWN = cls.getMethod("isOnCooldown", String.class); }
-                            catch (NoSuchMethodException ignored) {}
-                            IronsSpellsRefl.cooldownReady = true;
-                        }
-                    }
-                }
-                if (IronsSpellsRefl.GET_PCT != null) {
-                    Object v = IronsSpellsRefl.GET_PCT.invoke(cooldowns, spellId);
-                    if (v instanceof Number n) return Math.max(0f, Math.min(1f, n.floatValue()));
-                }
-                if (IronsSpellsRefl.IS_ON_COOLDOWN != null) {
-                    boolean onCd = (boolean) IronsSpellsRefl.IS_ON_COOLDOWN.invoke(cooldowns, spellId);
-                    return onCd ? 0.5f : 0f;
+                Object spell = resolveSpell(spellId);
+                if (spell == null) return 0f;
+                Object v = IronsSpellsRefl.GET_CD_PERCENT.invoke(null, spell);
+                if (v instanceof Number n) {
+                    float f = n.floatValue();
+                    // NaN would sail past both bounds checks in render() and print as "NaN%".
+                    if (Float.isNaN(f)) return 0f;
+                    return Math.max(0f, Math.min(1f, f));
                 }
             } catch (Throwable ignored) {}
             return 0f;
+        }
+
+        /** Registry lookup for an id, memoised. Returns null for ids Iron's Spells doesn't know:
+         *  it answers unknown ids with a NoneSpell sentinel rather than null, so the result is
+         *  only accepted when its own id round-trips (same check {@code SpellInfo} makes). */
+        private static Object resolveSpell(String spellId) {
+            Object cached = IronsSpellsRefl.SPELL_CACHE.get(spellId);
+            if (cached != null) return cached;
+            try {
+                Object spell = IronsSpellsRefl.GET_SPELL.invoke(null, spellId);
+                if (spell == null) return null;
+                if (IronsSpellsRefl.SPELL_ID != null
+                    && !spellId.equals(IronsSpellsRefl.SPELL_ID.invoke(spell))) return null;
+                IronsSpellsRefl.SPELL_CACHE.put(spellId, spell);
+                return spell;
+            } catch (Throwable ignored) {
+                return null;
+            }
         }
     }
 //? if forge {
@@ -592,7 +632,7 @@ public final class ClientEvents {
          *   <li><b>listening</b> (bright, pulsing) — audio is passing the gate and reaching Vosk.</li>
          * </ul>
          */
-        private void drawMicChip(GuiGraphics g, Font font, int x, int y, boolean isBottom) {
+        private void drawMicChip(GuiGraphics g, Font font, int anchorX, int y, boolean isBottom) {
             boolean armed = VoiceController.isArmed();
             float level = VoiceController.audioLevel();
             boolean hot = armed && level > 0.02f;
@@ -600,6 +640,11 @@ public final class ClientEvents {
             int dotColor = !armed ? Theme.C_FAINT
                          : hot    ? Theme.withPulsedAlpha(Theme.C_ACCENT_BRIGHT & 0x00FFFFFF, 0.75f, 1.0f)
                                   : Theme.C_ACCENT_SOFT;
+
+            boolean calibrating = VoiceController.isTranscribing();
+            int chipW = PAD_X + DOT_SIZE + 4 + METER_W
+                      + (calibrating ? 4 + font.width("calibrating") : 0) + PAD_X;
+            int x = alignX(anchorX, chipW);
 
             // Sits opposite the toast so the two never overlap as history stacks up.
             int chipY = y + (isBottom ? CHIP_H + 3 : -(CHIP_H + 3));
@@ -619,7 +664,7 @@ public final class ClientEvents {
 
             // Calibration mode replaces casting entirely, so say so rather than letting the chip
             // imply spells are about to fire.
-            if (VoiceController.isTranscribing()) {
+            if (calibrating) {
                 g.drawString(font, "calibrating", meterX + METER_W + 4,
                     chipY + (CHIP_H - font.lineHeight) / 2 + 1, Theme.C_MUTED, false);
             }
@@ -647,10 +692,17 @@ public final class ClientEvents {
             int offX = VoiceSpellsConfig.cHudOffsetX;
             int offY = VoiceSpellsConfig.cHudOffsetY;
 
+            // On a right-hand corner the anchor is the RIGHT edge of the HUD block and every
+            // element subtracts its own width (see alignX). Passing 0 as the width here is
+            // therefore correct — it is what makes anchorX the screen edge minus the offset.
+            // Each chip has a different width, so a single shared width could not right-align
+            // them all; the alignment happens per element instead.
             int anchorX = anchorX(corner, screenW, 0, offX);
             int anchorY = anchorY(corner, screenH, CHIP_H, offY);
             boolean isBottom = (corner == VoiceSpellsConfig.Corner.BOTTOM_LEFT
                              || corner == VoiceSpellsConfig.Corner.BOTTOM_RIGHT);
+            rightAligned = (corner == VoiceSpellsConfig.Corner.TOP_RIGHT
+                         || corner == VoiceSpellsConfig.Corner.BOTTOM_RIGHT);
 
             drawMicChip(g, font, anchorX, anchorY, isBottom);
             drawToastIfActive(g, font, anchorX, anchorY);
@@ -713,6 +765,22 @@ public final class ClientEvents {
             //  via voicespells:voice_cast and the JSONs under data/voicespells/advancement/.)
         }
 
+        /** True while the HUD is anchored to a right-hand corner. Set once per frame at the top
+         *  of render() and read by {@link #alignX}. Safe as a static: the HUD renders only on
+         *  the client render thread, one frame at a time. */
+        private static boolean rightAligned = false;
+
+        /** Turns the frame's anchor into the left edge of an element {@code w} pixels wide.
+         *
+         *  <p>Every chip draws left-to-right from the x it is given. On a left corner the anchor
+         *  is already the left edge, so it passes through. On a right corner the anchor is the
+         *  screen's right edge, so the element has to be pulled back by its own width — without
+         *  this, the entire HUD (mic chip, toasts, history, suggestions) rendered off the right
+         *  side of the screen and was invisible on both right-hand corner settings. */
+        private static int alignX(int anchorX, int w) {
+            return rightAligned ? anchorX - w : anchorX;
+        }
+
         private static int anchorX(VoiceSpellsConfig.Corner corner, int screenW, int chipW, int offX) {
             switch (corner) {
                 case TOP_RIGHT:
@@ -756,7 +824,7 @@ public final class ClientEvents {
             int textW = font.width(text);
             int toastW = PAD_X + textW + PAD_X;
             // With no persistent chip beneath us, the toast sits right at the anchor.
-            int toastX = anchorX;
+            int toastX = alignX(anchorX, toastW);
             int toastY = anchorY;
 
             drawChip(g, toastX, toastY, toastW, CHIP_H, alpha);
@@ -804,11 +872,12 @@ public final class ClientEvents {
                 int toastW = PAD_X + font.width(text) + PAD_X;
                 int yOff = (isBottom ? -1 : 1) * (CHIP_H + 3) * i;
                 int toastY = anchorY + yOff;
+                int toastX = alignX(anchorX, toastW);
 
-                drawChip(g, anchorX, toastY, toastW, CHIP_H, alpha);
+                drawChip(g, toastX, toastY, toastW, CHIP_H, alpha);
                 int color = withAlpha(VoiceSpellsConfig.cTextMuted, alpha);
                 int textY = toastY + (CHIP_H - 8) / 2;
-                g.drawString(font, Component.literal(text), anchorX + PAD_X, textY, color, false);
+                g.drawString(font, Component.literal(text), toastX + PAD_X, textY, color, false);
             }
         }
 
@@ -818,10 +887,11 @@ public final class ClientEvents {
                                            String heard) {
             String text = "» " + (heard.length() > 28 ? heard.substring(0, 27) + "…" : heard);
             int toastW = PAD_X + font.width(text) + PAD_X;
-            drawChip(g, anchorX, anchorY, toastW, CHIP_H, 0.55f);
+            int x = alignX(anchorX, toastW);
+            drawChip(g, x, anchorY, toastW, CHIP_H, 0.55f);
             int color = withAlpha(VoiceSpellsConfig.cTextMuted, 0.85f);
             int textY = anchorY + (CHIP_H - 8) / 2;
-            g.drawString(font, Component.literal(text), anchorX + PAD_X, textY, color, false);
+            g.drawString(font, Component.literal(text), x + PAD_X, textY, color, false);
         }
 
         /** "Did you mean X?" alias-suggestion chip — appears after a near-miss recognition,
@@ -837,11 +907,12 @@ public final class ClientEvents {
 
             String text = "? " + capitalize(s.candidateDisplay()) + "  [press Y]";
             int toastW = PAD_X + font.width(text) + PAD_X;
-            drawChip(g, anchorX, anchorY, toastW, CHIP_H, alpha);
+            int x = alignX(anchorX, toastW);
+            drawChip(g, x, anchorY, toastW, CHIP_H, alpha);
             // Bright accent text — this is actionable, treat it differently from a miss toast.
             int color = withAlpha(Theme.C_ACCENT, alpha);
             int textY = anchorY + (CHIP_H - 8) / 2;
-            g.drawString(font, Component.literal(text), anchorX + PAD_X, textY, color, false);
+            g.drawString(font, Component.literal(text), x + PAD_X, textY, color, false);
         }
 
         /** Persistent chip while a spell is queued — gives the player visible confirmation
@@ -853,10 +924,11 @@ public final class ClientEvents {
             int extra = Math.max(0, VoiceController.queuedCount() - 1);
             String text = extra == 0 ? "▷ " + body : "▷ " + body + "  (+" + extra + ")";
             int toastW = PAD_X + font.width(text) + PAD_X;
-            drawChip(g, anchorX, anchorY, toastW, CHIP_H, 0.75f);
+            int x = alignX(anchorX, toastW);
+            drawChip(g, x, anchorY, toastW, CHIP_H, 0.75f);
             int color = withAlpha(VoiceSpellsConfig.cTextToast, 0.85f);
             int textY = anchorY + (CHIP_H - 8) / 2;
-            g.drawString(font, Component.literal(text), anchorX + PAD_X, textY, color, false);
+            g.drawString(font, Component.literal(text), x + PAD_X, textY, color, false);
         }
 
         private static void drawMissToastIfActive(GuiGraphics g, Font font, int anchorX, int anchorY) {
@@ -879,9 +951,10 @@ public final class ClientEvents {
 
             String text = "? " + (VoiceSpellsConfig.cStreamerMode ? obscure(heard) : heard);
             int toastW = PAD_X + font.width(text) + PAD_X;
-            drawChip(g, anchorX, anchorY, toastW, CHIP_H, alpha * 0.85f);
+            int x = alignX(anchorX, toastW);
+            drawChip(g, x, anchorY, toastW, CHIP_H, alpha * 0.85f);
             int color = withAlpha(VoiceSpellsConfig.cTextMuted, alpha);
-            g.drawString(font, Component.literal(text), anchorX + PAD_X,
+            g.drawString(font, Component.literal(text), x + PAD_X,
                 anchorY + (CHIP_H - 8) / 2, color, false);
         }
 
