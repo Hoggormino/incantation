@@ -101,6 +101,12 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
         // Monitor only renders on the Recognition tab so the HUD tab stays compact.
         boolean showMonitor = currentTab == Tab.RECOGNITION && workDebug;
+        // The Live Monitor is a real-time view of what the recognizer is hearing, so it needs
+        // the device open. In single player any open screen pauses the game and
+        // captureAllowedNow() then closes the mic, leaving the monitor permanently blank on
+        // exactly the setup most people tune on. Only while the monitor is actually visible -
+        // the config screen has no business holding the mic open on its other tabs.
+        VoiceController.setDiagnosticCapture(showMonitor);
         // Clamp to fit the current screen so large GUI Scale settings don't push buttons off
         // the bottom or sides. The preferred dimensions still apply when there's enough room.
         panelW = Theme.fit(PANEL_W_PREF, width);
@@ -323,7 +329,17 @@ public final class VoiceSpellsConfigScreen extends Screen {
     }
 
     @Override
+    public void removed() {
+        // Safety net: init() may have taken the mic for the Live Monitor, and a screen can be
+        // swapped out without onClose() (another mod's setScreen, a disconnect, a resource
+        // reload). Idempotent.
+        try { VoiceController.setDiagnosticCapture(false); } catch (Throwable ignored) {}
+        super.removed();
+    }
+
+    @Override
     public void onClose() {
+        try { VoiceController.setDiagnosticCapture(false); } catch (Throwable ignored) {}
         // Cancel / Escape: drop the live theme preview back to what is actually persisted.
         if (!saved) {
             if (origPalette != null) Theme.applyPalette(origPalette);

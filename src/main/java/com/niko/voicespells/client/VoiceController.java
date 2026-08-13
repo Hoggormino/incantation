@@ -476,12 +476,31 @@ public final class VoiceController {
         return hudVisible;
     }
 
+    /** Earliest nanotime at which another model-load attempt may start.
+     *
+     *  <p>The retry driver is the capture thread: every frame it sees a null session it calls
+     *  preloadAsync(). The `loading` CAS only prevents two loads at once — loadModel's finally
+     *  block clears it on failure too, so a model that cannot load (missing, corrupt, no disk
+     *  space, download off) produced a fresh loader thread roughly ten times a second, forever,
+     *  each one repeating the same work and, on some paths, another chat line to the player.
+     *  Backing off turns that into one attempt per interval. */
+    private static volatile long nextLoadAttemptNanos = 0L;
+    private static final long LOAD_RETRY_BACKOFF_NANOS = 30_000_000_000L; // 30s
+
     /** Kick off model loading off the main thread. Safe to call multiple times. */
     public static void preloadAsync() {
         if (session != null) return;
+        if (System.nanoTime() < nextLoadAttemptNanos) return;
         if (!loading.compareAndSet(false, true)) return;
         statusLine = "LOADING";
         new Thread(VoiceController::loadModel, "VoiceSpells-Engine-Loader").start();
+    }
+
+    /** Clear the retry backoff so the next tick tries again immediately. Called when the player
+     *  changes config (they may have just fixed the model id or switched the download on), so a
+     *  fix does not sit behind up to 30 seconds of dead air. */
+    public static void resetLoadBackoff() {
+        nextLoadAttemptNanos = 0L;
     }
 
     /** Called on every captured mic frame, including empty
@@ -671,6 +690,7 @@ public final class VoiceController {
         // model vocabulary is loaded and uses putIfAbsent, so custom phrases still win.
         SpellIndex.registerRespellings();
         SpellInfo.clearCache(); // drop cached display names so spell renames / aliases re-resolve
+        resetLoadBackoff();     // they may have just corrected modelId or enabled autoDownload
         rebuildRecognizer("VoiceSpells-Grammar-Reload", VoiceController::currentGrammar);
     }
 
@@ -1259,6 +1279,9 @@ public final class VoiceController {
             }
             loadVosk();
         } finally {
+            // Arm the backoff whenever we finish without a usable session; the capture thread
+            // would otherwise call straight back in on the very next frame.
+            if (session == null) nextLoadAttemptNanos = System.nanoTime() + LOAD_RETRY_BACKOFF_NANOS;
             loading.set(false);
         }
     }

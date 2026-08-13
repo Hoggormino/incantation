@@ -155,18 +155,57 @@ public final class ModelDownloader {
                     entry.id(), digest);
             }
 
-            extractStrippingTopDir(tmpZip, modelDir);
-            Files.deleteIfExists(tmpZip);
+            // Extract to a staging directory and only publish it once it validates.
+            //
+            // Extracting straight into modelDir meant an interrupted or corrupt extraction left
+            // a half-model behind, and looksLikeModel only asks whether am/ and conf/ exist —
+            // which a partial extract satisfies easily. ensureModel checks that first and
+            // returns true, so the download never retried: the model stayed broken, recognition
+            // stayed dead, and it survived every restart with no way out but deleting the
+            // folder by hand. Staging means a failed attempt leaves the previous state intact.
+            Path staging = modelDir.resolveSibling(modelDir.getFileName() + ".incoming");
+            deleteRecursively(staging);
+            try {
+                extractStrippingTopDir(tmpZip, staging);
+                Files.deleteIfExists(tmpZip);
 
-            boolean ok = looksLikeModel(modelDir);
-            VoiceSpells.LOGGER.info(ok ? "Vosk model installed at {}"
-                                       : "Model archive extracted but layout looks wrong at {}",
-                modelDir);
-            return ok;
+                if (!looksLikeModel(staging)) {
+                    VoiceSpells.LOGGER.error(
+                        "Model archive extracted but layout looks wrong; discarding {}", staging);
+                    deleteRecursively(staging);
+                    return false;
+                }
+                // Publish. Replacing rather than merging, so leftovers from an older model
+                // cannot mix with the new one.
+                deleteRecursively(modelDir);
+                Files.createDirectories(modelDir.getParent());
+                try {
+                    Files.move(staging, modelDir, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+                } catch (java.nio.file.AtomicMoveNotSupportedException amnse) {
+                    Files.move(staging, modelDir);
+                }
+                VoiceSpells.LOGGER.info("Vosk model installed at {}", modelDir);
+                return true;
+            } catch (Throwable t) {
+                deleteRecursively(staging);
+                throw t;
+            }
         } catch (Throwable t) {
             VoiceSpells.LOGGER.error("Model download failed: {}", t.toString());
             try { Files.deleteIfExists(tmpZip); } catch (Throwable ignored) {}
             return false;
+        }
+    }
+
+    /** Delete a directory tree, best effort. Missing paths are not an error. */
+    private static void deleteRecursively(Path dir) {
+        if (dir == null || !Files.exists(dir)) return;
+        try (java.util.stream.Stream<Path> walk = Files.walk(dir)) {
+            walk.sorted(java.util.Comparator.reverseOrder()).forEach(pth -> {
+                try { Files.deleteIfExists(pth); } catch (Throwable ignored) {}
+            });
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.debug("Could not fully delete {}: {}", dir, t.toString());
         }
     }
 
