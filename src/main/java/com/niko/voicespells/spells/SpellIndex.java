@@ -209,9 +209,23 @@ public final class SpellIndex {
     private static List<String> withVoiceCommands(List<String> base) {
         boolean needsHF = com.niko.voicespells.VoiceSpellsConfig.cHandsFreeConfirm;
         boolean needsHotbar = com.niko.voicespells.VoiceSpellsConfig.cVoiceHotbarSelect;
-        if (!needsHF && !needsHotbar) return base;
-        List<String> out = new java.util.ArrayList<>(base.size() + 16);
+        java.util.Set<String> triggers = com.niko.voicespells.VoiceSpellsConfig.cTriggerWords;
+        if (!needsHF && !needsHotbar && triggers.isEmpty()) return base;
+        List<String> out = new java.util.ArrayList<>(base.size() + 16 + triggers.size());
         out.addAll(base);
+        // Trigger words have to be in the grammar or the feature cannot work at all.
+        //
+        // The recognizer runs in grammar mode: it can only emit tokens the grammar contains,
+        // and it decodes an utterance as a sequence of grammar entries. "cast" was never added
+        // here, so saying "cast fireball" could never produce a transcript containing the word
+        // "cast" — which is precisely what the trigger gate in VoiceController then tested for.
+        // The gate therefore rejected every phrase, and configuring a trigger word silently
+        // disabled voice casting entirely, with no log line and no HUD miss. Adding them as
+        // standalone entries is enough: the decoder is free to emit "<trigger> <spell>" as two
+        // consecutive entries, exactly as it already does for "yes"/"no".
+        for (String tw : triggers) {
+            if (!tw.isEmpty() && !out.contains(tw)) out.add(tw);
+        }
         if (needsHF) {
             if (!out.contains("yes")) out.add("yes");
             if (!out.contains("no"))  out.add("no");

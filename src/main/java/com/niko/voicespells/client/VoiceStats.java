@@ -51,6 +51,18 @@ public final class VoiceStats {
     private static long lastCastMs    = 0L;
 
     private static final AtomicBoolean LOADED = new AtomicBoolean(false);
+    /** Set when the most recent {@link #tryLoad()} could not read or could not make sense of
+     *  stats.dat. While true, {@link #trySave()} is a no-op.
+     *
+     *  <p>Without this, an unreadable stats.dat was silently upgraded into a destroyed one:
+     *  the read threw, the warning scrolled past, LOADED had already been CAS'd true so nothing
+     *  ever retried, and in-memory state stayed at zero. The next save — five casts later, or
+     *  the moment the More screen computed the spell of the day, or the shutdown hook — then
+     *  wrote those zeros over the real file with TRUNCATE_EXISTING. A transient Windows file
+     *  lock from antivirus or OneDrive was enough to wipe a player's lifetime totals, unlock
+     *  state and codex history. {@code Phrasebook} already guarded against exactly this; the
+     *  guard was simply never applied here. */
+    private static volatile boolean loadFailed = false;
     private static int writesSinceFlush = 0;
     private static final int FLUSH_EVERY = 5; // disk write every 5 casts
 
@@ -224,16 +236,51 @@ public final class VoiceStats {
                     } catch (NumberFormatException ignored) {}
                 }
             }
+            // A file that exists and has content but yields nothing recognisable is either
+            // truncated or corrupt. It does not throw, so without this check it would parse
+            // cleanly into defaults and the next save would cement the loss.
+            if (!lines.isEmpty() && totalCasts == 0 && COUNTS.isEmpty()
+                    && firstCastMs == 0L && !wizardSeen) {
+                loadFailed = true;
+                VoiceSpells.LOGGER.warn(
+                    "stats.dat has {} line(s) but no readable stats — treating as corrupt and "
+                    + "preserving the file rather than overwriting it", lines.size());
+                backupUnreadable(p);
+                return;
+            }
+            loadFailed = false;
             VoiceSpells.LOGGER.info("VoiceStats loaded: {} total casts across {} distinct spells",
                 totalCasts, COUNTS.size());
-        } catch (IOException e) {
-            VoiceSpells.LOGGER.warn("Failed to load stats.dat: {}", e.toString());
+        } catch (IOException | RuntimeException e) {
+            // RuntimeException too: MalformedInputException surfaces as an unchecked
+            // CharacterCodingException wrapper on some JDKs, and a single bad byte must not be
+            // the difference between "stats preserved" and "stats destroyed".
+            loadFailed = true;
+            VoiceSpells.LOGGER.warn("Failed to load stats.dat ({}) — stats will NOT be saved this "
+                + "session so the existing file is preserved", e.toString());
+            backupUnreadable(p);
         }
+    }
+
+    /** Copy an unreadable stats.dat aside once, so the player has something to hand back if
+     *  they ask for help. Best-effort and never overwrites an existing backup. */
+    private static void backupUnreadable(Path p) {
+        try {
+            Path bak = p.resolveSibling("stats.dat.bak");
+            if (!Files.exists(bak) && Files.exists(p)) {
+                Files.copy(p, bak);
+                VoiceSpells.LOGGER.warn("Copied unreadable stats to {}", bak);
+            }
+        } catch (Throwable ignored) { /* diagnostics only */ }
     }
 
     /** Save now. Called from the debounced cast path and from the shutdown hook. */
     public static synchronized void trySave() {
         ensureLoaded();
+        if (loadFailed) {
+            VoiceSpells.LOGGER.debug("Skipping stats save — last load failed, preserving file as-is");
+            return;
+        }
         Path p = statsFile();
         try {
             Files.createDirectories(p.getParent());
@@ -254,8 +301,23 @@ public final class VoiceStats {
             for (Map.Entry<String, Long> e : LAST_CAST_MS.entrySet()) {
                 sb.append("lastms.").append(e.getKey()).append('=').append(e.getValue()).append('\n');
             }
-            Files.writeString(p, sb.toString(), StandardOpenOption.CREATE,
+            // Write to a sibling temp file and move it into place, rather than truncating the
+            // real file and writing into it. A truncate-then-write is a window in which the
+            // stats file is empty on disk, and the two callers most likely to be interrupted
+            // are the shutdown hook and the flush that fires every fifth cast — i.e. exactly
+            // when the process may be going away. A crash inside that window left a 0-byte
+            // stats.dat, which then parsed happily into defaults on next launch.
+            Path tmp = p.resolveSibling("stats.dat.tmp");
+            Files.writeString(tmp, sb.toString(), StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            try {
+                Files.move(tmp, p, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException amnse) {
+                // Some filesystems (and some network shares) cannot do it atomically.
+                // A non-atomic replace is still strictly better than truncate-in-place.
+                Files.move(tmp, p, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             VoiceSpells.LOGGER.warn("Failed to save stats.dat: {}", e.toString());
         }

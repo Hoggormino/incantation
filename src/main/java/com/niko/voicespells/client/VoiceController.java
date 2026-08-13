@@ -1085,6 +1085,19 @@ public final class VoiceController {
 
     /** Whole-word, case-insensitive containment ("cast" in "cast fireball" but not in
      *  "castle"). The phrase is already lowercased upstream; word is lowercased in config. */
+    /** Remove every configured trigger token from a phrase, collapsing the leftover spacing.
+     *  Only whole tokens are removed, so a spell whose name merely contains a trigger word as
+     *  a substring is untouched. */
+    private static String stripTriggerWords(String phrase, java.util.Set<String> triggers) {
+        StringBuilder sb = new StringBuilder(phrase.length());
+        for (String tok : phrase.split("\\s+")) {
+            if (tok.isEmpty() || triggers.contains(tok)) continue;
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(tok);
+        }
+        return sb.toString();
+    }
+
     private static boolean containsWord(String phrase, String word) {
         for (String tok : phrase.split("\\s+")) {
             if (tok.equals(word)) return true;
@@ -1362,6 +1375,18 @@ public final class VoiceController {
             if (!any) return; // normal chat — ignore silently
         }
 
+        // Drop the trigger token(s) before the lookup chain. The whole phrase is matched
+        // against spell names, so leaving the trigger attached means "cast fireball" is
+        // compared to "fireball": exact fails, fuzzy is nowhere near (5 edits), and only
+        // substring matching could rescue it — and that is an option the player can turn off.
+        //
+        // A separate variable rather than reassigning `phrase`, because an earlier lambda in
+        // this method captures it and it must stay effectively final. `phrase` continues to
+        // carry what the player actually said, which is what the HUD and the recognition log
+        // should show; only the matcher sees the stripped form.
+        final String matchPhrase = usingTrigger ? stripTriggerWords(phrase, triggers) : phrase;
+        if (usingTrigger && matchPhrase.isEmpty()) return; // the trigger alone is not a cast
+
         // Initial coarse confidence gate: drop anything well below the global floor early so we
         // don't waste lookup work. Per-spell overrides are applied later, after we know which
         // spell the phrase resolved to — they can only RELAX the gate, never tighten it below
@@ -1381,7 +1406,7 @@ public final class VoiceController {
         // Loadout lookup runs first: if the phrase matches a configured loadout name we pick
         // the first castable spell from the list (cooldown + mana aware via ClientMagicData),
         // rather than falling through to the generic phrase → single-spell lookup.
-        List<ResourceLocation> loadoutSpells = SpellIndex.lookupLoadout(phrase);
+        List<ResourceLocation> loadoutSpells = SpellIndex.lookupLoadout(matchPhrase);
         if (loadoutSpells != null && !loadoutSpells.isEmpty()) {
             ResourceLocation chosen = pickCastableFromLoadout(loadoutSpells);
             if (chosen == null) {
@@ -1405,11 +1430,11 @@ public final class VoiceController {
             // still arriving, and would misfire a half-spoken word as a similar-sounding spell.
             Optional<SpellIndex.LookupResult> result;
             if (isFinal) {
-                result = SpellIndex.lookupWithTier(phrase);
+                result = SpellIndex.lookupWithTier(matchPhrase);
             } else {
-                result = SpellIndex.lookupExactWithTier(phrase);
+                result = SpellIndex.lookupExactWithTier(matchPhrase);
                 if (result.isEmpty() && VoiceSpellsConfig.cSubstringMatch) {
-                    result = SpellIndex.lookupTrailingWithTier(phrase);
+                    result = SpellIndex.lookupTrailingWithTier(matchPhrase);
                 }
             }
             id = result.map(SpellIndex.LookupResult::id);
