@@ -194,7 +194,14 @@ public final class DiagnosticsScreen extends Screen {
         public boolean mouseScrolled(double mx, double my, double sx, double sy) {
 //?}
             if (!isMouseOver(mx, my)) return false;
-            scroll = Math.max(0, scroll - (int) Math.signum(sy));
+            // Clamp against the end of the list, not just at zero. Without the upper bound the
+            // counter kept climbing while scrolling down past the last row, and the same number
+            // of scrolls back up did nothing visible — the list looked frozen until you
+            // out-scrolled the accumulated slack. renderWidget clamped only for drawing and
+            // threw the clamped value away, so the field itself was never corrected.
+            int rowsVisible = (getHeight() - 8) / ROW_H;
+            int maxScroll = Math.max(0, results.size() - rowsVisible);
+            scroll = Math.max(0, Math.min(scroll - (int) Math.signum(sy), maxScroll));
             return true;
         }
 

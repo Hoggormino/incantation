@@ -185,10 +185,13 @@ public final class Diagnostics {
     // -------------------------------------------------------------------- Recognition
 
     private static Result checkVoskModel() {
-        String override = VoiceSpellsConfig.CLIENT.modelPath.get();
-        Path p = (override == null || override.isBlank())
-            ? com.niko.voicespells.client.VoskSession.defaultModelPath()
-            : Path.of(override.trim());
+        // Resolve exactly as loadVosk() does. This used to fall back to
+        // VoskSession.defaultModelPath(), the LEGACY model/ directory, while downloads land in
+        // models/<modelId>/ — so a perfectly healthy default install reported "Vosk model FAIL,
+        // directory not present" and sent people chasing a problem they did not have. The check
+        // and the loader must not be able to disagree about where the model lives.
+        Path p = com.niko.voicespells.speech.ModelCatalog.resolveModelDir(
+            VoiceSpellsConfig.CLIENT.modelPath.get(), VoiceSpellsConfig.cModelId);
         if (!Files.isDirectory(p)) {
             return new Result("Vosk model", Status.FAIL,
                 "Directory not present: " + p.toAbsolutePath()

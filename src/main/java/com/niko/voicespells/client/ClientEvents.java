@@ -616,6 +616,9 @@ public final class ClientEvents {
     private static final class HudOverlay implements LayeredDraw.Layer {
 //?}
 
+        /** How long a history chip stays on screen. Shared by the renderer and the slot
+         *  accounting above them, which must agree or the chips below drift out of place. */
+        private static final long HISTORY_LIFETIME_NANOS = 4_500_000_000L;
         private static final int CHIP_H   = 14;
         private static final int PAD_X    = 5;
         private static final int DOT_SIZE = 4;
@@ -718,7 +721,20 @@ public final class ClientEvents {
             // toast, so we skip index 0 when rendering.
             drawHistoryStrip(g, font, anchorX, anchorY, isBottom);
 
-            int slotsUsed = Math.max(0, VoiceController.spellHistory().size() - 1);
+            // Count only the history chips that will actually be drawn. drawHistoryStrip skips
+            // entries older than HISTORY_LIFETIME_NANOS, but this used to count the whole list,
+            // so once a burst of casts aged out the queued / miss / heard / suggestion chips
+            // stayed pushed down into empty space — a permanent gap, because the history list
+            // itself is never pruned.
+            int slotsUsed = 0;
+            {
+                java.util.List<VoiceController.HistoryEntry> hist = VoiceController.spellHistory();
+                long nowNanos = System.nanoTime();
+                for (int i = 1; i < hist.size(); i++) {
+                    long age = nowNanos - hist.get(i).nanoTime();
+                    if (age >= 0 && age < HISTORY_LIFETIME_NANOS) slotsUsed++;
+                }
+            }
 
             // "Queued" chip — visible while a spell is parked in the cast queue waiting for
             // the current cast to finish. Slot lives just past the history strip.
@@ -834,12 +850,17 @@ public final class ClientEvents {
             int toastY = anchorY;
 
             drawChip(g, toastX, toastY, toastW, CHIP_H, alpha);
-            // Per-school text color so the cast toast carries an extra cue. The user's
-            // configured cTextToast is still used as the alpha source so opacity stays
-            // wired to the toml [colors] section.
+            // Per-school text color so the cast toast carries an extra cue, with the
+            // configured [hud] opacity folded in explicitly (see below).
             int schoolRgb = com.niko.voicespells.spells.SpellSchools.colorFor(
                 VoiceController.lastCastSchool());
-            int color = withAlpha(schoolRgb, alpha);
+            // cOpacity has to be applied explicitly here. Every other colour picks it up because
+            // refreshCache() bakes it into cBg / cBorder / cTextToast, but the cast toast draws
+            // with the per-school hue instead, so it bypassed both the configured toast colour
+            // and the [hud] opacity setting entirely — turning opacity down faded the whole HUD
+            // except the one element people actually look at. The comment below used to claim
+            // cTextToast was "still used as the alpha source", which was not true of this call.
+            int color = withAlpha(schoolRgb, alpha * VoiceSpellsConfig.cOpacity);
             int textY = toastY + (CHIP_H - 8) / 2;
             g.drawString(font, Component.literal(text), toastX + PAD_X, textY, color, false);
         }
@@ -853,7 +874,7 @@ public final class ClientEvents {
             java.util.List<VoiceController.HistoryEntry> history = VoiceController.spellHistory();
             if (history.size() <= 1) return;
             long now = System.nanoTime();
-            long lifetime = 4_500_000_000L;          // 4.5s on screen
+            long lifetime = HISTORY_LIFETIME_NANOS;  // 4.5s on screen
             long fadeIn   =   180_000_000L;          // 0.18s
             long fadeOut  =   900_000_000L;          // 0.9s
             float maxAlpha = 0.55f;                  // history is dimmer than the main toast

@@ -701,6 +701,21 @@ public final class SpellCaster {
      *  {@link com.niko.voicespells.VoiceSpellsServerConfig.Server#logVoiceCasts} so the file
      *  doesn't fill up by default. One line per cast: ISO timestamp, player name, UUID, spell id. */
     private static void appendCastLog(ServerPlayer player, ResourceLocation spellId) {
+        // The in-memory mirror is built first and unconditionally. It used to be populated at
+        // the bottom of this method — behind the logVoiceCasts gate AND behind a successful file
+        // write — so on a default server (logVoiceCasts is off) /voicespells diag always
+        // answered "No voice casts logged this session", including while casts were plainly
+        // happening. An admin diagnostic that reports nothing by default is worse than none: it
+        // reads as evidence the mod is broken.
+        String entry = String.format(java.util.Locale.ROOT, "%s\t%s\t%s\t%s",
+            java.time.Instant.now(),
+            player.getName().getString(),
+            player.getUUID(),
+            spellId);
+        synchronized (RECENT_LOG) {
+            RECENT_LOG.addFirst(entry);
+            while (RECENT_LOG.size() > 50) RECENT_LOG.removeLast();
+        }
         try {
             if (!com.niko.voicespells.VoiceSpellsServerConfig.SERVER.logVoiceCasts.get()) return;
             net.minecraft.server.MinecraftServer server = player.getServer();
@@ -712,19 +727,9 @@ public final class SpellCaster {
 //?}
             java.nio.file.Files.createDirectories(logDir);
             java.nio.file.Path logFile = logDir.resolve("voicespells-casts.log");
-            String line = String.format(java.util.Locale.ROOT, "%s\t%s\t%s\t%s%n",
-                java.time.Instant.now(),
-                player.getName().getString(),
-                player.getUUID(),
-                spellId);
-            java.nio.file.Files.writeString(logFile, line,
+            java.nio.file.Files.writeString(logFile, entry + System.lineSeparator(),
                 java.nio.file.StandardOpenOption.CREATE,
                 java.nio.file.StandardOpenOption.APPEND);
-            // Keep a small in-memory mirror for the /voicespells diag command.
-            synchronized (RECENT_LOG) {
-                RECENT_LOG.addFirst(line.trim());
-                while (RECENT_LOG.size() > 50) RECENT_LOG.removeLast();
-            }
         } catch (Throwable t) {
             VoiceSpells.LOGGER.debug("Cast log write failed: {}", t.toString());
         }
@@ -832,8 +837,16 @@ public final class SpellCaster {
         new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.Map<java.util.UUID, String>  PLAYER_NAMES  =
         new java.util.concurrent.ConcurrentHashMap<>();
-    static void recordPlayerTotal(java.util.UUID uuid, String name, int total) {
-        PLAYER_TOTALS.merge(uuid, total, Math::max);
+    static void recordPlayerTotal(java.util.UUID uuid, String name, int clientTotal) {
+        // Count server-side rather than believing the number in the packet.
+        //
+        // This used to be merge(uuid, clientTotal, Math::max) on a value the client supplies,
+        // so a single crafted packet claiming Integer.MAX_VALUE pinned that player at the top
+        // of /voicespells top permanently — max() means it can never come back down, and the
+        // map is not persisted per-world but does live for the whole server run. Counting the
+        // casts we actually authorised is both untrusted-input-free and a more honest answer
+        // to "who has voice-cast the most on this server".
+        PLAYER_TOTALS.merge(uuid, 1, Integer::sum);
         PLAYER_NAMES.put(uuid, name);
     }
     public static java.util.List<java.util.Map.Entry<String, Integer>> topPlayers(int limit) {

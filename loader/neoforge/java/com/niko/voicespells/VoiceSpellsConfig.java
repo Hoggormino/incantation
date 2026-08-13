@@ -429,7 +429,10 @@ public final class VoiceSpellsConfig {
 
             b.push("internal");
             b.comment("Whether the welcome wizard has been shown yet.",
-                      "Flip back to true to see it again next time you load a world.");
+                      "Setting this back to true is NOT enough to see the wizard again: finishing",
+                      "it also latches a flag in stats.dat, and the wizard only pops when both",
+                      "agree it has not been seen. To re-open it, use Config -> More... ->",
+                      "\"Open Welcome Wizard\".");
             firstRun = b.define("firstRun", true);
             b.pop();
         }

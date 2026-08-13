@@ -99,6 +99,11 @@ public final class VoiceController {
         calibSum = 0; calibCount = 0; calibPeak = 0;
         calibStartNanos = System.nanoTime();
         calibrating = true;
+        // Calibration is started from a screen, and in single player an open screen pauses the
+        // game, which closes the capture device — so the sampling loop received no frames at
+        // all and "calibrate by talking for 5 seconds" measured silence. Hold the device open
+        // for the window; released in finishCalibration().
+        setDiagnosticCapture(true);
     }
 
     private static void sampleCalibration(double rms) {
@@ -129,7 +134,21 @@ public final class VoiceController {
     }
 
     private static void finishCalibration() {
-        double mean = calibCount > 0 ? calibSum / calibCount : 0;
+        calibrating = false;
+        try { setDiagnosticCapture(false); } catch (Throwable ignored) {}
+
+        // Refuse to write a threshold we did not actually measure. With no frames the mean is
+        // 0, the clamp below turns that into the 100 floor, and that value was then saved over
+        // whatever the player had configured — so a calibration that silently failed did not
+        // just do nothing, it quietly replaced a working setting with a worse one.
+        if (calibCount == 0) {
+            lastCalibThreshold = -1;
+            VoiceSpells.LOGGER.warn("Noise gate calibration heard nothing — no microphone frames "
+                + "arrived during the window. Existing threshold left unchanged.");
+            return;
+        }
+
+        double mean = calibSum / calibCount;
         // Half the mean works well as a gate floor — it sits between observed silence and
         // observed speech for typical mics. Clamped to a sensible range so a calibration in
         // total silence doesn't disable the gate, and a noisy mic doesn't blow past it.
@@ -141,7 +160,6 @@ public final class VoiceController {
             VoiceSpellsConfig.refreshCache();
         } catch (Throwable ignored) {}
         lastCalibThreshold = threshold;
-        calibrating = false;
         VoiceSpells.LOGGER.info("Noise gate calibrated: mean={}, peak={}, set threshold={}",
             String.format("%.0f", mean), String.format("%.0f", calibPeak),
             String.format("%.0f", threshold));
@@ -866,9 +884,13 @@ public final class VoiceController {
     private static final long OWNED_SCAN_INTERVAL_NANOS = 1_000_000_000L; // 1s
 
     /**
-     * Periodic owned-spell scan. Called from the client tick. The owned set is consumed by the
-     * dispatch-time equipped-only gate; it no longer drives a Vosk grammar rebuild (the grammar
-     * stays broad to keep noise-mapping diluted across the full registry).
+     * Periodic owned-spell scan. Called from the client tick. The owned set feeds the
+     * dispatch-time equipped-only gate AND narrows the Vosk grammar — see the
+     * rebuildGrammarForOwned call below, which fires whenever the castable set changes.
+     *
+     * <p>This javadoc used to claim the owned set "no longer drives a Vosk grammar rebuild
+     * (the grammar stays broad)". That was false, and the false version is what made the
+     * disable path below look correct.
      */
     public static void refreshOwnedSpellsIfDue() {
         if (!VoiceSpellsConfig.cRestrictToOwned) {
@@ -878,6 +900,12 @@ public final class VoiceController {
                 ownedSpellIds = java.util.Set.of();
                 lastOwnedSignature = 0;
                 ownedScanReliable = false;
+                // Widen the grammar back out. Clearing the set without rebuilding left the
+                // recognizer on the narrowed grammar from the last scan, so turning
+                // "Only owned spells" OFF still refused to hear anything outside the spells
+                // that happened to be equipped when it was last on — the opposite of what the
+                // option says, and it persisted until something else forced a rebuild.
+                rebuildRecognizer("VoiceSpells-Grammar", VoiceController::currentGrammar);
             }
             return;
         }
