@@ -42,6 +42,15 @@ import java.lang.reflect.Method;
  * <p>{@code QuickCastPacket} lives in {@code network.casting}, not in an {@code api} package, so it
  * is an internal class that an Iron's Spells update may rename. Everything here fails soft to let
  * the caller fall back.
+ *
+ * <p>Both loaders are supported. This used to return {@code false} immediately on Forge 1.20.1,
+ * on the stated grounds that Iron's Spells' packets were unreachable there — but
+ * {@code QuickCastPacket(int)} exists in the 1.20.1 jar (verified with javap against 3.16.2) and
+ * {@code SpellSelector} was already dispatching Iron's packets on that version through the same
+ * reflective route. The consequence of the early return was that a Forge client on a server
+ * running Iron's Spells but NOT this mod had no cast path at all: the payload branch is skipped
+ * because the server has no channel, and this branch declined, so every recognised spell was
+ * silently dropped.
  */
 public final class ClientCast {
     private ClientCast() {}
@@ -69,15 +78,6 @@ public final class ClientCast {
      *         nothing was sent.
      */
     public static boolean tryCast(ResourceLocation spellId) {
-//? if forge {
-        /*// Unavailable on Forge 1.20.1 by construction, not by accident. This path works by
-        // handing Iron's Spells its own QuickCastPacket, which on 1.21.x is a CustomPacketPayload
-        // sent through the loader's PacketDistributor. 1.20.1 has neither: Iron's Spells routes
-        // its packets over a private SimpleChannel we have no supported handle on. Returning
-        // false sends every cast down the mod's own CastSpellPayload path, which is exactly what
-        // 1.20.1 shipped with and is server-validated anyway.
-        return false;
-        *///?} else {
         if (Boolean.FALSE.equals(available)) return false;
         try {
             Player player = Minecraft.getInstance().player;
@@ -105,7 +105,14 @@ public final class ClientCast {
 
                 Class<?> pktCls = Class.forName(QUICK_CAST_PACKET);
                 Object packet = pktCls.getConstructor(int.class).newInstance(i);
+//? if forge {
+/*                // 1.20.1 has no cross-mod payload routing, so the packet goes out through
+                // Iron's Spells' own dispatcher, reached reflectively — the same mechanism
+                // SpellSelector already uses to sync the spell bar.
+                if (!sendIronsPacket(packet)) return false;
+*///?} else {
                 PacketDistributor.sendToServer((CustomPacketPayload) packet);
+//?}
                 available = Boolean.TRUE;
                 return true;
             }
@@ -123,8 +130,37 @@ public final class ClientCast {
             available = Boolean.FALSE;
             return false;
         }
-//?}
     }
+
+//? if forge {
+/*    /^*
+     * Hand a packet to Iron's Spells' own dispatcher on 1.20.1, where every mod owns a private
+     * SimpleChannel and there is no shared payload routing.
+     *
+     * @return true if a dispatcher accepted the packet.
+     ^/
+    private static boolean sendIronsPacket(Object packet) {
+        String[][] candidates = {
+            { "io.redspace.ironsspellbooks.setup.Messages",   "sendToServer" },
+            { "io.redspace.ironsspellbooks.network.Messages", "sendToServer" },
+            { "io.redspace.ironsspellbooks.IronsSpellbooks",  "sendToServer" },
+        };
+        for (String[] c : candidates) {
+            try {
+                Class<?> cls = Class.forName(c[0]);
+                for (Method m : cls.getMethods()) {
+                    if (!m.getName().equals(c[1])) continue;
+                    if (m.getParameterCount() != 1) continue;
+                    if (!m.getParameterTypes()[0].isInstance(packet)
+                            && m.getParameterTypes()[0] != Object.class) continue;
+                    m.invoke(null, packet);
+                    return true;
+                }
+            } catch (Throwable ignored) { /^ try the next candidate ^/ }
+        }
+        return false;
+    }
+*///?}
 
     /** Whether the client path has been proven to work this session. Null = untried. */
     public static Boolean availability() { return available; }
