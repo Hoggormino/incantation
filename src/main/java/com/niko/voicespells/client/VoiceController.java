@@ -545,6 +545,20 @@ public final class VoiceController {
      * and it means the mic is not live while sitting on the title screen.
      */
     private static boolean captureArmed() {
+        // The diagnostic override has to short-circuit HERE too, not only in captureAllowedNow().
+        //
+        // captureAllowedNow() decides whether the OpenAL device is OPEN; this decides whether a
+        // delivered frame is USED. The override was wired into the first and not the second, so
+        // the Test Arena, the Live Monitor, the first-run mic check and auto-calibrate all
+        // opened the microphone and then discarded every frame it produced before the audio
+        // meter or sampleCalibration() ever saw it — auto-calibrate reported "heard nothing"
+        // after five seconds of talking, and the wizard's Next button stayed disabled forever
+        // with Skip the only way out. Worse, opening a device whose frames are all dropped is
+        // the one combination with no upside at all.
+        //
+        // Above every other check on purpose: these screens ask the player to talk, so the
+        // gating mode, the pause state and the in-world requirement are all beside the point.
+        if (diagnosticCaptureOverride) return true;
         if (!listeningEnabled) return false;
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return false;
@@ -1164,6 +1178,17 @@ public final class VoiceController {
         return sb.toString();
     }
 
+    /** True when the phrase still names something the index knows, even after every token in
+     *  it is a configured trigger. Guards the "trigger word on its own is not a cast" early
+     *  return from swallowing a spell whose entire name IS trigger words. */
+    private static boolean containsAnySpellWord(String phrase) {
+        try {
+            return SpellIndex.lookupExactWithTier(phrase).isPresent();
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     private static boolean containsWord(String phrase, String word) {
         for (String tok : phrase.split("\\s+")) {
             if (tok.equals(word)) return true;
@@ -1468,8 +1493,26 @@ public final class VoiceController {
         // this method captures it and it must stay effectively final. `phrase` continues to
         // carry what the player actually said, which is what the HUD and the recognition log
         // should show; only the matcher sees the stripped form.
-        final String matchPhrase = usingTrigger ? stripTriggerWords(phrase, triggers) : phrase;
-        if (usingTrigger && matchPhrase.isEmpty()) return; // the trigger alone is not a cast
+        // Two candidates, tried in order: what was actually said, then the same with the
+        // trigger tokens removed.
+        //
+        // Stripping alone is wrong when a trigger word is ALSO a word in a spell's own name.
+        // The config file's own example is triggerWords = ["cast", "invoke", "summon"], and
+        // Iron's Spells ships summon_vex, summon_horse and friends — so a player who copied
+        // that example had every Summon spell mutilated to "vex" before the lookup ran, and no
+        // matching tier could recover it. Trying the unstripped phrase first fixes that
+        // ("summon vex" matches exactly), while the stripped form still handles the intended
+        // case ("cast fireball" -> "fireball"). Whichever hits first wins.
+        final String strippedPhrase = usingTrigger ? stripTriggerWords(phrase, triggers) : phrase;
+        if (usingTrigger && strippedPhrase.isEmpty() && !containsAnySpellWord(phrase)) {
+            return; // the trigger alone is not a cast
+        }
+        final java.util.List<String> matchCandidates = (usingTrigger
+                && !strippedPhrase.isEmpty()
+                && !strippedPhrase.equals(phrase))
+            ? java.util.List.of(phrase, strippedPhrase)
+            : java.util.List.of(usingTrigger && strippedPhrase.isEmpty() ? phrase : strippedPhrase);
+        final String matchPhrase = matchCandidates.get(0);
 
         // Initial coarse confidence gate: drop anything well below the global floor early so we
         // don't waste lookup work. Per-spell overrides are applied later, after we know which
@@ -1490,7 +1533,11 @@ public final class VoiceController {
         // Loadout lookup runs first: if the phrase matches a configured loadout name we pick
         // the first castable spell from the list (cooldown + mana aware via ClientMagicData),
         // rather than falling through to the generic phrase → single-spell lookup.
-        List<ResourceLocation> loadoutSpells = SpellIndex.lookupLoadout(matchPhrase);
+        List<ResourceLocation> loadoutSpells = null;
+        for (String cand : matchCandidates) {
+            loadoutSpells = SpellIndex.lookupLoadout(cand);
+            if (loadoutSpells != null && !loadoutSpells.isEmpty()) break;
+        }
         if (loadoutSpells != null && !loadoutSpells.isEmpty()) {
             ResourceLocation chosen = pickCastableFromLoadout(loadoutSpells);
             if (chosen == null) {
@@ -1512,13 +1559,22 @@ public final class VoiceController {
             //
             // Fuzzy and phonetic stay off for partials — they're too lenient when audio is
             // still arriving, and would misfire a half-spoken word as a similar-sounding spell.
-            Optional<SpellIndex.LookupResult> result;
+            Optional<SpellIndex.LookupResult> result = Optional.empty();
             if (isFinal) {
-                result = SpellIndex.lookupWithTier(matchPhrase);
+                for (String cand : matchCandidates) {
+                    result = SpellIndex.lookupWithTier(cand);
+                    if (result.isPresent()) break;
+                }
             } else {
-                result = SpellIndex.lookupExactWithTier(matchPhrase);
+                for (String cand : matchCandidates) {
+                    result = SpellIndex.lookupExactWithTier(cand);
+                    if (result.isPresent()) break;
+                }
                 if (result.isEmpty() && VoiceSpellsConfig.cSubstringMatch) {
-                    result = SpellIndex.lookupTrailingWithTier(matchPhrase);
+                    for (String cand : matchCandidates) {
+                        result = SpellIndex.lookupTrailingWithTier(cand);
+                        if (result.isPresent()) break;
+                    }
                 }
             }
             id = result.map(SpellIndex.LookupResult::id);

@@ -204,6 +204,9 @@ public final class VoiceStats {
         if (!Files.exists(p)) return;
         try {
             List<String> lines = Files.readAllLines(p);
+            // Number of keys the parser actually RECOGNISED. This, not the values, is what
+            // tells us whether the file was readable — see the check after the loop.
+            int keysRead = 0;
             synchronized (VoiceStats.class) {
                 for (String ln : lines) {
                     int eq = ln.indexOf('=');
@@ -212,35 +215,45 @@ public final class VoiceStats {
                     String val = ln.substring(eq + 1).trim();
                     try {
                         switch (key) {
-                            case "totalCasts"    -> totalCasts = Integer.parseInt(val);
-                            case "longestStreak" -> longestStreak = Integer.parseInt(val);
-                            case "firstCastMs"   -> firstCastMs = Long.parseLong(val);
-                            case "lastCastMs"    -> lastCastMs = Long.parseLong(val);
+                            case "totalCasts"    -> { totalCasts = Integer.parseInt(val); keysRead++; }
+                            case "longestStreak" -> { longestStreak = Integer.parseInt(val); keysRead++; }
+                            case "firstCastMs"   -> { firstCastMs = Long.parseLong(val); keysRead++; }
+                            case "lastCastMs"    -> { lastCastMs = Long.parseLong(val); keysRead++; }
                             case "earned"        -> { /* legacy field — advancements handle this now, ignore */ }
-                            case "sotdDayEpoch"  -> sotdDayEpoch = Long.parseLong(val);
-                            case "sotdSpellId"   -> sotdSpellId  = val;
-                            case "sotdCasts"     -> sotdCasts    = Integer.parseInt(val);
-                            case "sotdStreak"    -> sotdStreak   = Integer.parseInt(val);
-                            case "sotdLastDay"   -> sotdLastCompletedDay = Long.parseLong(val);
-                            case "wizardSeen"    -> wizardSeen = Boolean.parseBoolean(val);
+                            case "sotdDayEpoch"  -> { sotdDayEpoch = Long.parseLong(val); keysRead++; }
+                            case "sotdSpellId"   -> { sotdSpellId  = val; keysRead++; }
+                            case "sotdCasts"     -> { sotdCasts    = Integer.parseInt(val); keysRead++; }
+                            case "sotdStreak"    -> { sotdStreak   = Integer.parseInt(val); keysRead++; }
+                            case "sotdLastDay"   -> { sotdLastCompletedDay = Long.parseLong(val); keysRead++; }
+                            case "wizardSeen"    -> { wizardSeen = Boolean.parseBoolean(val); keysRead++; }
                             default -> {
                                 if (key.startsWith("spell.")) {
                                     String spellId = key.substring("spell.".length());
                                     COUNTS.put(spellId, Integer.parseInt(val));
+                                    keysRead++;
                                 } else if (key.startsWith("lastms.")) {
                                     String spellId = key.substring("lastms.".length());
                                     LAST_CAST_MS.put(spellId, Long.parseLong(val));
+                                    keysRead++;
                                 }
                             }
                         }
                     } catch (NumberFormatException ignored) {}
                 }
             }
-            // A file that exists and has content but yields nothing recognisable is either
+            // A file that exists and has content but yields nothing the parser RECOGNISED is
             // truncated or corrupt. It does not throw, so without this check it would parse
             // cleanly into defaults and the next save would cement the loss.
-            if (!lines.isEmpty() && totalCasts == 0 && COUNTS.isEmpty()
-                    && firstCastMs == 0L && !wizardSeen) {
+            //
+            // Judged on keysRead, never on the values. The first version of this guard asked
+            // whether the stats were all zero — which is exactly what trySave() writes for a
+            // player who has not cast yet and has not finished the wizard, a file the mod
+            // produces itself on every fresh install. It then declared that file corrupt,
+            // latched loadFailed for the JVM, and suppressed every save; the file on disk never
+            // changed, so the same verdict was reached on every subsequent launch. The guard
+            // turned a working install into permanent, silent, self-reinforcing data loss.
+            // A zero-stat file is perfectly valid; an unparseable one is not.
+            if (!lines.isEmpty() && keysRead == 0) {
                 loadFailed = true;
                 VoiceSpells.LOGGER.warn(
                     "stats.dat has {} line(s) but no readable stats — treating as corrupt and "
@@ -277,7 +290,15 @@ public final class VoiceStats {
     /** Save now. Called from the debounced cast path and from the shutdown hook. */
     public static synchronized void trySave() {
         ensureLoaded();
-        if (loadFailed) {
+        // Escape hatch. If this session has accumulated real progress, write it even though the
+        // load failed: the original file was already copied to stats.dat.bak by
+        // backupUnreadable(), so nothing unrecoverable is being overwritten, and refusing to
+        // save would discard the whole session instead. Without this, anyone already carrying a
+        // file poisoned by the previous version of the guard above would stay frozen forever.
+        if (loadFailed && totalCasts > 0) {
+            VoiceSpells.LOGGER.info("Stats load failed earlier, but this session has {} cast(s) — "
+                + "saving anyway (the unreadable original is preserved as stats.dat.bak)", totalCasts);
+        } else if (loadFailed) {
             VoiceSpells.LOGGER.debug("Skipping stats save — last load failed, preserving file as-is");
             return;
         }
