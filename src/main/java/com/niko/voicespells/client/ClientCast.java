@@ -140,10 +140,15 @@ public final class ClientCast {
      * @return true if a dispatcher accepted the packet.
      ^/
     private static boolean sendIronsPacket(Object packet) {
+        // PacketDistributor first: on 3.16.2 for 1.20.1 it is the live dispatcher (30 KB of
+        // class), while setup.Messages is a thin deprecated shim that forwards to it and logs a
+        // deprecation WARN on every send — one line per voice cast, attributed to this mod.
+        // network.Messages does not exist in that jar at all and is dropped. setup.Messages is
+        // kept behind it for older 1.20.1 builds that predate the split.
         String[][] candidates = {
-            { "io.redspace.ironsspellbooks.setup.Messages",   "sendToServer" },
-            { "io.redspace.ironsspellbooks.network.Messages", "sendToServer" },
-            { "io.redspace.ironsspellbooks.IronsSpellbooks",  "sendToServer" },
+            { "io.redspace.ironsspellbooks.setup.PacketDistributor", "sendToServer" },
+            { "io.redspace.ironsspellbooks.setup.Messages",          "sendToServer" },
+            { "io.redspace.ironsspellbooks.IronsSpellbooks",         "sendToServer" },
         };
         for (String[] c : candidates) {
             try {

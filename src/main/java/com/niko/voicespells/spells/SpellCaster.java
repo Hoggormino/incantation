@@ -411,13 +411,11 @@ public final class SpellCaster {
         java.util.List<String>    slots  = new java.util.ArrayList<>();
         stacks.add(player.getMainHandItem()); slots.add("mainhand");
         stacks.add(player.getOffhandItem());  slots.add("offhand");
-        // Hotbar slots 0..8 — skip whichever one is mainhand to avoid double-checking it.
-        int selected = player.getInventory().selected;
-        for (int i = 0; i < 9; i++) {
-            if (i == selected) continue;
-            stacks.add(player.getInventory().getItem(i));
-            slots.add("hotbar." + i);
-        }
+        // Hands only. This used to walk hotbar slots 0..8 as well, which no cast mode asks
+        // for: ANY_SPELLBOOK is documented as "a spellbook in mainhand/offhand counts too",
+        // and CURIO_SPELLBOOK does not reach this method at all. Scanning the hotbar let a
+        // book you were merely carrying satisfy a check that is supposed to be about what you
+        // are holding.
         for (int h = 0; h < stacks.size(); h++) {
             ItemStack stack = stacks.get(h);
             if (stack == null || stack.isEmpty()) continue;
@@ -451,12 +449,12 @@ public final class SpellCaster {
         java.util.List<String>    slots  = new java.util.ArrayList<>();
         stacks.add(player.getMainHandItem()); slots.add("mainhand");
         stacks.add(player.getOffhandItem());  slots.add("offhand");
-        int selected = player.getInventory().selected;
-        for (int i = 0; i < 9; i++) {
-            if (i == selected) continue;
-            stacks.add(player.getInventory().getItem(i));
-            slots.add("hotbar." + i);
-        }
+        // Hands only, for the same reason as findHeldSpellbook — and here it mattered more.
+        // This scan is NOT gated by castMode, so while the hotbar was included an imbued sword
+        // or a scroll sitting unheld in the hotbar could be voice-cast even in CURIO_SPELLBOOK,
+        // the default and strictest mode. The method's own javadoc says "a player wielding an
+        // imbued sword", and right-clicking — the behaviour this mirrors — only ever works on
+        // what is actually in hand.
         for (int h = 0; h < stacks.size(); h++) {
             ItemStack stack = stacks.get(h);
             if (stack == null || stack.isEmpty()) continue;

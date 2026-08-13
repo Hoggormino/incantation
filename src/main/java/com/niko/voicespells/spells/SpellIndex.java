@@ -185,8 +185,11 @@ public final class SpellIndex {
         List<String> owned = new java.util.ArrayList<>();
         List<String> rest  = new java.util.ArrayList<>();
         for (Map.Entry<String, ResourceLocation> e : all.entrySet()) {
-            if (ownedIds.contains(e.getValue().toString())) owned.add(e.getKey());
-            else rest.add(e.getKey());
+            if (ownedIds.contains(e.getValue().toString()) || loadoutIsOwned(e.getKey(), ownedIds)) {
+                owned.add(e.getKey());
+            } else {
+                rest.add(e.getKey());
+            }
         }
         if (owned.isEmpty()) return getPhrases(); // nothing matched — don't narrow to nothing
 
@@ -203,6 +206,24 @@ public final class SpellIndex {
         Map<String, ResourceLocation> all = STATE.get().phraseToId;
         List<String> base = List.copyOf(all.keySet());
         return withVoiceCommands(base);
+    }
+
+    /**
+     * True when {@code phrase} names a loadout with at least one currently-equipped spell.
+     *
+     * <p>A loadout is registered in {@code phraseToId} against {@code ids.get(0)} only, as a
+     * fallback target. So the narrowed grammar judged the whole loadout by whether its FIRST
+     * entry happened to be equipped: if it was not, the loadout's name was demoted to a decoy
+     * and dropped as soon as the grammar floor filled — the recognizer then could not hear the
+     * word at all, and a loadout whose other spells were perfectly castable became unusable.
+     */
+    private static boolean loadoutIsOwned(String phrase, java.util.Set<String> ownedIds) {
+        List<ResourceLocation> ids = LOADOUTS.get(phrase);
+        if (ids == null) return false;
+        for (ResourceLocation rid : ids) {
+            if (ownedIds.contains(rid.toString())) return true;
+        }
+        return false;
     }
 
     /** Append the non-spell control words the recognizer also has to hear. */

@@ -55,6 +55,13 @@ public final class ConfigMoreScreen extends Screen {
         titleW.setColor(Theme.C_ACCENT);
         addRenderableWidget(titleW);
 
+        // Back is registered BEFORE the button stack so it wins hit-testing. Widgets are probed
+        // in insertion order, and when panelH is clamped the stack grows down into the Back
+        // row — "Import Profile from Clipboard" spans nearly the full panel width, so it sat on
+        // top of Back and swallowed the click, leaving Escape as the only way out.
+        addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 80, py + panelH - 28,
+            80, 20, CommonComponents.GUI_BACK, b -> onClose()));
+
         int y = py + Theme.HEADER_H + Theme.GAP_MD;
         int btnW = panelW - Theme.PAD * 2;
 
@@ -121,7 +128,13 @@ public final class ConfigMoreScreen extends Screen {
             b -> importProfile()));
         y += 28;
 
-        statusLabel = new StringWidget(px + Theme.PAD, y, btnW, 9, Component.empty(), font);
+        // Anchored just above the Back row rather than to the accumulated y. The button stack
+        // adds up to roughly py+262 from a 340px preferred panel, but panelH is clamped to the
+        // window, so at GUI Scale 3-4 (including 1080p on Auto) the accumulated y landed below
+        // the panel and the status line — the only feedback Import/Export gives — rendered
+        // off-screen entirely.
+        statusLabel = new StringWidget(px + Theme.PAD, py + panelH - 42, btnW, 9,
+            Component.empty(), font);
         statusLabel.alignLeft();
         statusLabel.setColor(Theme.C_MUTED);
         addRenderableWidget(statusLabel);
@@ -137,8 +150,6 @@ public final class ConfigMoreScreen extends Screen {
             addRenderableWidget(sotd);
         }
 
-        addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 80, py + panelH - 28,
-            80, 20, CommonComponents.GUI_BACK, b -> onClose()));
     }
 
     private void flashStatus(String text, int color) {

@@ -1282,10 +1282,25 @@ public final class VoiceController {
         if (capture == null) syncCapture();
     }
 
-    public static synchronized void stopCapture() {
-        com.niko.voicespells.client.MicCapture c = capture;
-        capture = null;
-        activeDevice = null;
+    /**
+     * Close the capture device.
+     *
+     * <p>Deliberately NOT {@code synchronized}. {@link com.niko.voicespells.client.MicCapture#close()}
+     * interrupts the capture thread and joins it for up to 500 ms, and this used to happen with
+     * the {@code VoiceController.class} monitor held — so the client tick thread could park the
+     * whole class for half a second while the capture thread, which needs that same monitor on
+     * its frame path, sat waiting to be joined. Publishing the field change under the monitor
+     * and then closing outside it keeps the mutation atomic without holding a lock across a
+     * blocking join.
+     */
+    public static void stopCapture() {
+        com.niko.voicespells.client.MicCapture c;
+        synchronized (VoiceController.class) {
+            c = capture;
+            capture = null;
+            activeDevice = null;
+        }
+        // Outside the monitor: the join below must not block anyone else.
         if (c != null) c.close();
     }
 
