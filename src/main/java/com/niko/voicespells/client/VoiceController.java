@@ -718,10 +718,18 @@ public final class VoiceController {
                     break;
                 } catch (NoSuchMethodException ignored) {}
             }
-            if (cooldowns != null) {
+            // Resolved up here because the cooldown lookup needs it: PlayerCooldowns exposes
+            // isOnCooldown(AbstractSpell), NOT isOnCooldown(String). The String probe that used
+            // to live here matched nothing on either 1.20.1 or 1.21.1 (javap, 3.16.2 both
+            // versions), threw NoSuchMethodException into an ignored catch, and left this
+            // preflight blind to cooldowns entirely.
+            Object spell = registryCls.getMethod("getSpell", String.class).invoke(null, spellId.toString());
+
+            if (cooldowns != null && spell != null) {
                 try {
-                    java.lang.reflect.Method onCd = cooldowns.getClass().getMethod("isOnCooldown", String.class);
-                    if ((boolean) onCd.invoke(cooldowns, spellId.toString())) return false;
+                    java.lang.reflect.Method onCd =
+                        cooldowns.getClass().getMethod("isOnCooldown", spellCls);
+                    if ((boolean) onCd.invoke(cooldowns, spell)) return false;
                 } catch (Throwable ignored) {}
             }
 
@@ -733,7 +741,6 @@ public final class VoiceController {
                     break;
                 } catch (NoSuchMethodException ignored) {}
             }
-            Object spell = registryCls.getMethod("getSpell", String.class).invoke(null, spellId.toString());
             if (spell != null) {
                 try {
                     int cost = ((Number) spellCls.getMethod("getManaCost", int.class).invoke(spell, 1)).intValue();
@@ -787,11 +794,22 @@ public final class VoiceController {
                 String actualId = (String) spellCls.getMethod("getSpellId").invoke(spell);
                 if (!rid.toString().equals(actualId)) continue; // unknown spell sentinel
 
-                // On cooldown? Skip.
+                // Not equipped? Skip. Without this the loadout picks its first entry on
+                // cooldown/mana grounds alone, hands it to dispatch, and the equipped-only gate
+                // there rejects it — so a loadout whose first spell is not in the book cast
+                // nothing at all instead of falling through to the next entry. Mirrors the gate
+                // in onPhraseRecognized, including the ownedScanReliable trust check.
+                if (VoiceSpellsConfig.cRestrictToOwned && ownedScanReliable
+                        && !ownedSpellIds.contains(rid.toString())) continue;
+
+                // On cooldown? Skip. Uses the AbstractSpell overload — isOnCooldown(String)
+                // does not exist on either Iron's Spells version, so the previous probe always
+                // threw into the ignored catch and every entry looked ready.
                 if (cooldowns != null) {
                     try {
-                        java.lang.reflect.Method onCd = cooldowns.getClass().getMethod("isOnCooldown", String.class);
-                        if ((boolean) onCd.invoke(cooldowns, rid.toString())) continue;
+                        java.lang.reflect.Method onCd =
+                            cooldowns.getClass().getMethod("isOnCooldown", spellCls);
+                        if ((boolean) onCd.invoke(cooldowns, spell)) continue;
                     } catch (Throwable ignored) { /* no isOnCooldown — proceed */ }
                 }
 

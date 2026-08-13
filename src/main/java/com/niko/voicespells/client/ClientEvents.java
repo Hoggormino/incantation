@@ -248,7 +248,13 @@ public final class ClientEvents {
         // Skip if the player already prefixed something brackety so we don't double up.
         if (original.startsWith("[")) return;
         String rank = com.niko.voicespells.client.VoiceStats.currentRank();
-        event.setMessage("[" + rank + "] " + original);
+        String tagged = "[" + rank + "] " + original;
+        // The chat packet caps the message at 256 characters and the server kicks the client
+        // for exceeding it. Prefixing a rank can push a message that was legally just under the
+        // limit past it, so a cosmetic feature would disconnect the player for typing a long
+        // line. Dropping the tag is the right trade: the message still sends.
+        if (tagged.length() > 256) return;
+        event.setMessage(tagged);
     }
 
 //? if forge {

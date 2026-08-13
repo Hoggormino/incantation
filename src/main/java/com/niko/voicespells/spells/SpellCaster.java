@@ -38,6 +38,9 @@ public final class SpellCaster {
     private static final String SPELL_CONTAINER   = "io.redspace.ironsspellbooks.api.spells.ISpellContainer";
     private static final String SPELL_DATA        = "io.redspace.ironsspellbooks.api.spells.SpellData";
     private static final String SPELLBOOK_MARKER  = "io.redspace.ironsspellbooks.api.item.ISpellbook";
+    /** Scrolls are ISpellContainer but not ISpellbook, so the imbued-weapon scan picks them up.
+     *  They must be cast as CastSource.SCROLL, not SWORD — see findHeldImbued. */
+    private static final String SCROLL_MARKER     = "io.redspace.ironsspellbooks.api.item.IScroll";
     private static final String MAGIC_DATA_CLASS  = "io.redspace.ironsspellbooks.api.magic.MagicData";
     private static final String CURIOS_API        = "top.theillusivec4.curios.api.CuriosApi";
     private static final String CURIOS_HANDLER    = "top.theillusivec4.curios.api.type.capability.ICuriosItemHandler";
@@ -466,9 +469,34 @@ public final class SpellCaster {
             if (idx < 0) continue;
             Object data = getAtIndex.invoke(container, idx);
             if (data == null) continue;
-            return new SlotMatch(stack, slots.get(h), (int) getLevel.invoke(data), "SWORD");
+            // Scrolls reach this scan too: Scroll implements IScroll, not ISpellbook, so the
+            // skip above does not catch them and they satisfy ISpellContainer. Casting one as
+            // SWORD meant Iron's Spells never consumed it — ServerPlayerEvents only calls
+            // ItemStack.shrink(1) when the source is CastSource.SCROLL — so a single-use scroll
+            // could be voice-cast without limit. SCROLL also matches right-click semantics:
+            // CastSource.consumesMana() is true only for SPELLBOOK and (configurably) SWORD.
+            String source = isScroll(stack) ? "SCROLL" : "SWORD";
+            return new SlotMatch(stack, slots.get(h), (int) getLevel.invoke(data), source);
         }
         return null;
+    }
+
+    /** True when the item implements Iron's Spells' IScroll marker. Resolved lazily and cached;
+     *  a missing class simply means no item is ever treated as a scroll. */
+    private static volatile Class<?> scrollMark;
+    private static volatile boolean scrollMarkResolved = false;
+    private static boolean isScroll(ItemStack stack) {
+        if (!scrollMarkResolved) {
+            synchronized (SpellCaster.class) {
+                if (!scrollMarkResolved) {
+                    try { scrollMark = Class.forName(SCROLL_MARKER); }
+                    catch (Throwable t) { scrollMark = null; }
+                    scrollMarkResolved = true;
+                }
+            }
+        }
+        Class<?> m = scrollMark;
+        return m != null && m.isInstance(stack.getItem());
     }
 
     /**
