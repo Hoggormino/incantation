@@ -120,20 +120,20 @@ public final class VoiceCodexScreen extends Screen {
 
         // Row 1: section header + tier
         g.drawString(font, Component.literal("VOICE CASTING"), x + 8, y + 5,
-            Theme.C_FAINT, true);
+            Theme.C_FAINT, !Theme.lightSurface());
         String tierLabel = "Tier: " + currentTier;
         int tierW = font.width(tierLabel);
         g.drawString(font, Component.literal(tierLabel),
-            x + colW - tierW - 8, y + 5, Theme.C_ACCENT_BRIGHT, true);
+            x + colW - tierW - 8, y + 5, Theme.C_ACCENT_BRIGHT, !Theme.lightSurface());
 
         // Row 2: count + next
         g.drawString(font, Component.literal(total + " casts"),
-            x + 8, y + 18, Theme.C_TEXT, true);
+            x + 8, y + 18, Theme.C_TEXT, !Theme.lightSurface());
         String nextLabel = (total >= 1000) ? "max tier reached"
             : "next: " + mileNames[nextIdx] + " (" + next + ")";
         int nextW = font.width(nextLabel);
         g.drawString(font, Component.literal(nextLabel),
-            x + colW - nextW - 8, y + 18, Theme.C_FAINT, true);
+            x + colW - nextW - 8, y + 18, Theme.C_FAINT, !Theme.lightSurface());
 
         // Row 3: progress bar
         int barX = x + 8;
@@ -163,7 +163,7 @@ public final class VoiceCodexScreen extends Screen {
                          : isNext  ? Theme.C_ACCENT_BRIGHT
                                    : Theme.C_FAINT;
             g.drawString(font, Component.literal(mark + " " + mileVals[i]), bx, badgeY,
-                color, true);
+                color, !Theme.lightSurface());
         }
 
         y += cardH + 6;
@@ -188,10 +188,10 @@ public final class VoiceCodexScreen extends Screen {
     }
 
     private void line(GuiGraphics g, int x, int y, String label, String value) {
-        g.drawString(font, Component.literal(label), x, y, Theme.C_MUTED, true);
+        g.drawString(font, Component.literal(label), x, y, Theme.C_MUTED, !Theme.lightSurface());
         int colW = panelW / 2 - Theme.PAD - 6;
         int vw = font.width(value);
-        g.drawString(font, Component.literal(value), x + colW - vw, y, Theme.C_TEXT, true);
+        g.drawString(font, Component.literal(value), x + colW - vw, y, Theme.C_TEXT, !Theme.lightSurface());
     }
 
     /** Top-N spells by cast count. Single fixed view, not scrollable (keep it simple). */
@@ -208,7 +208,7 @@ public final class VoiceCodexScreen extends Screen {
 
             // Header drawn inside the widget so it's clear of the accent rule glow up top.
             g.drawString(font, Component.literal("MOST CAST"), x + 4, y + 4,
-                Theme.C_FAINT, true);
+                Theme.C_FAINT, !Theme.lightSurface());
             g.fill(x + 4, y + 14, x + w - 4, y + 15, Theme.C_DIVIDER);
 
             int headerOffset = 18;
@@ -216,7 +216,7 @@ public final class VoiceCodexScreen extends Screen {
             List<Map.Entry<String, Integer>> top = VoiceStats.topSpells(Math.max(1, rowsArea / ROW_H));
             if (top.isEmpty()) {
                 g.drawString(font, Component.literal("(no casts yet — speak a spell!)"),
-                    x + 6, y + headerOffset + 2, Theme.C_FAINT, true);
+                    x + 6, y + headerOffset + 2, Theme.C_FAINT, !Theme.lightSurface());
                 return;
             }
             int ry = y + headerOffset;
@@ -227,11 +227,11 @@ public final class VoiceCodexScreen extends Screen {
                     ? shortId(e.getKey()) : info.name;
                 String countStr = "× " + e.getValue();
                 g.drawString(font, Component.literal(rank + "."), x + 4, ry,
-                    Theme.C_FAINT, true);
-                g.drawString(font, Component.literal(name), x + 18, ry, Theme.C_TEXT, true);
+                    Theme.C_FAINT, !Theme.lightSurface());
+                g.drawString(font, Component.literal(name), x + 18, ry, Theme.C_TEXT, !Theme.lightSurface());
                 int cw = font.width(countStr);
                 g.drawString(font, Component.literal(countStr), x + w - cw - 6, ry,
-                    Theme.C_ACCENT, true);
+                    Theme.C_ACCENT, !Theme.lightSurface());
                 ry += ROW_H;
                 rank++;
             }

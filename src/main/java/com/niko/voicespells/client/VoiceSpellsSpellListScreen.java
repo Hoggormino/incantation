@@ -275,7 +275,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
             if (font.width(text) > getWidth()) {
                 text = font.plainSubstrByWidth(text, getWidth() - font.width("…")) + "…";
             }
-            g.drawString(font, text, getX(), getY(), Theme.C_MUTED, true);
+            g.drawString(font, text, getX(), getY(), Theme.C_MUTED, !Theme.lightSurface());
         }
         @Override
         protected void updateWidgetNarration(NarrationElementOutput n) {}
@@ -303,7 +303,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
 
             if (filtered.isEmpty()) {
                 g.drawString(font, Component.translatable("voicespells.spelllist.empty"),
-                    x + 6, y + 6, Theme.C_FAINT, true);
+                    x + 6, y + 6, Theme.C_FAINT, !Theme.lightSurface());
                 return;
             }
             int clampedScroll = clampScroll();
@@ -331,11 +331,11 @@ public final class VoiceSpellsSpellListScreen extends Screen {
                 String id = r.id();
                 int idW = font.width(id);
                 int textColor = hov ? Theme.C_ACCENT_BRIGHT : (sel ? Theme.C_ACCENT : Theme.C_TEXT);
-                g.drawString(font, Component.literal(id), x + 6, ry + 2, textColor, true);
+                g.drawString(font, Component.literal(id), x + 6, ry + 2, textColor, !Theme.lightSurface());
                 int avail = (contentRight - x) - idW - 14;
                 if (avail > 30) {
                     g.drawString(font, Component.literal(trim(r.phrases(), avail)),
-                        x + idW + 12, ry + 2, Theme.C_MUTED, true);
+                        x + idW + 12, ry + 2, Theme.C_MUTED, !Theme.lightSurface());
                 }
             }
             // Neon scrollbar on the right gutter.
@@ -418,7 +418,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
 
             int ly = ty + padY;
             g.drawString(font, Component.literal(title), tx + padX, ly,
-                Theme.C_ACCENT_BRIGHT, true);
+                Theme.C_ACCENT_BRIGHT, !Theme.lightSurface());
             ly += lineH;
             // Thin accent rule under the title.
             g.fill(tx + padX, ly - 1, tx + tw - padX, ly, Theme.C_ACCENT_SOFT);
@@ -433,7 +433,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
                 if (i == body.size() - 1)                color = Theme.C_FAINT; // id row
                 else if (descStart >= 0 && i >= descStart) color = Theme.C_MUTED; // description rows
                 else                                      color = Theme.C_TEXT;  // meta rows
-                g.drawString(font, Component.literal(body.get(i)), tx + padX, ly, color, true);
+                g.drawString(font, Component.literal(body.get(i)), tx + padX, ly, color, !Theme.lightSurface());
                 ly += lineH;
             }
         }

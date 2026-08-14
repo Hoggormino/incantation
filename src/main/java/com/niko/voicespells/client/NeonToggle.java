@@ -18,6 +18,13 @@ import java.util.function.Consumer;
  *  - hover: neon-purple border + the soft halo lines used elsewhere
  */
 public final class NeonToggle extends AbstractWidget {
+    /** Vanilla's button body tone. Fixed, NOT derived from the panel: a vanilla button keeps
+     *  the same dark grey whether it sits on a light container panel or a dark options screen,
+     *  which is what lets its white text stay readable everywhere. */
+    private static final int BTN        = 0xFF6C6C6C;
+    private static final int BTN_HOVER  = 0xFF8A8A8A;
+    private static final int BTN_OFF    = 0xFF4A4A4A;
+
 
     private boolean value;
     private final Consumer<Boolean> onChange;
@@ -47,8 +54,7 @@ public final class NeonToggle extends AbstractWidget {
         //
         // A pressed toggle is drawn sunken, so ON/OFF is also readable without relying on hue —
         // which matters for colour-blind players and on the light SLATE palette.
-        int base = Theme.C_PANEL;
-        int fill = !active ? shade(base, -0.18f) : (hov ? shade(base, 0.30f) : shade(base, 0.12f));
+        int fill = !active ? BTN_OFF : (hov ? BTN_HOVER : BTN);
         g.fill(x, y, x + w, y + h, fill);
         bevel(g, x, y, w, h, fill, value || !active);
 

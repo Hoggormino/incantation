@@ -388,7 +388,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         long usedMb  = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
         long totalMb = rt.totalMemory() / (1024 * 1024);
         String heap = " · heap " + usedMb + "/" + totalMb + "MB";
-        g.drawString(font, Component.literal("LIVE MONITOR" + heap), mx, my, Theme.C_TEXT, true);
+        g.drawString(font, Component.literal("LIVE MONITOR" + heap), mx, my, Theme.C_TEXT, !Theme.lightSurface());
         int meterX = mx + font.width("LIVE MONITOR" + heap) + 10;
         int meterW = mw - (meterX - mx);
         drawWaveform(g, meterX, my, meterW, 8);
@@ -400,7 +400,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         List<VoiceController.RecognitionEvent> events = VoiceController.recentEvents();
         if (events.isEmpty()) {
             g.drawString(font, Component.literal("(say a spell — entries appear here)"),
-                mx + 4, my + 4, Theme.C_FAINT, true);
+                mx + 4, my + 4, Theme.C_FAINT, !Theme.lightSurface());
             return;
         }
         long now = System.nanoTime();
@@ -426,7 +426,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             String tier = e.tier() == ' ' ? " " : String.valueOf(e.tier());
             String line = String.format(Locale.ROOT, "%2ds %s [%s] \"%s\" %s",
                 ageSec, conf, tier, truncate(e.heard(), 16), outcome);
-            g.drawString(font, Component.literal(line), mx + 4, rowY, color, true);
+            g.drawString(font, Component.literal(line), mx + 4, rowY, color, !Theme.lightSurface());
             rowY += lineH;
         }
     }

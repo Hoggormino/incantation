@@ -52,9 +52,13 @@ public final class VoiceSpellsConfig {
      *  <p>Like ThemePreset, this lives in the config class so it can be referenced by the
      *  config spec without dragging in the client-only Theme renderer. */
     public enum UiPalette {
-        DARK,       // default — deep midnight surfaces, off-white text
-        MIDNIGHT,   // almost-black surfaces — even less light spill (good for streamers)
-        SLATE       // mid-grey neutral — gunmetal feel
+        // The constant NAMES are part of the saved config and cannot change without breaking
+        // everyone's voicespells-client.toml, so they stay — but what they render has changed
+        // and the comments say what is actually drawn now, not what the name implies.
+        DARK,       // default — vanilla container panel: light stone with dark 0x404040 text,
+                    // i.e. what a chest GUI looks like. Named DARK for config compatibility.
+        MIDNIGHT,   // near-black surfaces, white text — low glare, good for streamers
+        SLATE       // vanilla stone grey, white text — midway between the two
     }
 
     public static final ModConfigSpec CLIENT_SPEC;
@@ -334,9 +338,10 @@ public final class VoiceSpellsConfig {
                       "NECROTIC (1000).");
             themePreset = b.defineEnum("themePreset", ThemePreset.ARCANE);
             b.comment("Base UI palette. Independent of themePreset (which is the accent colour).",
-                      "DARK     — default midnight surfaces, off-white text",
-                      "MIDNIGHT — extra dark, low-glare for streamers",
-                      "SLATE    — neutral mid-grey");
+                      "DARK     — default. Vanilla container look: light stone panel, dark text",
+                      "           (the name is kept for config compatibility; it is the light one)",
+                      "MIDNIGHT — near-black panel, white text. Low glare for streamers",
+                      "SLATE    — vanilla stone grey panel, white text");
             uiPalette = b.defineEnum("uiPalette", UiPalette.DARK);
             b.comment("Hands-free queue confirmation: when on, say 'no' to clear the cast",
                       "queue, or 'yes' to acknowledge. Injects those two words into the Vosk",

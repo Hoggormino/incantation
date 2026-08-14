@@ -24,6 +24,13 @@ import net.minecraft.network.chat.Component;
  * Click handling, focus, narration and accessibility still come from {@link Button}.
  */
 public final class NeonButton extends Button {
+    /** Vanilla's button body tone. Fixed, NOT derived from the panel: a vanilla button keeps
+     *  the same dark grey whether it sits on a light container panel or a dark options screen,
+     *  which is what lets its white text stay readable everywhere. */
+    private static final int BTN        = 0xFF6C6C6C;
+    private static final int BTN_HOVER  = 0xFF8A8A8A;
+    private static final int BTN_OFF    = 0xFF4A4A4A;
+
 
     /** Vanilla's hovered-button text tint. */
     private static final int TEXT_HOVER = 0xFFFFFFA0;
@@ -41,11 +48,8 @@ public final class NeonButton extends Button {
         int x = getX(), y = getY(), w = getWidth(), h = getHeight();
         boolean hovered = isHoveredOrFocused() && active;
 
-        // Fill derived from the panel tone so all three palettes stay coherent: a button is a
-        // raised sibling of the panel, brighter on hover, flatter when dead.
-        int fill = !active ? shade(Theme.C_PANEL, -0.18f)
-                 : hovered ? shade(Theme.C_PANEL, 0.30f)
-                           : shade(Theme.C_PANEL, 0.12f);
+        // Fixed vanilla button tone, brighter on hover, flatter when dead.
+        int fill = !active ? BTN_OFF : (hovered ? BTN_HOVER : BTN);
         g.fill(x, y, x + w, y + h, fill);
 
         // The vanilla bevel: black outline, light top/left, dark bottom/right. Inactive buttons

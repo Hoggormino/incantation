@@ -17,6 +17,13 @@ import java.util.function.Function;
  * convention so the muscle memory carries over).
  */
 public final class NeonCycle<T> extends AbstractWidget {
+    /** Vanilla's button body tone. Fixed, NOT derived from the panel: a vanilla button keeps
+     *  the same dark grey whether it sits on a light container panel or a dark options screen,
+     *  which is what lets its white text stay readable everywhere. */
+    private static final int BTN        = 0xFF6C6C6C;
+    private static final int BTN_HOVER  = 0xFF8A8A8A;
+    private static final int BTN_OFF    = 0xFF4A4A4A;
+
 
     private final T[] values;
     private final Function<T, String> labeller;
@@ -66,9 +73,7 @@ public final class NeonCycle<T> extends AbstractWidget {
         // (Video Settings cycles Graphics/Clouds/Attack Indicator the same way). Locked values
         // render sunken and dimmed rather than merely darker, so "you cannot pick this" is
         // carried by shape as well as by the leading mark and the grey text.
-        int base = Theme.C_PANEL;
-        int fill = (!active || locked) ? shade(base, -0.18f)
-                 : hov ? shade(base, 0.30f) : shade(base, 0.12f);
+        int fill = (!active || locked) ? BTN_OFF : (hov ? BTN_HOVER : BTN);
         g.fill(x, y, x + w, y + h, fill);
         bevel(g, x, y, w, h, fill, locked || !active);
         if (hov && active && !locked) g.fill(x + 2, y + h - 2, x + w - 2, y + h - 1, Theme.C_ACCENT);

@@ -180,11 +180,11 @@ public final class HelpScreen extends Screen {
         int x = px + Theme.PAD;
         int y = py + Theme.HEADER_H + 24;
         // Heading in accent
-        g.drawString(font, Component.literal(lines[0]), x, y, Theme.C_ACCENT, true);
+        g.drawString(font, Component.literal(lines[0]), x, y, Theme.C_ACCENT, !Theme.lightSurface());
         y += 14;
         for (int i = 1; i < lines.length; i++) {
             int color = lines[i].isEmpty() ? Theme.C_FAINT : Theme.C_TEXT;
-            g.drawString(font, Component.literal(lines[i]), x, y + (i - 1) * 11, color, true);
+            g.drawString(font, Component.literal(lines[i]), x, y + (i - 1) * 11, color, !Theme.lightSurface());
         }
     }
 }

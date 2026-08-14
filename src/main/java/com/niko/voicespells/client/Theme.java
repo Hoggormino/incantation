@@ -149,18 +149,25 @@ public final class Theme {
                 // panels sit next to a vanilla inventory without clashing. Text is plain white
                 // and vanilla's own GRAY (0xA0A0A0), which is what Minecraft uses for secondary
                 // labels everywhere.
-                C_SCRIM    = 0xC0101010;
-                C_PANEL    = 0xFF313131;
-                C_HEADER_T = 0xFF3D3D3D;
-                C_HEADER_B = 0xFF2A2A2A;
-                C_INSET    = 0xFF1E1E1E;
-                C_INSET_2  = 0xFF383838;
+                // The vanilla container-GUI palette, i.e. what a chest or a furnace looks
+                // like, which is also exactly what Simple Voice Chat uses: a light stone
+                // panel with dark grey text. Its VoiceChatScreenBase.FONT_COLOR is 4210752 =
+                // 0x404040, and its panels are plain light PNGs with no accent anywhere.
+                // That understatement is the whole point — a modded screen that looks like
+                // an inventory reads as part of the game, and one with a dark neon panel
+                // reads as an overlay.
+                C_SCRIM    = 0x00000000;   // no scrim; vanilla's own backdrop is enough
+                C_PANEL    = 0xFFC6C6C6;
+                C_HEADER_T = 0xFFC6C6C6;   // container GUIs have no header band at all
+                C_HEADER_B = 0xFFC6C6C6;
+                C_INSET    = 0xFF8B8B8B;
+                C_INSET_2  = 0xFFDBDBDB;
                 C_BORDER   = 0xFF000000;
-                C_DIVIDER  = 0xFF555555;
-                C_SHADOW   = 0xFF1A1A1A;
-                C_TEXT     = 0xFFFFFFFF;
-                C_MUTED    = 0xFFA0A0A0;
-                C_FAINT    = 0xFF707070;
+                C_DIVIDER  = 0xFF8B8B8B;
+                C_SHADOW   = 0xFF555555;
+                C_TEXT     = 0xFF404040;   // vanilla's container text colour
+                C_MUTED    = 0xFF6A6A6A;
+                C_FAINT    = 0xFF8B8B8B;
             }
         }
         // Re-derive accent layers immediately if the palette flipped (SLATE needs different
@@ -276,19 +283,21 @@ public final class Theme {
      *               uses this for text fields, list backgrounds and slots.
      */
     public static void bevel(GuiGraphics g, int x, int y, int w, int h, boolean sunken) {
-        int hi = sunken ? darken(C_PANEL, 0.55f) : lighten(C_PANEL, 0.28f);
-        int lo = sunken ? lighten(C_PANEL, 0.22f) : darken(C_PANEL, 0.45f);
-        // 1px black outline first — vanilla always seats a widget on black.
+        // Vanilla container chrome: a 4px light border with a white inner highlight on the top
+        // and left and a mid-grey on the bottom and right, seated on black. This is the exact
+        // construction of a chest GUI's edge, and it is why those screens read as a physical
+        // panel rather than a coloured box.
+        int hi = sunken ? darken(C_PANEL, 0.40f) : lighten(C_PANEL, 0.60f);
+        int lo = sunken ? lighten(C_PANEL, 0.45f) : darken(C_PANEL, 0.32f);
         int outline = 0xFF000000;
         g.fill(x, y, x + w, y + 1, outline);
         g.fill(x, y + h - 1, x + w, y + h, outline);
         g.fill(x, y, x + 1, y + h, outline);
         g.fill(x + w - 1, y, x + w, y + h, outline);
-        // Inner bevel, inset by the outline.
-        g.fill(x + 1, y + 1, x + w - 1, y + 2, hi);          // top light
-        g.fill(x + 1, y + 1, x + 2, y + h - 1, hi);          // left light
-        g.fill(x + 1, y + h - 2, x + w - 1, y + h - 1, lo);  // bottom dark
-        g.fill(x + w - 2, y + 1, x + w - 1, y + h - 1, lo);  // right dark
+        g.fill(x + 1, y + 1, x + w - 1, y + 3, hi);
+        g.fill(x + 1, y + 1, x + 3, y + h - 1, hi);
+        g.fill(x + 1, y + h - 3, x + w - 1, y + h - 1, lo);
+        g.fill(x + w - 3, y + 1, x + w - 1, y + h - 1, lo);
     }
 
     /**
@@ -309,11 +318,16 @@ public final class Theme {
         g.fill(x + w - 2, y + 1, x + w - 1, y + h - 1, darken(color, 0.4f));
     }
 
-    /** Header band. Vanilla title bars are a flat slightly-raised strip, not a gradient wash. */
+    /**
+     * Header band — intentionally almost nothing now.
+     *
+     * <p>A container screen has no header band; the title is simply text sitting on the same
+     * panel. Anything more is decoration the game does not have. Kept as a no-op-shaped call
+     * (it still paints the panel tone, so callers that draw it before their title do not get
+     * a hole) so the nine screens did not each need editing.
+     */
     public static void headerBand(GuiGraphics g, int x, int y, int w, int h) {
         g.fill(x, y, x + w, y + h, C_HEADER_T);
-        g.fill(x + 1, y + 1, x + w - 1, y + 2, lighten(C_HEADER_T, 0.22f));
-        g.fill(x, y + h - 1, x + w, y + h, darken(C_HEADER_T, 0.5f));
     }
 
     /**
@@ -326,8 +340,10 @@ public final class Theme {
      * player's chosen theme, so the personality survives without the neon.
      */
     public static void accentGlow(GuiGraphics g, int x, int y, int w) {
-        g.fill(x, y, x + w, y + 1, C_ACCENT);
-        g.fill(x, y + 1, x + w, y + 2, darken(C_ACCENT, 0.55f));
+        // A single hairline separator in the panel's own shadow tone. Simple Voice Chat has no
+        // accent rule at all; this is the least that still separates a title from its body.
+        // It was a seven-layer pulsing neon halo two revisions ago.
+        g.fill(x, y, x + w, y + 1, C_SHADOW);
     }
 
     /**
@@ -354,15 +370,24 @@ public final class Theme {
     }
 
     /**
-     * Draw text the way Minecraft does: with a drop shadow.
+     * True when the current panel is light enough that text on it should be dark and
+     * UNSHADOWED, which is what vanilla does on container screens.
      *
-     * <p>Vanilla renders essentially all GUI text shadowed, and this mod was passing
-     * {@code false} in 26 places. Flat unshadowed text on a dark panel is the quietest and
-     * most pervasive reason the UI did not look like it belonged in the game.
+     * <p>Shadowing is not a blanket rule. Vanilla shadows white text on dark surfaces (the
+     * options menu, the HUD) and deliberately does not shadow the dark 0x404040 text on a
+     * container panel — a shadow under dark-on-light text just looks like a rendering bug.
+     * Deriving it from panel luminance keeps every palette correct without each caller
+     * having to know which one is active.
      */
+    public static boolean lightSurface() {
+        int r = (C_PANEL >> 16) & 0xFF, gg = (C_PANEL >> 8) & 0xFF, b = C_PANEL & 0xFF;
+        return (r * 299 + gg * 587 + b * 114) / 1000 > 128;
+    }
+
+    /** Draw text with the shadow convention the current surface calls for. */
     public static void text(GuiGraphics g, net.minecraft.client.gui.Font font, String s,
                             int x, int y, int color) {
-        g.drawString(font, s, x, y, color, true);
+        g.drawString(font, s, x, y, color, !lightSurface());
     }
 
     /** Centred, shadowed — vanilla's own title treatment. */

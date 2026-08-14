@@ -168,19 +168,19 @@ public final class DiagnosticsScreen extends Screen {
             int statusColor = colorForStatus(r.status());
             String pill = "[" + r.status() + "]";
             int pillW = font.width(pill);
-            g.drawString(font, Component.literal(pill), x, y + 1, statusColor, true);
+            g.drawString(font, Component.literal(pill), x, y + 1, statusColor, !Theme.lightSurface());
             // Left-edge accent bar in the status colour for quick scan.
             g.fill(x - 3, y, x - 1, y + ROW_H - 2, statusColor);
             // Name in main text colour.
             g.drawString(font, Component.literal(r.name()),
-                x + pillW + 6, y + 1, Theme.C_TEXT, true);
+                x + pillW + 6, y + 1, Theme.C_TEXT, !Theme.lightSurface());
             // Detail in muted, on the next line.
             String detail = r.detail();
             if (font.width(detail) > w - 12) {
                 detail = font.plainSubstrByWidth(detail, w - 16) + "…";
             }
             g.drawString(font, Component.literal(detail),
-                x + 4, y + 12, Theme.C_MUTED, true);
+                x + 4, y + 12, Theme.C_MUTED, !Theme.lightSurface());
         }
 
         private int colorForStatus(Diagnostics.Status s) {

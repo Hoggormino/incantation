@@ -254,7 +254,7 @@ public final class FirstRunScreen extends Screen {
         int availW = panelW - Theme.PAD * 2 - font.width(prefix) - font.width("\"\"");
         String shown = empty ? "(nothing yet)" : "\"" + fitFromRight(last, availW) + "\"";
         g.drawString(font, Component.literal(prefix + shown), x, y,
-            empty ? Theme.C_FAINT : Theme.C_TEXT, true);
+            empty ? Theme.C_FAINT : Theme.C_TEXT, !Theme.lightSurface());
     }
 
     // ------------------------------------------------------------------------ Step 2
@@ -280,7 +280,7 @@ public final class FirstRunScreen extends Screen {
         int feedH = panelH - (feedY - py) - 40; // leave room for buttons + a real gap
         if (feedH > 30) {
             g.drawString(font, Component.literal("Recent recognitions:"), feedX, feedY,
-                Theme.C_MUTED, true);
+                Theme.C_MUTED, !Theme.lightSurface());
             feedY += 13;                          // label text + ~4px gap before the box
             feedH -= 13;
             g.fill(feedX, feedY, feedX + feedW, feedY + feedH, Theme.C_INSET);
@@ -289,7 +289,7 @@ public final class FirstRunScreen extends Screen {
             List<VoiceController.RecognitionEvent> events = VoiceController.recentEvents();
             if (events.isEmpty()) {
                 g.drawString(font, Component.literal("(say a spell — entries appear here)"),
-                    feedX + 4, feedY + 4, Theme.C_FAINT, true);
+                    feedX + 4, feedY + 4, Theme.C_FAINT, !Theme.lightSurface());
             } else {
                 long now = System.nanoTime();
                 int rowY = feedY + 4;
@@ -302,7 +302,7 @@ public final class FirstRunScreen extends Screen {
                     String text = String.format(java.util.Locale.ROOT, "%2ds  \"%s\"  %s",
                         ageSec, e.heard(),
                         e.matched() == null ? "— no match" : "→ " + shortId(e.matched()));
-                    g.drawString(font, Component.literal(text), feedX + 4, rowY, color, true);
+                    g.drawString(font, Component.literal(text), feedX + 4, rowY, color, !Theme.lightSurface());
                     rowY += lineH;
                 }
             }
@@ -311,13 +311,13 @@ public final class FirstRunScreen extends Screen {
 
     // ------------------------------------------------------------------------ Shared
     private void drawHeading(GuiGraphics g, int x, int y, String text) {
-        g.drawString(font, Component.literal(text), x, y, Theme.C_ACCENT, true);
+        g.drawString(font, Component.literal(text), x, y, Theme.C_ACCENT, !Theme.lightSurface());
     }
 
     private void drawLines(GuiGraphics g, int x, int y, String[] lines) {
         for (int i = 0; i < lines.length; i++) {
             int color = lines[i].isEmpty() ? Theme.C_FAINT : Theme.C_TEXT;
-            g.drawString(font, Component.literal(lines[i]), x, y + i * 11, color, true);
+            g.drawString(font, Component.literal(lines[i]), x, y + i * 11, color, !Theme.lightSurface());
         }
     }
 
@@ -329,9 +329,9 @@ public final class FirstRunScreen extends Screen {
         // Left-edge state bar: neon when good, faint otherwise.
         g.fill(x + 1, y + 1, x + 3, y + h - 1, good ? Theme.F_MATCH : Theme.C_FAINT);
         g.drawString(font, Component.literal(label),     x + 6, y + 3,
-            Theme.C_MUTED, true);
+            Theme.C_MUTED, !Theme.lightSurface());
         g.drawString(font, Component.literal(value),     x + 6, y + 13,
-            good ? Theme.C_ACCENT_BRIGHT : Theme.C_TEXT, true);
+            good ? Theme.C_ACCENT_BRIGHT : Theme.C_TEXT, !Theme.lightSurface());
     }
 
     /** Big live audio meter — dim background, neon fill that grows with the smoothed RMS
