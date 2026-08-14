@@ -53,7 +53,7 @@ public final class TestArenaScreen extends Screen {
         // player opening any screen pauses the game. So the one place the live feed matters
         // most was the one place it could never arrive. Same override the first-run wizard
         // uses for its mic check. Released in onClose() and, as a safety net, removed().
-        VoiceController.setDiagnosticCapture(true);
+        VoiceController.setDiagnosticCapture("testarena", true);
 
         // Clamp to fit the current screen so large GUI Scale settings don't push buttons off
         // the bottom or sides. The preferred dimensions still apply when there's enough room.
@@ -74,7 +74,7 @@ public final class TestArenaScreen extends Screen {
 
     @Override
     public void onClose() {
-        try { VoiceController.setDiagnosticCapture(false); } catch (Throwable ignored) {}
+        try { VoiceController.setDiagnosticCapture("testarena", false); } catch (Throwable ignored) {}
         if (minecraft != null) minecraft.setScreen(parent);
     }
 
@@ -83,7 +83,7 @@ public final class TestArenaScreen extends Screen {
         // Safety net for exits that bypass onClose() — another mod calling setScreen, a
         // disconnect, a resource reload. Leaving the device open behind the title screen is
         // exactly the bug the gating work set out to kill. setDiagnosticCapture is idempotent.
-        try { VoiceController.setDiagnosticCapture(false); } catch (Throwable ignored) {}
+        try { VoiceController.setDiagnosticCapture("testarena", false); } catch (Throwable ignored) {}
         super.removed();
     }
 

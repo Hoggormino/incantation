@@ -192,6 +192,11 @@ public final class AddAliasScreen extends Screen {
         boolean changed = removeFromList(VoiceSpellsConfig.CLIENT.customPhrases, entry);
         if (!changed) changed = removeFromList(VoiceSpellsConfig.CLIENT.incantations, entry);
         if (changed) {
+            // Persist, exactly as the add path does. set() does not reach the disk on NeoForge,
+            // so without this the row vanished from the screen and came back on the next launch.
+            // The add path got this when config persistence was fixed; removal was missed, which
+            // is the more annoying half — an alias you deliberately deleted reappearing.
+            VoiceSpellsConfig.saveToDisk();
             VoiceSpellsConfig.refreshCache();
             VoiceController.onConfigChanged();
             rebuildWidgets();

@@ -106,7 +106,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // captureAllowedNow() then closes the mic, leaving the monitor permanently blank on
         // exactly the setup most people tune on. Only while the monitor is actually visible -
         // the config screen has no business holding the mic open on its other tabs.
-        VoiceController.setDiagnosticCapture(showMonitor);
+        VoiceController.setDiagnosticCapture("livemonitor", showMonitor);
         // Clamp to fit the current screen so large GUI Scale settings don't push buttons off
         // the bottom or sides. The preferred dimensions still apply when there's enough room.
         panelW = Theme.fit(PANEL_W_PREF, width);
@@ -333,13 +333,13 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // Safety net: init() may have taken the mic for the Live Monitor, and a screen can be
         // swapped out without onClose() (another mod's setScreen, a disconnect, a resource
         // reload). Idempotent.
-        try { VoiceController.setDiagnosticCapture(false); } catch (Throwable ignored) {}
+        try { VoiceController.setDiagnosticCapture("livemonitor", false); } catch (Throwable ignored) {}
         super.removed();
     }
 
     @Override
     public void onClose() {
-        try { VoiceController.setDiagnosticCapture(false); } catch (Throwable ignored) {}
+        try { VoiceController.setDiagnosticCapture("livemonitor", false); } catch (Throwable ignored) {}
         // Cancel / Escape: drop the live theme preview back to what is actually persisted.
         if (!saved) {
             if (origPalette != null) Theme.applyPalette(origPalette);

@@ -102,8 +102,9 @@ public final class VoiceController {
         // Calibration is started from a screen, and in single player an open screen pauses the
         // game, which closes the capture device — so the sampling loop received no frames at
         // all and "calibrate by talking for 5 seconds" measured silence. Hold the device open
-        // for the window; released in finishCalibration().
-        setDiagnosticCapture(true);
+        // for the window; released in finishCalibration(). Keyed so releasing it cannot revoke
+        // the hold belonging to whichever screen is still on screen.
+        setDiagnosticCapture("calibration", true);
     }
 
     private static void sampleCalibration(double rms) {
@@ -135,16 +136,20 @@ public final class VoiceController {
 
     private static void finishCalibration() {
         calibrating = false;
-        try { setDiagnosticCapture(false); } catch (Throwable ignored) {}
+        try { setDiagnosticCapture("calibration", false); } catch (Throwable ignored) {}
 
         // Refuse to write a threshold we did not actually measure. With no frames the mean is
         // 0, the clamp below turns that into the 100 floor, and that value was then saved over
         // whatever the player had configured — so a calibration that silently failed did not
         // just do nothing, it quietly replaced a working setting with a worse one.
-        if (calibCount == 0) {
+        // Require a real sample, not merely a non-zero one. calibCount == 0 alone was too weak:
+        // a window abandoned after about a second still carries a handful of near-silent frames,
+        // which average to almost nothing, clamp to the 100 floor, and get written over a
+        // threshold the player had tuned. 16 frames is roughly a second and a half of audio.
+        if (calibCount < 16) {
             lastCalibThreshold = -1;
-            VoiceSpells.LOGGER.warn("Noise gate calibration heard nothing — no microphone frames "
-                + "arrived during the window. Existing threshold left unchanged.");
+            VoiceSpells.LOGGER.warn("Noise gate calibration heard too little ({} frame(s)) — "
+                + "existing threshold left unchanged. Talk for the full five seconds.", calibCount);
             return;
         }
 
@@ -1266,12 +1271,34 @@ public final class VoiceController {
      *  title-screen fix landed. Not a config: it follows the screen's lifetime, nothing else. */
     private static volatile boolean diagnosticCaptureOverride = false;
 
-    /** Open the microphone regardless of gating, for as long as a mic-test screen is showing.
-     *  Always pair the {@code true} call with a {@code false} in the screen's close path. */
-    public static void setDiagnosticCapture(boolean on) {
-        if (diagnosticCaptureOverride == on) return;
-        diagnosticCaptureOverride = on;
+    /** Who currently wants the microphone held open. The override is on while this is non-empty. */
+    private static final java.util.Set<String> captureHolders =
+        java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /**
+     * Hold the microphone open regardless of gating, for as long as a mic-test surface needs it.
+     *
+     * <p>Keyed by owner rather than a bare boolean, because four independent things claim this:
+     * the first-run wizard, the Test Arena, the config screen's Live Monitor, and the noise-gate
+     * calibration timer. With a single flag, whichever released LAST won — so a calibration
+     * finishing would revoke the mic out from under the Test Arena that was still open, and the
+     * old equality check at the top made the second claimant's request a silent no-op. Holds are
+     * a set, so releases are idempotent (screens release in both onClose and removed) and the
+     * device stays open until the last holder lets go.
+     */
+    public static void setDiagnosticCapture(String owner, boolean on) {
+        boolean before = !captureHolders.isEmpty();
+        if (on) captureHolders.add(owner); else captureHolders.remove(owner);
+        boolean after = !captureHolders.isEmpty();
+        if (before == after) return;
+        diagnosticCaptureOverride = after;
         syncCapture();
+    }
+
+    /** Legacy single-argument form. Kept so nothing breaks; attributes the hold to one shared
+     *  owner, which is the behaviour that caused the conflict, so prefer the keyed overload. */
+    public static void setDiagnosticCapture(boolean on) {
+        setDiagnosticCapture("legacy", on);
     }
 
     private static boolean captureAllowedNow() {

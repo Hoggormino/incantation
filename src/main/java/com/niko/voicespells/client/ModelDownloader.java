@@ -175,15 +175,57 @@ public final class ModelDownloader {
                     deleteRecursively(staging);
                     return false;
                 }
-                // Publish. Replacing rather than merging, so leftovers from an older model
-                // cannot mix with the new one.
-                deleteRecursively(modelDir);
-                Files.createDirectories(modelDir.getParent());
+                // Publish — but NEVER delete a directory this mod does not own.
+                //
+                // This used to call deleteRecursively(modelDir) unconditionally. modelDir is
+                // whatever the player typed into `modelPath`, passed through verbatim, so that
+                // line would recursively erase a user-chosen directory and everything under it.
+                // The README itself tells non-English players to point modelPath at a model they
+                // downloaded by hand, and Vosk archives wrap their contents in a top-level
+                // folder — so the natural result of following those instructions is a path whose
+                // am/ and conf/ sit one level deeper, which fails looksLikeModel, triggers the
+                // auto-download, and then deletes the model they just installed. Pointing
+                // modelPath at a shared folder of several models deleted all of them.
+                //
+                // The rule now: we only ever replace a directory that is already a model root,
+                // i.e. one this mod would itself have produced. Anything else is the player's
+                // and is left untouched, with a log line explaining why.
+                Path absolute = modelDir.toAbsolutePath();
+                Path parent = absolute.getParent();
+                // getParent() is null for a single-segment relative path like modelPath="voskmodel";
+                // createDirectories(null) throws NPE, which previously fired AFTER the delete.
+                if (parent != null) Files.createDirectories(parent);
+
+                Path retired = null;
+                if (Files.exists(modelDir)) {
+                    if (!looksLikeModel(modelDir)) {
+                        VoiceSpells.LOGGER.error(
+                            "Refusing to replace {} — it exists but is not a Vosk model directory "
+                            + "(no am/ and conf/ inside it), so it is not ours to delete. If you "
+                            + "meant to point modelPath at a hand-installed model, point it at the "
+                            + "folder that directly contains am/ and conf/. Downloaded model left "
+                            + "in {} and nothing was removed.", modelDir, staging);
+                        return false;
+                    }
+                    // It is a model root, so it is safe to swap. Move it aside rather than
+                    // deleting first: if the move of the new one fails we can put it back.
+                    retired = absolute.resolveSibling(absolute.getFileName() + ".old");
+                    deleteRecursively(retired);
+                    Files.move(modelDir, retired);
+                }
+
                 try {
                     Files.move(staging, modelDir, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
                 } catch (java.nio.file.AtomicMoveNotSupportedException amnse) {
                     Files.move(staging, modelDir);
+                } catch (Throwable moveFailed) {
+                    // Put the player's previous model back before giving up.
+                    if (retired != null && !Files.exists(modelDir)) {
+                        try { Files.move(retired, modelDir); } catch (Throwable ignored) {}
+                    }
+                    throw moveFailed;
                 }
+                if (retired != null) deleteRecursively(retired);
                 VoiceSpells.LOGGER.info("Vosk model installed at {}", modelDir);
                 return true;
             } catch (Throwable t) {

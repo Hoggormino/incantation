@@ -275,6 +275,31 @@ public final class VoiceStats {
         }
     }
 
+    /**
+     * Guarantee a copy of {@code p} exists somewhere before we are allowed to overwrite it.
+     *
+     * <p>Unlike {@link #backupUnreadable}, this will not give up when stats.dat.bak is already
+     * taken — it walks to stats.dat.bak2, .bak3 and so on, because the whole point is to be
+     * able to answer "yes, the bytes are safe" truthfully. Returns false if no copy could be
+     * made, in which case the caller must not write.
+     */
+    private static boolean ensureBackedUp(Path p) {
+        try {
+            if (!Files.exists(p)) return true; // nothing to lose
+            for (int i = 0; i < 20; i++) {
+                Path bak = p.resolveSibling("stats.dat.bak" + (i == 0 ? "" : String.valueOf(i + 1)));
+                if (Files.exists(bak)) continue;
+                Files.copy(p, bak);
+                VoiceSpells.LOGGER.warn("Unreadable stats copied to {} before overwrite", bak);
+                return true;
+            }
+            return false; // 20 backups already sitting there — stop making more, stop writing
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.warn("Could not back up stats before overwrite: {}", t.toString());
+            return false;
+        }
+    }
+
     /** Copy an unreadable stats.dat aside once, so the player has something to hand back if
      *  they ask for help. Best-effort and never overwrites an existing backup. */
     private static void backupUnreadable(Path p) {
@@ -296,8 +321,22 @@ public final class VoiceStats {
         // save would discard the whole session instead. Without this, anyone already carrying a
         // file poisoned by the previous version of the guard above would stay frozen forever.
         if (loadFailed && totalCasts > 0) {
+            // Only overwrite an unreadable file once we have PROVEN a copy of it exists.
+            //
+            // This previously claimed in the log that "the unreadable original is preserved as
+            // stats.dat.bak" and then wrote regardless. backupUnreadable() copies only when no
+            // .bak is already there, so on a second bad launch the current file was never
+            // backed up — and the hatch overwrote a player's lifetime stats while telling them
+            // it had been saved. A reassuring log line next to unrecoverable data loss is worse
+            // than no log line.
+            if (!ensureBackedUp(statsFile())) {
+                VoiceSpells.LOGGER.warn("Stats load failed and the file could not be backed up; "
+                    + "refusing to overwrite it. This session's {} cast(s) will not be saved.",
+                    totalCasts);
+                return;
+            }
             VoiceSpells.LOGGER.info("Stats load failed earlier, but this session has {} cast(s) — "
-                + "saving anyway (the unreadable original is preserved as stats.dat.bak)", totalCasts);
+                + "saving anyway; the unreadable original was copied aside first.", totalCasts);
         } else if (loadFailed) {
             VoiceSpells.LOGGER.debug("Skipping stats save — last load failed, preserving file as-is");
             return;
