@@ -473,7 +473,7 @@ public final class ClientEvents {
             }
             // Fixed light text — the chip background is fixed-dark above, so we can't use
             // Theme.C_TEXT (which goes dark in light mode and would vanish into the dark chip).
-            g.drawString(font, Component.literal(label), x + 6, y + 2, 0xFFEAE6FA, false);
+            g.drawString(font, Component.literal(label), x + 6, y + 2, 0xFFEAE6FA, true);
         }
 
         /** Returns the 0..1 fraction of the cooldown still to run: 1.0 the instant the spell is
@@ -675,7 +675,7 @@ public final class ClientEvents {
             // imply spells are about to fire.
             if (calibrating) {
                 g.drawString(font, "calibrating", meterX + METER_W + 4,
-                    chipY + (CHIP_H - font.lineHeight) / 2 + 1, Theme.C_MUTED, false);
+                    chipY + (CHIP_H - font.lineHeight) / 2 + 1, Theme.C_MUTED, true);
             }
         }
 
@@ -862,7 +862,7 @@ public final class ClientEvents {
             // cTextToast was "still used as the alpha source", which was not true of this call.
             int color = withAlpha(schoolRgb, alpha * VoiceSpellsConfig.cOpacity);
             int textY = toastY + (CHIP_H - 8) / 2;
-            g.drawString(font, Component.literal(text), toastX + PAD_X, textY, color, false);
+            g.drawString(font, Component.literal(text), toastX + PAD_X, textY, color, true);
         }
 
         /** Stack of recent-cast history chips trailing the main cast toast. Index 0 of the
@@ -904,7 +904,7 @@ public final class ClientEvents {
                 drawChip(g, toastX, toastY, toastW, CHIP_H, alpha);
                 int color = withAlpha(VoiceSpellsConfig.cTextMuted, alpha);
                 int textY = toastY + (CHIP_H - 8) / 2;
-                g.drawString(font, Component.literal(text), toastX + PAD_X, textY, color, false);
+                g.drawString(font, Component.literal(text), toastX + PAD_X, textY, color, true);
             }
         }
 
@@ -918,7 +918,7 @@ public final class ClientEvents {
             drawChip(g, x, anchorY, toastW, CHIP_H, 0.55f);
             int color = withAlpha(VoiceSpellsConfig.cTextMuted, 0.85f);
             int textY = anchorY + (CHIP_H - 8) / 2;
-            g.drawString(font, Component.literal(text), x + PAD_X, textY, color, false);
+            g.drawString(font, Component.literal(text), x + PAD_X, textY, color, true);
         }
 
         /** "Did you mean X?" alias-suggestion chip — appears after a near-miss recognition,
@@ -939,7 +939,7 @@ public final class ClientEvents {
             // Bright accent text — this is actionable, treat it differently from a miss toast.
             int color = withAlpha(Theme.C_ACCENT, alpha);
             int textY = anchorY + (CHIP_H - 8) / 2;
-            g.drawString(font, Component.literal(text), x + PAD_X, textY, color, false);
+            g.drawString(font, Component.literal(text), x + PAD_X, textY, color, true);
         }
 
         /** Persistent chip while a spell is queued — gives the player visible confirmation
@@ -955,7 +955,7 @@ public final class ClientEvents {
             drawChip(g, x, anchorY, toastW, CHIP_H, 0.75f);
             int color = withAlpha(VoiceSpellsConfig.cTextToast, 0.85f);
             int textY = anchorY + (CHIP_H - 8) / 2;
-            g.drawString(font, Component.literal(text), x + PAD_X, textY, color, false);
+            g.drawString(font, Component.literal(text), x + PAD_X, textY, color, true);
         }
 
         private static void drawMissToastIfActive(GuiGraphics g, Font font, int anchorX, int anchorY) {
@@ -982,7 +982,7 @@ public final class ClientEvents {
             drawChip(g, x, anchorY, toastW, CHIP_H, alpha * 0.85f);
             int color = withAlpha(VoiceSpellsConfig.cTextMuted, alpha);
             g.drawString(font, Component.literal(text), x + PAD_X,
-                anchorY + (CHIP_H - 8) / 2, color, false);
+                anchorY + (CHIP_H - 8) / 2, color, true);
         }
 
         private static void drawChip(GuiGraphics g, int x, int y, int w, int h, float alpha) {

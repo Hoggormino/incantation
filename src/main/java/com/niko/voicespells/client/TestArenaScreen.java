@@ -89,6 +89,11 @@ public final class TestArenaScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
+        // Vanilla backdrop first (blurred world in-game, dirt on the title screen, and it
+        // honours the player's Menu Background Blur setting), then our own dim on top so
+        // the panel still reads. Painting only a flat scrim, as this did before, opted out
+        // of all of that and was a large part of why the screens felt foreign.
+        Theme.background(this, g, mouseX, mouseY, partial);
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
         g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
         Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
@@ -110,9 +115,9 @@ public final class TestArenaScreen extends Screen {
         Theme.roundedFrame(g, x, y, discW, discH, Theme.C_ACCENT_SOFT);
         g.fill(x + 1, y + 1, x + 3, y + discH - 1, Theme.C_ACCENT_BRIGHT);
         g.drawString(font, Component.literal("PRACTICE MODE — spells will NOT actually cast."),
-            x + 8, y + 3, Theme.C_ACCENT_BRIGHT, false);
+            x + 8, y + 3, Theme.C_ACCENT_BRIGHT, true);
         g.drawString(font, Component.literal("Close this screen to cast for real."),
-            x + 8, y + 13, Theme.C_MUTED, false);
+            x + 8, y + 13, Theme.C_MUTED, true);
         y += discH + 6;
 
         // Hard-warn if the player isn't in a world: capture is paused there, so nothing on
@@ -124,10 +129,10 @@ public final class TestArenaScreen extends Screen {
             g.fill(x, y, x + bannerW, y + bannerH, Theme.C_INSET);
             Theme.roundedFrame(g, x, y, bannerW, bannerH, Theme.C_DANGER);
             g.drawString(font, Component.literal("⚠ Open a world first."), x + 6, y + 4,
-                Theme.C_DANGER, false);
+                Theme.C_DANGER, true);
             g.drawString(font,
                 Component.literal("Recognition only runs in-game, so nothing fires here."),
-                x + 6, y + 14, Theme.C_MUTED, false);
+                x + 6, y + 14, Theme.C_MUTED, true);
             y += bannerH + 8;
         }
 
@@ -148,10 +153,10 @@ public final class TestArenaScreen extends Screen {
         // to attempt something specific rather than just stare at the meter.
         String suggestion = sessionSuggestion();
         if (!suggestion.isEmpty()) {
-            g.drawString(font, Component.literal("Try saying: "), x, y, Theme.C_FAINT, false);
+            g.drawString(font, Component.literal("Try saying: "), x, y, Theme.C_FAINT, true);
             int prefixW = font.width("Try saying: ");
             g.drawString(font, Component.literal(suggestion), x + prefixW, y,
-                Theme.C_ACCENT_BRIGHT, false);
+                Theme.C_ACCENT_BRIGHT, true);
             y += 14;
         }
 
@@ -163,9 +168,9 @@ public final class TestArenaScreen extends Screen {
         int labelW = font.width("Last heard:  ");
         int availW = panelW - Theme.PAD * 2 - labelW;
         last = fitToWidth(last, availW);
-        g.drawString(font, Component.literal("Last heard:  "), x, y, Theme.C_FAINT, false);
+        g.drawString(font, Component.literal("Last heard:  "), x, y, Theme.C_FAINT, true);
         g.drawString(font, Component.literal(last),
-            x + labelW, y, Theme.C_TEXT, false);
+            x + labelW, y, Theme.C_TEXT, true);
         y += 14;
 
         // Status + transmission badges.
@@ -173,13 +178,13 @@ public final class TestArenaScreen extends Screen {
         String mic = VoiceController.isHearingNow() ? "transmitting" : "idle";
         String statusLine = "Status: " + (status.isEmpty() ? "warming up" : status)
             + "    Mic: " + mic;
-        g.drawString(font, Component.literal(statusLine), x, y, Theme.C_FAINT, false);
+        g.drawString(font, Component.literal(statusLine), x, y, Theme.C_FAINT, true);
         y += 16;
 
         // Recent recognition list — same source as the Live Monitor, narrower view. Entries
         // with the "(menu)" suffix are what *would have* cast; perfect for practice mode.
         g.drawString(font, Component.literal("RECENT — would have cast:"), x, y,
-            Theme.C_MUTED, false);
+            Theme.C_MUTED, true);
         y += 12;
         int listH = panelH - (y - py) - 36;
         g.fill(x, y, x + meterW, y + listH, Theme.C_INSET);
@@ -189,7 +194,7 @@ public final class TestArenaScreen extends Screen {
         List<VoiceController.RecognitionEvent> events = VoiceController.recentEvents();
         if (events.isEmpty()) {
             g.drawString(font, Component.literal("(no recognitions yet — try saying a spell)"),
-                x + 6, y + 6, Theme.C_FAINT, false);
+                x + 6, y + 6, Theme.C_FAINT, true);
         } else {
             long now = System.nanoTime();
             int rowY = y + 4;
@@ -220,13 +225,13 @@ public final class TestArenaScreen extends Screen {
                 String tier = e.tier() == ' ' ? " " : String.valueOf(e.tier());
                 String line = String.format(Locale.ROOT, "%2ds [%s] c%.2f  \"%s\"  %s",
                     ageSec, tier, e.confidence(), truncate(e.heard(), 16), outcome);
-                g.drawString(font, Component.literal(line), x + 4, rowY, color, false);
+                g.drawString(font, Component.literal(line), x + 4, rowY, color, true);
                 rowY += ROW_H;
                 shown++;
             }
             if (shown == 0) {
                 g.drawString(font, Component.literal("(speak — entries appear here)"),
-                    x + 6, y + 6, Theme.C_FAINT, false);
+                    x + 6, y + 6, Theme.C_FAINT, true);
             }
         }
     }

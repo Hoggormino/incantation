@@ -161,6 +161,11 @@ public final class FirstRunScreen extends Screen {
             return;
         }
 
+        // Vanilla backdrop first (blurred world in-game, dirt on the title screen, and it
+        // honours the player's Menu Background Blur setting), then our own dim on top so
+        // the panel still reads. Painting only a flat scrim, as this did before, opted out
+        // of all of that and was a large part of why the screens felt foreign.
+        Theme.background(this, g, mouseX, mouseY, partial);
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
         g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
         Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
@@ -249,7 +254,7 @@ public final class FirstRunScreen extends Screen {
         int availW = panelW - Theme.PAD * 2 - font.width(prefix) - font.width("\"\"");
         String shown = empty ? "(nothing yet)" : "\"" + fitFromRight(last, availW) + "\"";
         g.drawString(font, Component.literal(prefix + shown), x, y,
-            empty ? Theme.C_FAINT : Theme.C_TEXT, false);
+            empty ? Theme.C_FAINT : Theme.C_TEXT, true);
     }
 
     // ------------------------------------------------------------------------ Step 2
@@ -275,7 +280,7 @@ public final class FirstRunScreen extends Screen {
         int feedH = panelH - (feedY - py) - 40; // leave room for buttons + a real gap
         if (feedH > 30) {
             g.drawString(font, Component.literal("Recent recognitions:"), feedX, feedY,
-                Theme.C_MUTED, false);
+                Theme.C_MUTED, true);
             feedY += 13;                          // label text + ~4px gap before the box
             feedH -= 13;
             g.fill(feedX, feedY, feedX + feedW, feedY + feedH, Theme.C_INSET);
@@ -284,7 +289,7 @@ public final class FirstRunScreen extends Screen {
             List<VoiceController.RecognitionEvent> events = VoiceController.recentEvents();
             if (events.isEmpty()) {
                 g.drawString(font, Component.literal("(say a spell — entries appear here)"),
-                    feedX + 4, feedY + 4, Theme.C_FAINT, false);
+                    feedX + 4, feedY + 4, Theme.C_FAINT, true);
             } else {
                 long now = System.nanoTime();
                 int rowY = feedY + 4;
@@ -297,7 +302,7 @@ public final class FirstRunScreen extends Screen {
                     String text = String.format(java.util.Locale.ROOT, "%2ds  \"%s\"  %s",
                         ageSec, e.heard(),
                         e.matched() == null ? "— no match" : "→ " + shortId(e.matched()));
-                    g.drawString(font, Component.literal(text), feedX + 4, rowY, color, false);
+                    g.drawString(font, Component.literal(text), feedX + 4, rowY, color, true);
                     rowY += lineH;
                 }
             }
@@ -306,13 +311,13 @@ public final class FirstRunScreen extends Screen {
 
     // ------------------------------------------------------------------------ Shared
     private void drawHeading(GuiGraphics g, int x, int y, String text) {
-        g.drawString(font, Component.literal(text), x, y, Theme.C_ACCENT, false);
+        g.drawString(font, Component.literal(text), x, y, Theme.C_ACCENT, true);
     }
 
     private void drawLines(GuiGraphics g, int x, int y, String[] lines) {
         for (int i = 0; i < lines.length; i++) {
             int color = lines[i].isEmpty() ? Theme.C_FAINT : Theme.C_TEXT;
-            g.drawString(font, Component.literal(lines[i]), x, y + i * 11, color, false);
+            g.drawString(font, Component.literal(lines[i]), x, y + i * 11, color, true);
         }
     }
 
@@ -324,9 +329,9 @@ public final class FirstRunScreen extends Screen {
         // Left-edge state bar: neon when good, faint otherwise.
         g.fill(x + 1, y + 1, x + 3, y + h - 1, good ? Theme.F_MATCH : Theme.C_FAINT);
         g.drawString(font, Component.literal(label),     x + 6, y + 3,
-            Theme.C_MUTED, false);
+            Theme.C_MUTED, true);
         g.drawString(font, Component.literal(value),     x + 6, y + 13,
-            good ? Theme.C_ACCENT_BRIGHT : Theme.C_TEXT, false);
+            good ? Theme.C_ACCENT_BRIGHT : Theme.C_TEXT, true);
     }
 
     /** Big live audio meter — dim background, neon fill that grows with the smoothed RMS

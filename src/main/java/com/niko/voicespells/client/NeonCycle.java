@@ -62,23 +62,21 @@ public final class NeonCycle<T> extends AbstractWidget {
         boolean hov = isHoveredOrFocused();
         boolean locked = isLocked != null && isLocked.apply(values[idx]);
 
-        // Locked chips get a darker background so it's obvious they're not the equipped value.
-        g.fill(x, y, x + w, y + h, locked ? Theme.C_PANEL : Theme.C_INSET);
-        if (hov && active && !locked) {
-            g.fill(x + 2, y + 1,     x + w - 2, y + 2,     Theme.C_ACCENT_FAINT);
-            g.fill(x + 2, y + h - 2, x + w - 2, y + h - 1, Theme.C_ACCENT_FAINT);
-        }
-        int border = !active ? Theme.C_DIVIDER
-                   : locked  ? Theme.C_DIVIDER
-                   : (hov ? Theme.C_ACCENT : Theme.C_BORDER);
-        Theme.roundedFrame(g, x, y, w, h, border);
+        // A cycling option button, drawn like vanilla's — which is exactly what this is
+        // (Video Settings cycles Graphics/Clouds/Attack Indicator the same way). Locked values
+        // render sunken and dimmed rather than merely darker, so "you cannot pick this" is
+        // carried by shape as well as by the leading mark and the grey text.
+        int base = Theme.C_PANEL;
+        int fill = (!active || locked) ? shade(base, -0.18f)
+                 : hov ? shade(base, 0.30f) : shade(base, 0.12f);
+        g.fill(x, y, x + w, y + h, fill);
+        bevel(g, x, y, w, h, fill, locked || !active);
+        if (hov && active && !locked) g.fill(x + 2, y + h - 2, x + w - 2, y + h - 1, Theme.C_ACCENT);
 
         // Label with a leading "✗ " when locked so the state reads at a glance.
         String text = labeller.apply(values[idx]);
         if (locked) text = "✗ " + text;
-        int textColor = !active ? Theme.C_FAINT
-                       : locked ? Theme.C_FAINT     // distinctly dim for locked
-                       : (hov ? Theme.C_ACCENT_BRIGHT : Theme.C_TEXT);
+        int textColor = (!active || locked) ? 0xFFA0A0A0 : (hov ? 0xFFFFFFA0 : 0xFFFFFFFF);
         // Center the label, with a tiny "‹ ›" hint at each edge that brightens on hover so the
         // affordance is obvious ("click to cycle").
         Minecraft mc = Minecraft.getInstance();
@@ -88,8 +86,8 @@ public final class NeonCycle<T> extends AbstractWidget {
         int chevronColor = locked ? Theme.C_FAINT
                          : hov    ? Theme.C_ACCENT_BRIGHT
                                   : Theme.C_FAINT;
-        g.drawString(mc.font, Component.literal("‹"), x + 4,     textY, chevronColor, false);
-        g.drawString(mc.font, Component.literal("›"), x + w - 8, textY, chevronColor, false);
+        g.drawString(mc.font, Component.literal("‹"), x + 4,     textY, chevronColor, true);
+        g.drawString(mc.font, Component.literal("›"), x + w - 8, textY, chevronColor, true);
     }
 
     @Override
@@ -115,4 +113,32 @@ public final class NeonCycle<T> extends AbstractWidget {
 
     @Override
     protected void updateWidgetNarration(NarrationElementOutput n) {}
+
+    /** Vanilla bevel keyed off the widget's own fill. Mirrors NeonButton so the two never drift. */
+    private static void bevel(GuiGraphics g, int x, int y, int w, int h, int base, boolean sunken) {
+        int hi = sunken ? shade(base, -0.35f) : shade(base, 0.35f);
+        int lo = sunken ? shade(base, 0.20f) : shade(base, -0.40f);
+        g.fill(x, y, x + w, y + 1, 0xFF000000);
+        g.fill(x, y + h - 1, x + w, y + h, 0xFF000000);
+        g.fill(x, y, x + 1, y + h, 0xFF000000);
+        g.fill(x + w - 1, y, x + w, y + h, 0xFF000000);
+        g.fill(x + 1, y + 1, x + w - 1, y + 2, hi);
+        g.fill(x + 1, y + 1, x + 2, y + h - 1, hi);
+        g.fill(x + 1, y + h - 2, x + w - 1, y + h - 1, lo);
+        g.fill(x + w - 2, y + 1, x + w - 1, y + h - 1, lo);
+    }
+
+    private static int shade(int argb, float f) {
+        int a = (argb >>> 24) & 0xFF;
+        int r = (argb >> 16) & 0xFF, gg = (argb >> 8) & 0xFF, b = argb & 0xFF;
+        if (f >= 0) {
+            r = (int) (r + (255 - r) * f);
+            gg = (int) (gg + (255 - gg) * f);
+            b = (int) (b + (255 - b) * f);
+        } else {
+            float k = 1 + f;
+            r = (int) (r * k); gg = (int) (gg * k); b = (int) (b * k);
+        }
+        return (a << 24) | (r << 16) | (gg << 8) | b;
+    }
 }

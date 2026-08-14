@@ -350,6 +350,11 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
+        // Vanilla backdrop first (blurred world in-game, dirt on the title screen, and it
+        // honours the player's Menu Background Blur setting), then our own dim on top so
+        // the panel still reads. Painting only a flat scrim, as this did before, opted out
+        // of all of that and was a large part of why the screens felt foreign.
+        Theme.background(this, g, mouseX, mouseY, partial);
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
         g.fill(panelX, panelY, panelX + panelW, panelY + panelH, Theme.C_PANEL);
         Theme.headerBand(g, panelX, panelY, panelW, Theme.HEADER_H);
@@ -383,7 +388,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         long usedMb  = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
         long totalMb = rt.totalMemory() / (1024 * 1024);
         String heap = " · heap " + usedMb + "/" + totalMb + "MB";
-        g.drawString(font, Component.literal("LIVE MONITOR" + heap), mx, my, Theme.C_TEXT, false);
+        g.drawString(font, Component.literal("LIVE MONITOR" + heap), mx, my, Theme.C_TEXT, true);
         int meterX = mx + font.width("LIVE MONITOR" + heap) + 10;
         int meterW = mw - (meterX - mx);
         drawWaveform(g, meterX, my, meterW, 8);
@@ -395,7 +400,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         List<VoiceController.RecognitionEvent> events = VoiceController.recentEvents();
         if (events.isEmpty()) {
             g.drawString(font, Component.literal("(say a spell — entries appear here)"),
-                mx + 4, my + 4, Theme.C_FAINT, false);
+                mx + 4, my + 4, Theme.C_FAINT, true);
             return;
         }
         long now = System.nanoTime();
@@ -421,7 +426,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             String tier = e.tier() == ' ' ? " " : String.valueOf(e.tier());
             String line = String.format(Locale.ROOT, "%2ds %s [%s] \"%s\" %s",
                 ageSec, conf, tier, truncate(e.heard(), 16), outcome);
-            g.drawString(font, Component.literal(line), mx + 4, rowY, color, false);
+            g.drawString(font, Component.literal(line), mx + 4, rowY, color, true);
             rowY += lineH;
         }
     }

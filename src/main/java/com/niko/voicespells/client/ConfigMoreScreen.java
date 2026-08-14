@@ -340,6 +340,11 @@ public final class ConfigMoreScreen extends Screen {
                 calibBtn.setMessage(Component.literal("Auto-calibrate noise gate (talk for 5s)"));
             }
         }
+        // Vanilla backdrop first (blurred world in-game, dirt on the title screen, and it
+        // honours the player's Menu Background Blur setting), then our own dim on top so
+        // the panel still reads. Painting only a flat scrim, as this did before, opted out
+        // of all of that and was a large part of why the screens felt foreign.
+        Theme.background(this, g, mouseX, mouseY, partial);
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
         g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
         Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);

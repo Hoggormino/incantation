@@ -124,6 +124,11 @@ public final class DiagnosticsScreen extends Screen {
             summaryLabel.setMessage(Component.literal("Report copied to clipboard."));
             summaryLabel.setColor(Theme.F_MATCH);
         }
+        // Vanilla backdrop first (blurred world in-game, dirt on the title screen, and it
+        // honours the player's Menu Background Blur setting), then our own dim on top so
+        // the panel still reads. Painting only a flat scrim, as this did before, opted out
+        // of all of that and was a large part of why the screens felt foreign.
+        Theme.background(this, g, mouseX, mouseY, partial);
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
         g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
         Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
@@ -163,19 +168,19 @@ public final class DiagnosticsScreen extends Screen {
             int statusColor = colorForStatus(r.status());
             String pill = "[" + r.status() + "]";
             int pillW = font.width(pill);
-            g.drawString(font, Component.literal(pill), x, y + 1, statusColor, false);
+            g.drawString(font, Component.literal(pill), x, y + 1, statusColor, true);
             // Left-edge accent bar in the status colour for quick scan.
             g.fill(x - 3, y, x - 1, y + ROW_H - 2, statusColor);
             // Name in main text colour.
             g.drawString(font, Component.literal(r.name()),
-                x + pillW + 6, y + 1, Theme.C_TEXT, false);
+                x + pillW + 6, y + 1, Theme.C_TEXT, true);
             // Detail in muted, on the next line.
             String detail = r.detail();
             if (font.width(detail) > w - 12) {
                 detail = font.plainSubstrByWidth(detail, w - 16) + "…";
             }
             g.drawString(font, Component.literal(detail),
-                x + 4, y + 12, Theme.C_MUTED, false);
+                x + 4, y + 12, Theme.C_MUTED, true);
         }
 
         private int colorForStatus(Diagnostics.Status s) {

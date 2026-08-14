@@ -5,13 +5,24 @@ import net.minecraft.client.gui.GuiGraphics;
 /**
  * Shared visual language for VoiceSpells screens.
  *
- * Minimalist magic with neon energy: deep midnight surfaces, a bright electric-purple accent
- * that breathes, and very restrained chrome. The palette is intentionally tiny — three surface
- * tones, three text tones, one neon accent — so the screens read as quiet and mystical, with
- * the neon doing the heavy lifting for state and hierarchy.
+ * <p><b>Goal: look like it shipped with the game.</b> Minecraft's GUI has a very specific and
+ * very consistent grammar — flat desaturated stone-grey surfaces, a 1px black outline around
+ * every raised element, a light bevel on the top and left with a dark one on the bottom and
+ * right, drop-shadowed text, square corners, and nothing that animates. Matching that grammar
+ * is what makes a modded screen feel native instead of pasted in.
  *
- * Polish comes from the helpers: gradient header band, multi-layer accent glow with a slow
- * pulse, 2px rounded corners, inset shadows, and a thin neon scrollbar.
+ * <p>This used to be the opposite of all of it: saturated lavender-midnight surfaces, a
+ * pulsing seven-layer neon rule, 2px "rounded" corners, and unshadowed text. It looked like a
+ * web dashboard. The palettes have been moved onto vanilla's neutral grey axis, the chrome
+ * helpers now draw vanilla bevels, and text goes through helpers that always shadow.
+ *
+ * <p>The accent colour survives — it is the player's unlocked {@code ThemePreset} and carries
+ * the mod's identity — but it is now used the way vanilla uses colour: sparingly, for state
+ * and for a single seated rule, never as a glow.
+ *
+ * <p>Screens are expected to call {@link #background} first, {@link #panel} for their surface,
+ * and {@link #text} / {@link #title} for copy. The older helpers kept their names and
+ * signatures so all existing screens inherit the new look without being rewritten.
  */
 public final class Theme {
     private Theme() {}
@@ -94,52 +105,62 @@ public final class Theme {
         currentPalette = p;
         switch (p) {
             case MIDNIGHT -> {
-                // TRUE black. No purple tint, no warm tint — pure flat black for streamers
-                // who want minimum light spill. Borders/text use very-cool greys.
-                C_SCRIM    = 0xEE000000;
-                C_PANEL    = 0xFF000000;
-                C_HEADER_T = 0xFF0A0A0A;
-                C_HEADER_B = 0xFF030303;
-                C_INSET    = 0xFF050505;
-                C_INSET_2  = 0xFF0F0F0F;
-                C_BORDER   = 0xFF333333;
-                C_DIVIDER  = 0xFF1A1A1A;
+                // Near-black, but no longer pure 0x000000: a true-black panel makes the
+                // vanilla bevel invisible, since the bevel is derived from the panel tone and
+                // the outline is black. 0x141414 keeps it as dark as a streamer wants while
+                // leaving the edges readable.
+                C_SCRIM    = 0xE0000000;
+                C_PANEL    = 0xFF141414;
+                C_HEADER_T = 0xFF1E1E1E;
+                C_HEADER_B = 0xFF0A0A0A;
+                C_INSET    = 0xFF0A0A0A;
+                C_INSET_2  = 0xFF1A1A1A;
+                C_BORDER   = 0xFF000000;
+                C_DIVIDER  = 0xFF3A3A3A;
                 C_SHADOW   = 0xFF000000;
-                C_TEXT     = 0xFFEEEEEE;
-                C_MUTED    = 0xFF9A9A9A;
-                C_FAINT    = 0xFF5A5A5A;
+                C_TEXT     = 0xFFFFFFFF;
+                C_MUTED    = 0xFFA0A0A0;
+                C_FAINT    = 0xFF6A6A6A;
             }
             case SLATE -> {
-                // True neutral grey — zero blue/purple bleed. Distinctly lighter than DARK
-                // than DARK and cooler than MIDNIGHT. Reads as gunmetal / aluminum.
-                C_SCRIM    = 0xCC202020;
-                C_PANEL    = 0xFF454545;     // visibly lighter than DARK's 0x101020
-                C_HEADER_T = 0xFF555555;
-                C_HEADER_B = 0xFF3D3D3D;
-                C_INSET    = 0xFF333333;
-                C_INSET_2  = 0xFF4A4A4A;
-                C_BORDER   = 0xFF7A7A7A;
-                C_DIVIDER  = 0xFF5C5C5C;
-                C_SHADOW   = 0xFF1A1A1A;
-                C_TEXT     = 0xFFF0F0F0;
-                C_MUTED    = 0xFFB0B0B0;
-                C_FAINT    = 0xFF808080;
+                // Vanilla's actual stone-grey widget tone — this is the closest of the three
+                // to a real Minecraft inventory panel.
+                C_SCRIM    = 0xC0202020;
+                C_PANEL    = 0xFF8B8B8B;
+                C_HEADER_T = 0xFF9E9E9E;
+                C_HEADER_B = 0xFF7A7A7A;
+                C_INSET    = 0xFF5B5B5B;
+                C_INSET_2  = 0xFF969696;
+                C_BORDER   = 0xFF000000;
+                C_DIVIDER  = 0xFF373737;
+                C_SHADOW   = 0xFF373737;
+                C_TEXT     = 0xFFFFFFFF;
+                C_MUTED    = 0xFF3F3F3F;
+                C_FAINT    = 0xFF5A5A5A;
             }
             case DARK -> {
-                // Purple-tinged midnight — the original VoiceSpells look. Distinct from both
-                // SLATE (neutral) and MIDNIGHT (true black) because of the lavender shift.
-                C_SCRIM    = 0xCC050410;
-                C_PANEL    = 0xFF101020;
-                C_HEADER_T = 0xFF1E1A38;
-                C_HEADER_B = 0xFF131225;
-                C_INSET    = 0xFF0A0913;
-                C_INSET_2  = 0xFF14122A;
-                C_BORDER   = 0xFF2E2A52;
-                C_DIVIDER  = 0xFF221E3C;
-                C_SHADOW   = 0xFF050410;
-                C_TEXT     = 0xFFEAE6FA;
-                C_MUTED    = 0xFF9892B8;
-                C_FAINT    = 0xFF6A6390;
+                // The default, retuned to read as Minecraft rather than as a neon web app.
+                //
+                // Vanilla's GUI palette is desaturated stone grey — the inventory is 0xC6C6C6
+                // with 0x8B8B8B and 0x373737 bevels, and the modern dark menus sit near
+                // 0x2B2B2B. The old values here were a saturated lavender midnight (panel
+                // 0x101020, text 0xEAE6FA) which never appears anywhere in the game. These are
+                // the same tonal RELATIONSHIPS, moved onto vanilla's neutral grey axis, so the
+                // panels sit next to a vanilla inventory without clashing. Text is plain white
+                // and vanilla's own GRAY (0xA0A0A0), which is what Minecraft uses for secondary
+                // labels everywhere.
+                C_SCRIM    = 0xC0101010;
+                C_PANEL    = 0xFF313131;
+                C_HEADER_T = 0xFF3D3D3D;
+                C_HEADER_B = 0xFF2A2A2A;
+                C_INSET    = 0xFF1E1E1E;
+                C_INSET_2  = 0xFF383838;
+                C_BORDER   = 0xFF000000;
+                C_DIVIDER  = 0xFF555555;
+                C_SHADOW   = 0xFF1A1A1A;
+                C_TEXT     = 0xFFFFFFFF;
+                C_MUTED    = 0xFFA0A0A0;
+                C_FAINT    = 0xFF707070;
             }
         }
         // Re-derive accent layers immediately if the palette flipped (SLATE needs different
@@ -204,39 +225,150 @@ public final class Theme {
     // Chrome helpers — keep both screens visually identical via these.
     // -----------------------------------------------------------------------
 
+    // -----------------------------------------------------------------------
+    // Vanilla bevel construction.
+    //
+    // Minecraft's GUI has one unmistakable signature: every raised surface is a flat fill
+    // wrapped in a 1px black outline, with a lighter edge along the top and left and a darker
+    // edge along the bottom and right. That is what makes a vanilla button read as a physical
+    // object, and its absence is why a flat coloured rectangle always looks like a web page
+    // pasted into the game. Everything below is built from that one idea, so the whole mod
+    // inherits it without any screen having to change.
+    //
+    // Drawn with fills rather than a vanilla texture on purpose: the sprite APIs diverge
+    // between the two shipping versions (1.21.1 has blitSprite, 1.20.1 only blitNineSliced),
+    // and the texture paths moved too, so a hardcoded path that is subtly wrong on one loader
+    // renders as missing-texture magenta. Bevels are identical on both and cannot 404.
+    // -----------------------------------------------------------------------
+
+    /** Lighten an ARGB toward white by {@code f} (0..1), preserving alpha. */
+    private static int lighten(int argb, float f) {
+        int a = (argb >>> 24) & 0xFF;
+        int r = (argb >> 16) & 0xFF, gg = (argb >> 8) & 0xFF, b = argb & 0xFF;
+        r = (int) (r + (255 - r) * f);
+        gg = (int) (gg + (255 - gg) * f);
+        b = (int) (b + (255 - b) * f);
+        return (a << 24) | (r << 16) | (gg << 8) | b;
+    }
+
+    /** Darken an ARGB toward black by {@code f} (0..1), preserving alpha. */
+    private static int darken(int argb, float f) {
+        int a = (argb >>> 24) & 0xFF;
+        int r = (int) (((argb >> 16) & 0xFF) * (1 - f));
+        int gg = (int) (((argb >> 8) & 0xFF) * (1 - f));
+        int b = (int) ((argb & 0xFF) * (1 - f));
+        return (a << 24) | (r << 16) | (gg << 8) | b;
+    }
+
     /**
-     * Rounded frame with 2px diagonal corner notches. Two pixels of softening gives a
-     * noticeably softer silhouette without looking pixellated.
+     * A complete Minecraft-style raised panel: black outline, bevelled edges, flat fill.
+     * This is the one call a screen needs for its main surface.
+     */
+    public static void panel(GuiGraphics g, int x, int y, int w, int h) {
+        g.fill(x, y, x + w, y + h, C_PANEL);
+        bevel(g, x, y, w, h, false);
+    }
+
+    /**
+     * Draw the vanilla bevel over an already-filled rect.
+     *
+     * @param sunken {@code true} inverts the light so the surface reads as recessed — vanilla
+     *               uses this for text fields, list backgrounds and slots.
+     */
+    public static void bevel(GuiGraphics g, int x, int y, int w, int h, boolean sunken) {
+        int hi = sunken ? darken(C_PANEL, 0.55f) : lighten(C_PANEL, 0.28f);
+        int lo = sunken ? lighten(C_PANEL, 0.22f) : darken(C_PANEL, 0.45f);
+        // 1px black outline first — vanilla always seats a widget on black.
+        int outline = 0xFF000000;
+        g.fill(x, y, x + w, y + 1, outline);
+        g.fill(x, y + h - 1, x + w, y + h, outline);
+        g.fill(x, y, x + 1, y + h, outline);
+        g.fill(x + w - 1, y, x + w, y + h, outline);
+        // Inner bevel, inset by the outline.
+        g.fill(x + 1, y + 1, x + w - 1, y + 2, hi);          // top light
+        g.fill(x + 1, y + 1, x + 2, y + h - 1, hi);          // left light
+        g.fill(x + 1, y + h - 2, x + w - 1, y + h - 1, lo);  // bottom dark
+        g.fill(x + w - 2, y + 1, x + w - 1, y + h - 1, lo);  // right dark
+    }
+
+    /**
+     * Frame helper kept at its original name and signature so every screen picks up the new
+     * look for free — it is called ~28 times across the UI. It used to draw a 2px-notched
+     * "rounded" outline in a single flat colour, which is a web idiom; Minecraft has no
+     * rounded corners anywhere in its GUI. Now it draws the vanilla bevel instead, tinted
+     * toward the requested colour so callers that pass an accent still get their emphasis.
      */
     public static void roundedFrame(GuiGraphics g, int x, int y, int w, int h, int color) {
-        g.fill(x + 2,     y,         x + w - 2, y + 1,     color); // top
-        g.fill(x + 2,     y + h - 1, x + w - 2, y + h,     color); // bottom
-        g.fill(x,         y + 2,     x + 1,     y + h - 2, color); // left
-        g.fill(x + w - 1, y + 2,     x + w,     y + h - 2, color); // right
-        g.fill(x + 1,     y + 1,     x + 2,     y + 2,     color); // tl
-        g.fill(x + w - 2, y + 1,     x + w - 1, y + 2,     color); // tr
-        g.fill(x + 1,     y + h - 2, x + 2,     y + h - 1, color); // bl
-        g.fill(x + w - 2, y + h - 2, x + w - 1, y + h - 1, color); // br
+        g.fill(x, y, x + w, y + 1, 0xFF000000);
+        g.fill(x, y + h - 1, x + w, y + h, 0xFF000000);
+        g.fill(x, y, x + 1, y + h, 0xFF000000);
+        g.fill(x + w - 1, y, x + w, y + h, 0xFF000000);
+        g.fill(x + 1, y + 1, x + w - 1, y + 2, lighten(color, 0.25f));
+        g.fill(x + 1, y + 1, x + 2, y + h - 1, lighten(color, 0.25f));
+        g.fill(x + 1, y + h - 2, x + w - 1, y + h - 1, darken(color, 0.4f));
+        g.fill(x + w - 2, y + 1, x + w - 1, y + h - 1, darken(color, 0.4f));
     }
 
-    /** Header band with a top-to-bottom gradient — quiet elevation. */
+    /** Header band. Vanilla title bars are a flat slightly-raised strip, not a gradient wash. */
     public static void headerBand(GuiGraphics g, int x, int y, int w, int h) {
-        g.fillGradient(x, y, x + w, y + h, C_HEADER_T, C_HEADER_B);
+        g.fill(x, y, x + w, y + h, C_HEADER_T);
+        g.fill(x + 1, y + 1, x + w - 1, y + 2, lighten(C_HEADER_T, 0.22f));
+        g.fill(x, y + h - 1, x + w, y + h, darken(C_HEADER_T, 0.5f));
     }
 
     /**
-     * Five-layer neon accent rule: three fade-up layers above the crisp line, two below.
-     * The outermost halo pulses so the rule feels lit.
+     * Section rule under a header.
+     *
+     * <p>This was a seven-layer pulsing neon halo — the single most un-Minecraft thing in the
+     * mod, since nothing in vanilla glows or animates in a menu. It is now a 2px seated rule
+     * in the accent colour: a light line over a dark one, the same construction vanilla uses
+     * to separate the header from the body of a container screen. The accent still carries the
+     * player's chosen theme, so the personality survives without the neon.
      */
     public static void accentGlow(GuiGraphics g, int x, int y, int w) {
-        int outer = withPulsedAlpha((C_ACCENT & 0x00FFFFFF), 0.06f, 0.16f);
-        g.fill(x, y - 3, x + w, y - 2, outer);            // outer halo (pulsed)
-        g.fill(x, y - 2, x + w, y - 1, C_ACCENT_FAINT);   // dim above
-        g.fill(x, y - 1, x + w, y,     C_ACCENT_SOFT);    // soft above
-        g.fill(x, y,     x + w, y + 1, C_ACCENT_BRIGHT);  // crisp center (bright)
-        g.fill(x, y + 1, x + w, y + 2, C_ACCENT_SOFT);    // soft below
-        g.fill(x, y + 2, x + w, y + 3, C_ACCENT_FAINT);   // dim below
-        g.fill(x, y + 3, x + w, y + 4, outer);            // outer halo (pulsed)
+        g.fill(x, y, x + w, y + 1, C_ACCENT);
+        g.fill(x, y + 1, x + w, y + 2, darken(C_ACCENT, 0.55f));
+    }
+
+    /**
+     * Paint the screen backdrop the way vanilla does, then dim behind the panel.
+     *
+     * <p>Every screen in this mod used to fill its own flat scrim and never call
+     * {@code Screen.renderBackground} at all. That skipped Minecraft's own backdrop entirely,
+     * so the mod ignored the player's Menu Background Blur setting, did not show the blurred
+     * world behind an in-game menu, and did not show the dirt texture on the title screen —
+     * three things every vanilla and well-behaved modded screen does. Routing through vanilla
+     * first means the mod now matches whatever the player has configured.
+     *
+     * <p>The signature diverged between the two shipping versions, hence the split:
+     * 1.21.1 takes (graphics, mouseX, mouseY, partialTick); 1.20.1 takes just (graphics).
+     * Verified with javap against neoforge-21.1.219-merged and forge-1.20.1-47.4.10-merged.
+     */
+    public static void background(net.minecraft.client.gui.screens.Screen screen, GuiGraphics g,
+                                  int mouseX, int mouseY, float partialTick) {
+//? if forge {
+/*        screen.renderBackground(g);
+*///?} else {
+        screen.renderBackground(g, mouseX, mouseY, partialTick);
+//?}
+    }
+
+    /**
+     * Draw text the way Minecraft does: with a drop shadow.
+     *
+     * <p>Vanilla renders essentially all GUI text shadowed, and this mod was passing
+     * {@code false} in 26 places. Flat unshadowed text on a dark panel is the quietest and
+     * most pervasive reason the UI did not look like it belonged in the game.
+     */
+    public static void text(GuiGraphics g, net.minecraft.client.gui.Font font, String s,
+                            int x, int y, int color) {
+        g.drawString(font, s, x, y, color, true);
+    }
+
+    /** Centred, shadowed — vanilla's own title treatment. */
+    public static void title(GuiGraphics g, net.minecraft.client.gui.Font font, String s,
+                             int cx, int y, int color) {
+        g.drawCenteredString(font, s, cx, y, color);
     }
 
     /** Inset shadow — 1px darker line at the top of a recessed surface so it reads as

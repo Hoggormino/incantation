@@ -241,6 +241,11 @@ public final class VoiceSpellsSpellListScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         // Midnight scrim + panel + gradient header band BEFORE widgets.
+        // Vanilla backdrop first (blurred world in-game, dirt on the title screen, and it
+        // honours the player's Menu Background Blur setting), then our own dim on top so
+        // the panel still reads. Painting only a flat scrim, as this did before, opted out
+        // of all of that and was a large part of why the screens felt foreign.
+        Theme.background(this, g, mouseX, mouseY, partial);
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
         g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
         Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
@@ -270,7 +275,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
             if (font.width(text) > getWidth()) {
                 text = font.plainSubstrByWidth(text, getWidth() - font.width("…")) + "…";
             }
-            g.drawString(font, text, getX(), getY(), Theme.C_MUTED, false);
+            g.drawString(font, text, getX(), getY(), Theme.C_MUTED, true);
         }
         @Override
         protected void updateWidgetNarration(NarrationElementOutput n) {}
@@ -298,7 +303,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
 
             if (filtered.isEmpty()) {
                 g.drawString(font, Component.translatable("voicespells.spelllist.empty"),
-                    x + 6, y + 6, Theme.C_FAINT, false);
+                    x + 6, y + 6, Theme.C_FAINT, true);
                 return;
             }
             int clampedScroll = clampScroll();
@@ -326,11 +331,11 @@ public final class VoiceSpellsSpellListScreen extends Screen {
                 String id = r.id();
                 int idW = font.width(id);
                 int textColor = hov ? Theme.C_ACCENT_BRIGHT : (sel ? Theme.C_ACCENT : Theme.C_TEXT);
-                g.drawString(font, Component.literal(id), x + 6, ry + 2, textColor, false);
+                g.drawString(font, Component.literal(id), x + 6, ry + 2, textColor, true);
                 int avail = (contentRight - x) - idW - 14;
                 if (avail > 30) {
                     g.drawString(font, Component.literal(trim(r.phrases(), avail)),
-                        x + idW + 12, ry + 2, Theme.C_MUTED, false);
+                        x + idW + 12, ry + 2, Theme.C_MUTED, true);
                 }
             }
             // Neon scrollbar on the right gutter.
@@ -413,7 +418,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
 
             int ly = ty + padY;
             g.drawString(font, Component.literal(title), tx + padX, ly,
-                Theme.C_ACCENT_BRIGHT, false);
+                Theme.C_ACCENT_BRIGHT, true);
             ly += lineH;
             // Thin accent rule under the title.
             g.fill(tx + padX, ly - 1, tx + tw - padX, ly, Theme.C_ACCENT_SOFT);
@@ -428,7 +433,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
                 if (i == body.size() - 1)                color = Theme.C_FAINT; // id row
                 else if (descStart >= 0 && i >= descStart) color = Theme.C_MUTED; // description rows
                 else                                      color = Theme.C_TEXT;  // meta rows
-                g.drawString(font, Component.literal(body.get(i)), tx + padX, ly, color, false);
+                g.drawString(font, Component.literal(body.get(i)), tx + padX, ly, color, true);
                 ly += lineH;
             }
         }

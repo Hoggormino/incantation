@@ -39,22 +39,23 @@ public final class NeonToggle extends AbstractWidget {
         int x = getX(), y = getY(), w = getWidth(), h = getHeight();
         boolean hov = isHoveredOrFocused();
 
-        // Background: faint accent tint when ON so the state reads at a glance.
-        int bg = value ? Theme.C_ACCENT_FAINT : Theme.C_INSET;
-        g.fill(x, y, x + w, y + h, bg);
+        // Rendered as a vanilla button, because that is what it is. Vanilla signals a binary
+        // option with the LABEL ("Option: ON" / "Option: OFF"), not with a coloured pill — see
+        // every toggle in Video Settings. A faint accent tint plus a neon border was doing the
+        // job with colour that vanilla does with words, which is exactly the kind of thing that
+        // makes a modded screen feel like a different application.
+        //
+        // A pressed toggle is drawn sunken, so ON/OFF is also readable without relying on hue —
+        // which matters for colour-blind players and on the light SLATE palette.
+        int base = Theme.C_PANEL;
+        int fill = !active ? shade(base, -0.18f) : (hov ? shade(base, 0.30f) : shade(base, 0.12f));
+        g.fill(x, y, x + w, y + h, fill);
+        bevel(g, x, y, w, h, fill, value || !active);
 
-        if (hov && active) {
-            g.fill(x + 2, y + 1,     x + w - 2, y + 2,     Theme.C_ACCENT_FAINT);
-            g.fill(x + 2, y + h - 2, x + w - 2, y + h - 1, Theme.C_ACCENT_FAINT);
-        }
-
-        int border = !active ? Theme.C_DIVIDER
-                   : (hov ? Theme.C_ACCENT : (value ? Theme.C_ACCENT_SOFT : Theme.C_BORDER));
-        Theme.roundedFrame(g, x, y, w, h, border);
+        if (hov && active) g.fill(x + 2, y + h - 2, x + w - 2, y + h - 1, Theme.C_ACCENT);
 
         String text = value ? "ON" : "OFF";
-        int textColor = !active ? Theme.C_FAINT
-                       : (value ? Theme.C_ACCENT_BRIGHT : Theme.C_MUTED);
+        int textColor = !active ? 0xFFA0A0A0 : (hov ? 0xFFFFFFA0 : 0xFFFFFFFF);
         int textX = x + w / 2;
         int textY = y + (h - 8) / 2;
         g.drawCenteredString(Minecraft.getInstance().font, Component.literal(text), textX, textY, textColor);
@@ -69,4 +70,32 @@ public final class NeonToggle extends AbstractWidget {
 
     @Override
     protected void updateWidgetNarration(NarrationElementOutput n) {}
+
+    /** Vanilla bevel keyed off the widget's own fill. Mirrors NeonButton so the two never drift. */
+    private static void bevel(GuiGraphics g, int x, int y, int w, int h, int base, boolean sunken) {
+        int hi = sunken ? shade(base, -0.35f) : shade(base, 0.35f);
+        int lo = sunken ? shade(base, 0.20f) : shade(base, -0.40f);
+        g.fill(x, y, x + w, y + 1, 0xFF000000);
+        g.fill(x, y + h - 1, x + w, y + h, 0xFF000000);
+        g.fill(x, y, x + 1, y + h, 0xFF000000);
+        g.fill(x + w - 1, y, x + w, y + h, 0xFF000000);
+        g.fill(x + 1, y + 1, x + w - 1, y + 2, hi);
+        g.fill(x + 1, y + 1, x + 2, y + h - 1, hi);
+        g.fill(x + 1, y + h - 2, x + w - 1, y + h - 1, lo);
+        g.fill(x + w - 2, y + 1, x + w - 1, y + h - 1, lo);
+    }
+
+    private static int shade(int argb, float f) {
+        int a = (argb >>> 24) & 0xFF;
+        int r = (argb >> 16) & 0xFF, gg = (argb >> 8) & 0xFF, b = argb & 0xFF;
+        if (f >= 0) {
+            r = (int) (r + (255 - r) * f);
+            gg = (int) (gg + (255 - gg) * f);
+            b = (int) (b + (255 - b) * f);
+        } else {
+            float k = 1 + f;
+            r = (int) (r * k); gg = (int) (gg * k); b = (int) (b * k);
+        }
+        return (a << 24) | (r << 16) | (gg << 8) | b;
+    }
 }

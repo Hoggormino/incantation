@@ -71,6 +71,11 @@ public final class VoiceCodexScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
+        // Vanilla backdrop first (blurred world in-game, dirt on the title screen, and it
+        // honours the player's Menu Background Blur setting), then our own dim on top so
+        // the panel still reads. Painting only a flat scrim, as this did before, opted out
+        // of all of that and was a large part of why the screens felt foreign.
+        Theme.background(this, g, mouseX, mouseY, partial);
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
         g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
         Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
@@ -115,20 +120,20 @@ public final class VoiceCodexScreen extends Screen {
 
         // Row 1: section header + tier
         g.drawString(font, Component.literal("VOICE CASTING"), x + 8, y + 5,
-            Theme.C_FAINT, false);
+            Theme.C_FAINT, true);
         String tierLabel = "Tier: " + currentTier;
         int tierW = font.width(tierLabel);
         g.drawString(font, Component.literal(tierLabel),
-            x + colW - tierW - 8, y + 5, Theme.C_ACCENT_BRIGHT, false);
+            x + colW - tierW - 8, y + 5, Theme.C_ACCENT_BRIGHT, true);
 
         // Row 2: count + next
         g.drawString(font, Component.literal(total + " casts"),
-            x + 8, y + 18, Theme.C_TEXT, false);
+            x + 8, y + 18, Theme.C_TEXT, true);
         String nextLabel = (total >= 1000) ? "max tier reached"
             : "next: " + mileNames[nextIdx] + " (" + next + ")";
         int nextW = font.width(nextLabel);
         g.drawString(font, Component.literal(nextLabel),
-            x + colW - nextW - 8, y + 18, Theme.C_FAINT, false);
+            x + colW - nextW - 8, y + 18, Theme.C_FAINT, true);
 
         // Row 3: progress bar
         int barX = x + 8;
@@ -158,7 +163,7 @@ public final class VoiceCodexScreen extends Screen {
                          : isNext  ? Theme.C_ACCENT_BRIGHT
                                    : Theme.C_FAINT;
             g.drawString(font, Component.literal(mark + " " + mileVals[i]), bx, badgeY,
-                color, false);
+                color, true);
         }
 
         y += cardH + 6;
@@ -183,10 +188,10 @@ public final class VoiceCodexScreen extends Screen {
     }
 
     private void line(GuiGraphics g, int x, int y, String label, String value) {
-        g.drawString(font, Component.literal(label), x, y, Theme.C_MUTED, false);
+        g.drawString(font, Component.literal(label), x, y, Theme.C_MUTED, true);
         int colW = panelW / 2 - Theme.PAD - 6;
         int vw = font.width(value);
-        g.drawString(font, Component.literal(value), x + colW - vw, y, Theme.C_TEXT, false);
+        g.drawString(font, Component.literal(value), x + colW - vw, y, Theme.C_TEXT, true);
     }
 
     /** Top-N spells by cast count. Single fixed view, not scrollable (keep it simple). */
@@ -203,7 +208,7 @@ public final class VoiceCodexScreen extends Screen {
 
             // Header drawn inside the widget so it's clear of the accent rule glow up top.
             g.drawString(font, Component.literal("MOST CAST"), x + 4, y + 4,
-                Theme.C_FAINT, false);
+                Theme.C_FAINT, true);
             g.fill(x + 4, y + 14, x + w - 4, y + 15, Theme.C_DIVIDER);
 
             int headerOffset = 18;
@@ -211,7 +216,7 @@ public final class VoiceCodexScreen extends Screen {
             List<Map.Entry<String, Integer>> top = VoiceStats.topSpells(Math.max(1, rowsArea / ROW_H));
             if (top.isEmpty()) {
                 g.drawString(font, Component.literal("(no casts yet — speak a spell!)"),
-                    x + 6, y + headerOffset + 2, Theme.C_FAINT, false);
+                    x + 6, y + headerOffset + 2, Theme.C_FAINT, true);
                 return;
             }
             int ry = y + headerOffset;
@@ -222,11 +227,11 @@ public final class VoiceCodexScreen extends Screen {
                     ? shortId(e.getKey()) : info.name;
                 String countStr = "× " + e.getValue();
                 g.drawString(font, Component.literal(rank + "."), x + 4, ry,
-                    Theme.C_FAINT, false);
-                g.drawString(font, Component.literal(name), x + 18, ry, Theme.C_TEXT, false);
+                    Theme.C_FAINT, true);
+                g.drawString(font, Component.literal(name), x + 18, ry, Theme.C_TEXT, true);
                 int cw = font.width(countStr);
                 g.drawString(font, Component.literal(countStr), x + w - cw - 6, ry,
-                    Theme.C_ACCENT, false);
+                    Theme.C_ACCENT, true);
                 ry += ROW_H;
                 rank++;
             }
