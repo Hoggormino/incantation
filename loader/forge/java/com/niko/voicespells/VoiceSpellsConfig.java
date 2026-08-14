@@ -234,9 +234,15 @@ public final class VoiceSpellsConfig {
 
             b.push("colors");
             b.comment("ARGB hex strings. 8 chars include alpha (\"CC0A0A0A\"); 6 chars are",
-                      "treated as fully opaque. The leading '#' is optional.");
-            bgColor      = b.define("background",   "CC0A0A0A");
-            borderColor  = b.define("border",       "FF1F1F1F");
+                      "treated as fully opaque. The leading '#' is optional.",
+                      "",
+                      "background and border default to fully transparent, so the HUD is just",
+                      "shadowed text over the world - the way vanilla draws the action bar and",
+                      "the way Simple Voice Chat draws its mic indicator. Set background to",
+                      "something like CC0A0A0A if you would rather have a solid chip behind it.",
+                      "Existing configs keep whatever you already had.");
+            bgColor      = b.define("background",   "00000000");
+            borderColor  = b.define("border",       "00000000");
             textMuted    = b.define("textMuted",    "FF8A8A8A");
             textToast    = b.define("toast",        "FFFFD75A");
             b.pop();
