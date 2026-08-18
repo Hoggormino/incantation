@@ -135,6 +135,9 @@ public final class AudioDevicesScreen extends Screen {
         // Leave room for the meter row and the button row below the list.
         listH = (py + panelH - 26 - 8) - listY - (showingOutputs ? 0 : 22);
         rowsVisible = Math.max(1, listH / ROW);
+        // Snap the well to whole rows. The leftover strip under the last row was both a dead
+        // click target (fixed separately) and visibly a half-row of empty box.
+        listH = rowsVisible * ROW;
         // After the geometry, never before: this needs the real row count to know what "in view"
         // means, and listH is still zero further up.
         scrollSelectedIntoView();
