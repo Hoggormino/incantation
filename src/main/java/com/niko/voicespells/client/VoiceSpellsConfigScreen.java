@@ -353,8 +353,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
                     // the old palette until the screen is rebuilt.
                     rebuildWidgets();
                 }), i++, gridX, colW, y),
-            "The menu surface. Vanilla is the light container look; Midnight is a dark panel; "
-            + "Slate sits between them.");
+            "Options draws no panel at all, like Minecraft's own settings screens. Vanilla, "
+            + "Midnight and Slate draw a container window in light, near-black or stone grey.");
 
         help(slot(NeonCycle.namedWithLocks(0, 0, colW, 20, "Accent",
                 VoiceSpellsConfig.ThemePreset.values(), workTheme,
@@ -374,14 +374,15 @@ public final class VoiceSpellsConfigScreen extends Screen {
                     Theme.applyPreset(val);
                     rebuildWidgets();
                 }), i++, gridX, colW, y),
-            "Accent colour, used for meters and highlights. Locked themes show the number of "
-            + "voice casts needed to unlock them.");
+            "Accent colour for the in-world HUD. Menus deliberately stay neutral. Locked "
+            + "themes show the number of voice casts needed to unlock them.");
     }
 
     private static String prettyPalette(VoiceSpellsConfig.UiPalette p) {
         // DARK is the light vanilla-container palette; the constant name is kept for config
         // compatibility, so the LABEL has to say what the player actually gets.
         return switch (p) {
+            case OPTIONS  -> "Options";
             case DARK     -> "Vanilla";
             case MIDNIGHT -> "Midnight";
             case SLATE    -> "Slate";
@@ -607,7 +608,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             int barY = y + h - 2 - barH;
             // Newest bars get the brighter neon — the rightmost columns are the most recent
             // ~1.5s, draw them with C_ACCENT_BRIGHT so the eye reads the trace direction.
-            int color = (i > bars * 3 / 4) ? Theme.C_ACCENT_BRIGHT : Theme.C_ACCENT;
+            int color = (i > bars * 3 / 4) ? 0xFFFFFFFF : 0xFFA0A0A0;
             g.fill(barX, barY, Math.max(barX + 1, barNextX - 1), y + h - 2, color);
         }
     }

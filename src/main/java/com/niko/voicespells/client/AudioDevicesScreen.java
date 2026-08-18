@@ -375,7 +375,8 @@ public final class AudioDevicesScreen extends Screen {
 
             // Selection needs to survive on a light panel, where an 0x11-alpha accent ghost is
             // invisible. A solid accent-soft band plus the marker below is unambiguous.
-            if (selected) g.fill(listX + 1, ry, listX + listW - 1, ry + ROW, Theme.C_ACCENT_SOFT);
+            // Vanilla highlights a selected list row with a plain translucent white wash.
+            if (selected) g.fill(listX + 1, ry, listX + listW - 1, ry + ROW, 0x40FFFFFF);
             else if (hovered) g.fill(listX + 1, ry, listX + listW - 1, ry + ROW, Theme.C_INSET_2);
 
             // Verdict chip on the right, so the name can use the full remaining width.

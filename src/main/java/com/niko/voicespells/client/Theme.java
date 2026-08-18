@@ -118,9 +118,13 @@ public final class Theme {
      * consistently. Every screen already routes its surface through {@link #panel} and its text
      * through the palette, so this one field moves all of them.
      */
-    public static boolean panelless = true;
+    public static boolean panelless = true;   // set from the palette on every applyPalette
 
     public static void applyPalette(com.niko.voicespells.VoiceSpellsConfig.UiPalette p) {
+        // The style IS the palette choice, so a player can go back to a container window without
+        // editing a file. OPTIONS keeps the panel tones below unused; everything visible comes
+        // from the panelless block further down.
+        panelless = p == com.niko.voicespells.VoiceSpellsConfig.UiPalette.OPTIONS;
         boolean changed = currentPalette != p;
         currentPalette = p;
         switch (p) {
@@ -141,6 +145,23 @@ public final class Theme {
                 C_TEXT     = 0xFFFFFFFF;
                 C_MUTED    = 0xFFA0A0A0;
                 C_FAINT    = 0xFF6A6A6A;
+                C_HEADING  = 0xFFFFFFFF;
+            }
+            case OPTIONS -> {
+                // Overridden wholesale by the panelless block below; these are only the values
+                // any stray panel-mode helper would fall back on.
+                C_SCRIM    = 0x00000000;
+                C_PANEL    = 0xFF303030;
+                C_HEADER_T = 0xFF303030;
+                C_HEADER_B = 0xFF303030;
+                C_INSET    = 0x90101010;
+                C_INSET_2  = 0x60FFFFFF;
+                C_BORDER   = 0xFF000000;
+                C_DIVIDER  = 0x40FFFFFF;
+                C_SHADOW   = 0xFF000000;
+                C_TEXT     = 0xFFFFFFFF;
+                C_MUTED    = 0xFFA0A0A0;
+                C_FAINT    = 0xFF808080;
                 C_HEADING  = 0xFFFFFFFF;
             }
             case SLATE -> {

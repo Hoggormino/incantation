@@ -191,16 +191,10 @@ public final class FirstRunScreen extends Screen {
 
         Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
 
-        // Step indicator dots just below the accent rule.
-        int dotsY = py + Theme.HEADER_H + 10;
-        int spacing = 14, dotW = 8, dotH = 2;
-        int dotsX = px + panelW / 2 - (STEPS * spacing - (spacing - dotW)) / 2;
-        for (int i = 0; i < STEPS; i++) {
-            int dx = dotsX + i * spacing;
-            int color = (i == step) ? Theme.C_ACCENT_BRIGHT
-                       : (i < step ? Theme.C_ACCENT_SOFT : Theme.C_DIVIDER);
-            g.fill(dx, dotsY, dx + dotW, dotsY + dotH, color);
-        }
+        // "Step 1 of 3" rather than indicator dots — see HelpScreen for why: the game paginates
+        // with a written count, not with dots, and a count is legible on every surface.
+        g.drawCenteredString(font, "Step " + (step + 1) + " of " + STEPS,
+            px + panelW / 2, py + Theme.HEADER_H + 8, Theme.C_MUTED);
 
         int x = px + Theme.PAD;
         int y = py + Theme.HEADER_H + 24;
@@ -363,13 +357,13 @@ public final class FirstRunScreen extends Screen {
     private void drawPill(GuiGraphics g, int x, int y, int w, String label, String value, boolean good) {
         int h = 24;
         g.fill(x, y, x + w, y + h, Theme.C_INSET);
-        Theme.roundedFrame(g, x, y, w, h, good ? Theme.C_ACCENT_SOFT : Theme.C_DIVIDER);
+        Theme.roundedFrame(g, x, y, w, h, good ? Theme.C_SUCCESS : Theme.C_DIVIDER);
         // Left-edge state bar: neon when good, faint otherwise.
         g.fill(x + 1, y + 1, x + 3, y + h - 1, good ? Theme.F_MATCH : Theme.C_FAINT);
         g.drawString(font, Component.literal(label),     x + 6, y + 3,
             Theme.C_MUTED, !Theme.lightSurface());
         g.drawString(font, Component.literal(value),     x + 6, y + 13,
-            good ? Theme.C_ACCENT_BRIGHT : Theme.C_TEXT, !Theme.lightSurface());
+            good ? Theme.C_SUCCESS : Theme.C_TEXT, !Theme.lightSurface());
     }
 
     /** Big live audio meter — dim background, neon fill that grows with the smoothed RMS
@@ -380,8 +374,9 @@ public final class FirstRunScreen extends Screen {
         float level = Math.max(0f, Math.min(1f, VoiceController.audioLevel()));
         int fillW = (int) (level * (w - 4));
         if (fillW > 0) {
-            g.fill(x + 2, y + 2, x + 2 + fillW, y + h - 2, Theme.C_ACCENT);
-            g.fill(x + 2 + fillW - 1, y + 2, x + 2 + fillW, y + h - 2, Theme.C_ACCENT_BRIGHT);
+            // Green, the way a level or a loading bar reads in vanilla: it means "this is
+            // working", which is exactly what a live mic meter is telling you.
+            g.fill(x + 2, y + 2, x + 2 + fillW, y + h - 2, Theme.C_SUCCESS);
         }
     }
 

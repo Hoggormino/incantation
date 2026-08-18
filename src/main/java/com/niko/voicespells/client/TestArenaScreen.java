@@ -111,10 +111,10 @@ public final class TestArenaScreen extends Screen {
         int discW = panelW - Theme.PAD * 2;
         int discH = 22;
         g.fill(x, y, x + discW, y + discH, Theme.C_INSET);
-        Theme.roundedFrame(g, x, y, discW, discH, Theme.C_ACCENT_SOFT);
-        g.fill(x + 1, y + 1, x + 3, y + discH - 1, Theme.C_ACCENT_BRIGHT);
+        Theme.roundedFrame(g, x, y, discW, discH, Theme.C_DIVIDER);
+        g.fill(x + 1, y + 1, x + 3, y + discH - 1, 0xFFFFFFFF);
         g.drawString(font, Component.literal("PRACTICE MODE — spells will NOT actually cast."),
-            x + 8, y + 3, Theme.C_ACCENT_BRIGHT, !Theme.lightSurface());
+            x + 8, y + 3, Theme.C_TEXT, !Theme.lightSurface());
         g.drawString(font, Component.literal("Close this screen to cast for real."),
             x + 8, y + 13, Theme.C_MUTED, !Theme.lightSurface());
         y += discH + 6;
@@ -143,8 +143,7 @@ public final class TestArenaScreen extends Screen {
         float level = Math.max(0f, Math.min(1f, VoiceController.audioLevel()));
         int fillW = (int) (level * (meterW - 4));
         if (fillW > 0) {
-            g.fill(x + 2, y + 2, x + 2 + fillW, y + meterH - 2, Theme.C_ACCENT);
-            g.fill(x + 2 + fillW - 1, y + 2, x + 2 + fillW, y + meterH - 2, Theme.C_ACCENT_BRIGHT);
+            g.fill(x + 2, y + 2, x + 2 + fillW, y + meterH - 2, Theme.C_SUCCESS);
         }
         y += meterH + 8;
 
@@ -155,7 +154,7 @@ public final class TestArenaScreen extends Screen {
             g.drawString(font, Component.literal("Try saying: "), x, y, Theme.C_FAINT, !Theme.lightSurface());
             int prefixW = font.width("Try saying: ");
             g.drawString(font, Component.literal(suggestion), x + prefixW, y,
-                Theme.C_ACCENT_BRIGHT, !Theme.lightSurface());
+                Theme.C_TEXT, !Theme.lightSurface());
             y += 14;
         }
 

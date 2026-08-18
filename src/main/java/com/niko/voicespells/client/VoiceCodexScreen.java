@@ -123,7 +123,7 @@ public final class VoiceCodexScreen extends Screen {
         String tierLabel = "Tier: " + currentTier;
         int tierW = font.width(tierLabel);
         g.drawString(font, Component.literal(tierLabel),
-            x + colW - tierW - 8, y + 5, Theme.C_ACCENT_BRIGHT, !Theme.lightSurface());
+            x + colW - tierW - 8, y + 5, Theme.C_TEXT, !Theme.lightSurface());
 
         // Row 2: count + next
         g.drawString(font, Component.literal(total + " casts"),
@@ -143,10 +143,10 @@ public final class VoiceCodexScreen extends Screen {
         Theme.roundedFrame(g, barX, barY, barW, barH, Theme.C_DIVIDER);
         int fillW = (int) ((double) progress / next * (barW - 2));
         if (fillW > 0) {
-            g.fill(barX + 1, barY + 1, barX + 1 + fillW, barY + barH - 1, Theme.C_ACCENT);
+            g.fill(barX + 1, barY + 1, barX + 1 + fillW, barY + barH - 1, Theme.C_SUCCESS);
             if (fillW > 1) {
                 g.fill(barX + fillW, barY + 1, barX + 1 + fillW, barY + barH - 1,
-                    Theme.C_ACCENT_BRIGHT);
+                    Theme.C_TEXT);
             }
         }
 
@@ -159,7 +159,7 @@ public final class VoiceCodexScreen extends Screen {
             boolean isNext  = (i == nextIdx) && !reached;
             String mark  = reached ? "✓" : (isNext ? "▶" : "○");
             int color    = reached ? Theme.F_MATCH
-                         : isNext  ? Theme.C_ACCENT_BRIGHT
+                         : isNext  ? Theme.C_TEXT
                                    : Theme.C_FAINT;
             g.drawString(font, Component.literal(mark + " " + mileVals[i]), bx, badgeY,
                 color, !Theme.lightSurface());

@@ -163,16 +163,16 @@ public final class HelpScreen extends Screen {
 
         Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
 
-        // Page indicator dots — same look as the first-run wizard, for visual consistency.
-        int dotsY = py + Theme.HEADER_H + 10;
-        int spacing = 12, dotW = 8, dotH = 2;
-        int dotsX = px + panelW / 2 - (PAGES.length * spacing - (spacing - dotW)) / 2;
-        for (int i = 0; i < PAGES.length; i++) {
-            int dx = dotsX + i * spacing;
-            int color = (i == page) ? Theme.C_ACCENT_BRIGHT
-                       : (i < page ? Theme.C_ACCENT_SOFT : Theme.C_DIVIDER);
-            g.fill(dx, dotsY, dx + dotW, dotsY + dotH, color);
-        }
+        // "Page 1 of 5", which is what Minecraft itself writes at the top of a written book.
+        //
+        // This was a row of indicator dots — a website idiom that appears nowhere in the game,
+        // and one that had no readable colour on either surface: the accent tones vanished on
+        // the light container palette and the inactive dots were barely there on the dark one. A
+        // count says the same thing in words, works on any background, and is the form a player
+        // has already seen in vanilla.
+        String pageLabel = "Page " + (page + 1) + " of " + PAGES.length;
+        g.drawCenteredString(font, pageLabel, px + panelW / 2, py + Theme.HEADER_H + 8,
+            Theme.C_MUTED);
 
         // Page content.
         //

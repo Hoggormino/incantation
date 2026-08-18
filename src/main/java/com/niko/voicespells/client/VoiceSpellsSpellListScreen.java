@@ -332,18 +332,18 @@ public final class VoiceSpellsSpellListScreen extends Screen {
                 if ((i & 1) == 1 && !hov && !sel) g.fill(x + 1, ry, contentRight, ry + ROW_H, Theme.C_INSET_2);
                 if (sel && !hov) {
                     // Persistent selection: dim accent so the row stays anchored after click.
-                    g.fill(x + 1, ry, contentRight, ry + ROW_H, Theme.C_ACCENT_FAINT);
-                    g.fill(x + 1, ry, x + 3, ry + ROW_H, Theme.C_ACCENT);
+                    g.fill(x + 1, ry, contentRight, ry + ROW_H, 0x22FFFFFF);
+                    g.fill(x + 1, ry, x + 3, ry + ROW_H, 0x80FFFFFF);
                 }
                 if (hov) {
-                    g.fill(x + 1, ry, contentRight, ry + ROW_H, Theme.C_ACCENT_SOFT);
+                    g.fill(x + 1, ry, contentRight, ry + ROW_H, 0x40FFFFFF);
                     // Neon left-edge marker on hover — confident, sleek.
-                    g.fill(x + 1, ry, x + 3, ry + ROW_H, Theme.C_ACCENT_BRIGHT);
+                    g.fill(x + 1, ry, x + 3, ry + ROW_H, 0xFFFFFFFF);
                     hoveredRow = i;
                 }
                 String id = r.id();
                 int idW = font.width(id);
-                int textColor = hov ? Theme.C_ACCENT_BRIGHT : (sel ? Theme.C_ACCENT : Theme.C_TEXT);
+                int textColor = (hov || sel) ? 0xFFFFFFFF : Theme.C_TEXT;
                 g.drawString(font, Component.literal(id), x + 6, ry + 2, textColor, !Theme.lightSurface());
                 int avail = (contentRight - x) - idW - 14;
                 if (avail > 30) {
