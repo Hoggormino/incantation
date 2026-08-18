@@ -23,16 +23,19 @@ import java.util.function.Function;
  */
 public final class NeonCycle<T> extends Button {
 
+    /** Option name shown before the value ("Corner: Bottom Right"), or blank for value only. */
+    private final String name;
     private final T[] values;
     private final Function<T, String> labeller;
     private final Function<T, Boolean> isLocked;
     private final Consumer<T> onChange;
     private int idx;
 
-    private NeonCycle(int x, int y, int w, int h, T[] values, T initial,
+    private NeonCycle(int x, int y, int w, int h, String name, T[] values, T initial,
                       Function<T, String> labeller, Function<T, Boolean> isLocked,
                       Consumer<T> onChange) {
         super(x, y, w, h, Component.empty(), b -> {}, Button.DEFAULT_NARRATION);
+        this.name = name;
         this.values = values;
         this.labeller = labeller;
         this.isLocked = isLocked;
@@ -47,7 +50,7 @@ public final class NeonCycle<T> extends Button {
 
     public static <T> NeonCycle<T> of(int x, int y, int w, int h, T[] values, T initial,
                                        Function<T, String> labeller, Consumer<T> onChange) {
-        return new NeonCycle<>(x, y, w, h, values, initial, labeller, null, onChange);
+        return new NeonCycle<>(x, y, w, h, "", values, initial, labeller, null, onChange);
     }
 
     /** Variant with an "isLocked" predicate — locked values still appear in the cycle but are
@@ -56,7 +59,23 @@ public final class NeonCycle<T> extends Button {
                                               Function<T, String> labeller,
                                               Function<T, Boolean> isLocked,
                                               Consumer<T> onChange) {
-        return new NeonCycle<>(x, y, w, h, values, initial, labeller, isLocked, onChange);
+        return new NeonCycle<>(x, y, w, h, "", values, initial, labeller, isLocked, onChange);
+    }
+
+    /** Self-labelling: reads "Corner: Bottom Right", the way every vanilla cycle option does. */
+    public static <T> NeonCycle<T> named(int x, int y, int w, int h, String name, T[] values,
+                                          T initial, Function<T, String> labeller,
+                                          Consumer<T> onChange) {
+        return new NeonCycle<>(x, y, w, h, name, values, initial, labeller, null, onChange);
+    }
+
+    /** Self-labelling variant with locks. */
+    public static <T> NeonCycle<T> namedWithLocks(int x, int y, int w, int h, String name,
+                                                   T[] values, T initial,
+                                                   Function<T, String> labeller,
+                                                   Function<T, Boolean> isLocked,
+                                                   Consumer<T> onChange) {
+        return new NeonCycle<>(x, y, w, h, name, values, initial, labeller, isLocked, onChange);
     }
 
     public T value() { return values[idx]; }
@@ -67,6 +86,7 @@ public final class NeonCycle<T> extends Button {
         T v = values[idx];
         boolean locked = isLocked != null && Boolean.TRUE.equals(isLocked.apply(v));
         String text = labeller.apply(v);
+        if (!name.isEmpty()) text = name + ": " + text;
         setMessage(Component.literal(locked ? "✗ " + text : text));
     }
 

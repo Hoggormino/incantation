@@ -27,20 +27,38 @@ import java.util.function.Consumer;
 public final class NeonToggle extends Button {
 
     private boolean value;
+    private final String name;
     private final Consumer<Boolean> onChange;
 
-    private NeonToggle(int x, int y, int w, int h, boolean initial, Consumer<Boolean> onChange) {
-        super(x, y, w, h, label(initial), b -> {}, Button.DEFAULT_NARRATION);
+    private NeonToggle(int x, int y, int w, int h, String name, boolean initial,
+                       Consumer<Boolean> onChange) {
+        super(x, y, w, h, label(name, initial), b -> {}, Button.DEFAULT_NARRATION);
+        this.name = name;
         this.value = initial;
         this.onChange = onChange;
     }
 
+    /** Bare ON/OFF, for layouts that put the option name in a separate label. */
     public static NeonToggle of(int x, int y, int w, int h, boolean initial, Consumer<Boolean> onChange) {
-        return new NeonToggle(x, y, w, h, initial, onChange);
+        return new NeonToggle(x, y, w, h, "", initial, onChange);
     }
 
-    private static Component label(boolean v) {
-        return Component.literal(v ? "ON" : "OFF");
+    /**
+     * Self-labelling form: the control reads "Option: ON".
+     *
+     * <p>This is how Minecraft states an option — Video Settings has no separate label column,
+     * every setting is one full-width button carrying its own name and value. Doing the same
+     * removes a whole column of cramped left-hand text, lets each control be twice as wide, and
+     * makes the option and its value a single click target instead of two aligned pieces.
+     */
+    public static NeonToggle named(int x, int y, int w, int h, String name, boolean initial,
+                                   Consumer<Boolean> onChange) {
+        return new NeonToggle(x, y, w, h, name, initial, onChange);
+    }
+
+    private static Component label(String name, boolean v) {
+        String state = v ? "ON" : "OFF";
+        return Component.literal(name.isEmpty() ? state : name + ": " + state);
     }
 
     public boolean value() { return value; }
@@ -50,7 +68,7 @@ public final class NeonToggle extends Button {
     public void onPress() {
         if (!active) return;
         value = !value;
-        setMessage(label(value));
+        setMessage(label(name, value));
         onChange.accept(value);
     }
 }

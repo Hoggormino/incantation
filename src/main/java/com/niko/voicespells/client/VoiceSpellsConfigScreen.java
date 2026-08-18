@@ -37,7 +37,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
     // make the narrower width workable and to remove the dead vertical gap the single
     // overcrowded row used to leave above itself.
     private static final int PANEL_W_PREF  = 320;
-    private static final int PANEL_BASE_H  = 248;   // header + tabs + 5 rows + 2 button rows
+    private static final int PANEL_BASE_H  = 206;   // header + tabs + 3 grid rows + 2 button rows
     private static final int MONITOR_H     = 156;   // extra height when the monitor is shown
     private static final int TAB_H         = 22;
 
@@ -67,9 +67,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private int panelX, panelY, panelW, panelH;
     /** Per-row pitch for the current layout — Theme.ROW_H normally, smaller when the panel is
      *  height-clamped on small windows. Set in init() before the tab builders run. */
-    private int rowH = Theme.ROW_H;
     /** Whether the Live Monitor has room to draw without colliding with the option rows.
-     *  Computed in init() alongside rowH; read by render(). */
+     *  Computed in init() from the grid geometry; read by render(). */
     private boolean monitorFits = true;
 
     /** Theme and palette as they were when the screen opened, plus whether Save ran.
@@ -140,33 +139,23 @@ public final class VoiceSpellsConfigScreen extends Screen {
         addRenderableWidget(new TabButton(panelX + Theme.PAD + tabW,     tabsY, tabW, TAB_H,
             "HUD",         Tab.HUD));
 
-        // --- Tab content ---
+        // --- Tab content: a two-column option grid ---
+        //
+        // Three rows for five settings, three for six. The old label-plus-control layout needed
+        // five and six rows respectively, which is why it had to compress rows on short windows
+        // and still collided with the buttons. Halving the row count made the whole compression
+        // mechanism unnecessary; what remains is a fixed, uniform grid.
         int contentY = tabsY + TAB_H + Theme.GAP_MD;
-        // Rows compress when the panel is height-clamped. Theme.fit shrinks the PANEL on small
-        // windows (an 854x480 dev window at GUI scale 2 leaves only ~224px of logical height),
-        // but the content stack was laid out with the fixed 24px ROW_H regardless — so the
-        // bottom button rows landed on top of the last option row. Chrome (header, tabs, two
-        // button rows, padding) is fixed; whatever height remains is divided among the rows.
-        int rows = currentTab == Tab.HUD ? 6 : 5;
-        // The monitor's own height has to be RESERVED here, not just added to panelH above.
-        // Without this term the rows were sized against a panel height that included the
-        // monitor's 156px, so on any window too small for BASE+MONITOR the rows expanded into
-        // the monitor's space and the monitor rendered straight through the bottom button rows.
-        int monitorReserve = showMonitor ? MONITOR_H : 0;
-        int fixed = (contentY - panelY) + 52 + 6 + monitorReserve;
-        rowH = Math.max(17, Math.min(Theme.ROW_H, (panelH - fixed) / rows));
-        // At the 17px floor the rows can still outgrow a very short window, and when they do the
-        // monitor is the thing that has to go: it is a diagnostic overlay, whereas the options
-        // underneath it are the screen's actual purpose. monitorFits is the single source of
-        // truth for both reserving the space and drawing into it, so the two cannot disagree.
-        monitorFits = !showMonitor || (panelH - fixed) >= 17 * rows;
-        int x = panelX + Theme.PAD;
-        int ctrlX = panelX + panelW / 2;
-        int ctrlW = panelW / 2 - Theme.PAD;
+        int gridX = panelX + Theme.PAD;
+        int colW = (panelW - Theme.PAD * 2 - 4) / 2;
+        int gridRows = 3;                                   // both tabs land on three
+        // The monitor renders under the grid, so it only fits if there is room left below it.
+        int gridBottom = contentY + gridRows * GRID_ROW;
+        monitorFits = !showMonitor || (panelY + panelH - 58) - gridBottom >= 60;
 
         switch (currentTab) {
-            case RECOGNITION -> buildRecognitionTab(x, ctrlX, ctrlW, contentY);
-            case HUD         -> buildHudTab(x, ctrlX, ctrlW, contentY);
+            case RECOGNITION -> buildRecognitionTab(gridX, colW, contentY);
+            case HUD         -> buildHudTab(gridX, colW, contentY);
         }
 
         // --- Bottom buttons, two rows (always present, span both tabs) ---
@@ -177,109 +166,140 @@ public final class VoiceSpellsConfigScreen extends Screen {
         int row1Y = panelY + panelH - 52;
         int row2Y = panelY + panelH - 28;
         int thirdW = (avail - 12) / 3;
-        addRenderableWidget(NeonButton.of(x, row1Y, thirdW, 20,
+        addRenderableWidget(NeonButton.of(gridX, row1Y, thirdW, 20,
             Component.translatable("voicespells.config.reset"), b -> resetDefaults()));
-        addRenderableWidget(NeonButton.of(x + thirdW + 6, row1Y, thirdW, 20,
+        addRenderableWidget(NeonButton.of(gridX + thirdW + 6, row1Y, thirdW, 20,
             Component.translatable("voicespells.config.spelllist"),
             b -> { if (minecraft != null) minecraft.setScreen(new VoiceSpellsSpellListScreen(this)); }));
-        addRenderableWidget(NeonButton.of(x + (thirdW + 6) * 2, row1Y, avail - (thirdW + 6) * 2, 20,
+        addRenderableWidget(NeonButton.of(gridX + (thirdW + 6) * 2, row1Y, avail - (thirdW + 6) * 2, 20,
             Component.literal("More..."),
             b -> { if (minecraft != null) minecraft.setScreen(new ConfigMoreScreen(this)); }));
         int halfW = (avail - 6) / 2;
-        addRenderableWidget(NeonButton.of(x, row2Y, halfW, 20,
+        addRenderableWidget(NeonButton.of(gridX, row2Y, halfW, 20,
             CommonComponents.GUI_CANCEL, b -> onClose()));
-        addRenderableWidget(NeonButton.of(x + halfW + 6, row2Y, avail - halfW - 6, 20,
+        addRenderableWidget(NeonButton.of(gridX + halfW + 6, row2Y, avail - halfW - 6, 20,
             CommonComponents.GUI_DONE, b -> save()));
     }
 
-    private void buildRecognitionTab(int x, int ctrlX, int ctrlW, int y) {
-        addLabel("Only owned spells", x, y + 6);
-        addLabel("Debug Monitor",     x, y + rowH + 6);
-        addLabel("Fuzzy Tolerance",   x, y + rowH * 2 + 6);
-        addLabel("Substring Match",   x, y + rowH * 3 + 6);
-        addLabel("Dedup Window",      x, y + rowH * 4 + 6);
+    // ---------------------------------------------------------------------------------
+    // Option grid.
+    //
+    // Both tabs used to be a left column of labels with a control column beside it, each row
+    // 24px tall. That is a form layout, not a Minecraft one: the game has no label column
+    // anywhere in its options: every setting is one wide button reading "Graphics: Fancy", and
+    // the screen is a two-column grid of those. Adopting it removes the cramped left column,
+    // makes every control twice as wide (so values stop truncating), halves the row count —
+    // five settings become three rows, which is what killed the whole row-compression problem —
+    // and gives each setting one click target instead of two aligned pieces.
+    //
+    // Every control also carries a hover tooltip explaining what it does, the way vanilla's own
+    // options do, because "Substring Match: ON" tells a new player nothing on its own.
+    // ---------------------------------------------------------------------------------
 
-        addRenderableWidget(NeonToggle.of(ctrlX, y, ctrlW, 20, workRestrictToOwned,
-            val -> workRestrictToOwned = val));
-        y += rowH;
+    /** Pitch of one grid row: a 20px control plus a 4px gutter. */
+    private static final int GRID_ROW = 24;
 
-        addRenderableWidget(NeonToggle.of(ctrlX, y, ctrlW, 20, workDebug,
-            val -> { workDebug = val; rebuildWidgets(); }));
-        y += rowH;
-
-        addRenderableWidget(new NeonSlider(ctrlX, y, ctrlW, 20,
-            workFuzzy, 0, 2, this::fuzzyLabel, v -> workFuzzy = v));
-        y += rowH;
-
-        addRenderableWidget(NeonToggle.of(ctrlX, y, ctrlW, 20, workSubstring,
-            val -> workSubstring = val));
-        y += rowH;
-
-        addRenderableWidget(new NeonSlider(ctrlX, y, ctrlW, 20,
-            workDedup, 0, 3000, v -> "Dedup: " + v + " ms", v -> workDedup = v));
+    /** Place a control at grid slot {@code i}, left column for even, right for odd. */
+    private <T extends net.minecraft.client.gui.components.AbstractWidget> T slot(
+            T w, int i, int gridX, int colW, int y) {
+        w.setX(gridX + (i % 2) * (colW + 4));
+        w.setY(y + (i / 2) * GRID_ROW);
+        return addRenderableWidget(w);
     }
 
-    private void buildHudTab(int x, int ctrlX, int ctrlW, int y) {
-        addLabel("Corner",   x, y + 6);
-        addLabel("Offset X", x, y + rowH + 6);
-        addLabel("Offset Y", x, y + rowH * 2 + 6);
-        addLabel("Opacity",  x, y + rowH * 3 + 6);
-        addLabel("Palette",  x, y + rowH * 4 + 6);
-        addLabel("Theme",    x, y + rowH * 5 + 6);
+    private static void help(net.minecraft.client.gui.components.AbstractWidget w, String text) {
+        w.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(text)));
+    }
 
-        addRenderableWidget(NeonCycle.of(ctrlX, y, ctrlW, 20,
-            VoiceSpellsConfig.Corner.values(), workCorner,
-            VoiceSpellsConfigScreen::prettyCorner,
-            val -> workCorner = val));
-        y += rowH;
+    private void buildRecognitionTab(int gridX, int colW, int y) {
+        int i = 0;
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Owned only", workRestrictToOwned,
+                v -> workRestrictToOwned = v), i++, gridX, colW, y),
+            "Only listen for spells you actually have equipped. Off means every indexed spell "
+            + "is a candidate, which makes false matches far more likely.");
 
-        addRenderableWidget(new NeonSlider(ctrlX, y, ctrlW, 20,
-            workOffsetX, 0, 1000, v -> "X: " + v + " px", v -> workOffsetX = v));
-        y += rowH;
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Live monitor", workDebug,
+                v -> { workDebug = v; rebuildWidgets(); }), i++, gridX, colW, y),
+            "Show a real-time panel of what the recogniser is hearing, with the match tier for "
+            + "each phrase. Useful while tuning, noisy the rest of the time.");
 
-        addRenderableWidget(new NeonSlider(ctrlX, y, ctrlW, 20,
-            workOffsetY, 0, 1000, v -> "Y: " + v + " px", v -> workOffsetY = v));
-        y += rowH;
+        help(slot(new NeonSlider(0, 0, colW, 20, workFuzzy, 0, 2,
+                this::fuzzyLabel, v -> workFuzzy = v), i++, gridX, colW, y),
+            "How many letters a heard phrase may differ from a spell name and still match. "
+            + "Higher catches more mispronunciations and more wrong spells.");
 
-        addRenderableWidget(new NeonSlider(ctrlX, y, ctrlW, 20,
-            workOpacityPct, 0, 100, v -> "Opacity: " + v + "%", v -> workOpacityPct = v));
-        y += rowH;
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Substring", workSubstring,
+                v -> workSubstring = v), i++, gridX, colW, y),
+            "Match when a spell name appears inside a longer sentence, so talking normally can "
+            + "still cast. Turn off if casual conversation keeps triggering spells.");
 
-        // Base palette: dark / light / midnight / slate. Independent of the accent Theme below.
-        addRenderableWidget(NeonCycle.of(ctrlX, y, ctrlW, 20,
-            VoiceSpellsConfig.UiPalette.values(), workPalette,
-            p -> p.name().charAt(0) + p.name().substring(1).toLowerCase(),
-            val -> {
-                workPalette = val;
-                Theme.applyPalette(val);
-                // Same StringWidget caching gotcha as the theme cycle: existing widgets keep
-                // their old colors so we rebuild to capture the fresh palette.
-                rebuildWidgets();
-            }));
-        y += rowH;
+        help(slot(new NeonSlider(0, 0, colW, 20, workDedup, 0, 3000,
+                v -> "Repeat gap: " + v + " ms", v -> workDedup = v), i++, gridX, colW, y),
+            "Ignore the same spell heard again within this long. Stops one drawn-out word from "
+            + "casting twice.");
+    }
 
-        addRenderableWidget(NeonCycle.withLocks(ctrlX, y, ctrlW, 20,
-            VoiceSpellsConfig.ThemePreset.values(), workTheme,
-            p -> {
-                String name = p.name().charAt(0) + p.name().substring(1).toLowerCase();
-                // Locked themes show their required cast count so the player knows the goal.
-                return VoiceStats.totalCasts() >= p.requiredCasts
-                    ? name
-                    : name + " [" + p.requiredCasts + " casts]";
-            },
-            p -> VoiceStats.totalCasts() < p.requiredCasts,
-            val -> {
-                // Locked? Don't commit / don't apply. The chip still shows the locked theme
-                // (dim + ✗ prefix from the locked-aware render path) so the player sees the
-                // goal, but the visual + persisted theme stay on whatever they had before.
-                if (VoiceStats.totalCasts() < val.requiredCasts) return;
-                workTheme = val;
-                Theme.applyPreset(val);
-                // StringWidget caches its color at construction time, so existing widgets
-                // (title, labels) wouldn't pick up the new accent. Rebuild reruns init() and
-                // captures the fresh palette into all freshly-constructed widgets.
-                rebuildWidgets();
-            }));
+    private void buildHudTab(int gridX, int colW, int y) {
+        int i = 0;
+        help(slot(NeonCycle.named(0, 0, colW, 20, "Corner", VoiceSpellsConfig.Corner.values(),
+                workCorner, VoiceSpellsConfigScreen::prettyCorner, v -> workCorner = v),
+                i++, gridX, colW, y),
+            "Which corner of the screen the voice HUD sits in.");
+
+        help(slot(new NeonSlider(0, 0, colW, 20, workOffsetX, 0, 1000,
+                v -> "Offset X: " + v, v -> workOffsetX = v), i++, gridX, colW, y),
+            "Nudge the HUD horizontally away from its corner.");
+
+        help(slot(new NeonSlider(0, 0, colW, 20, workOffsetY, 0, 1000,
+                v -> "Offset Y: " + v, v -> workOffsetY = v), i++, gridX, colW, y),
+            "Nudge the HUD vertically away from its corner.");
+
+        help(slot(new NeonSlider(0, 0, colW, 20, workOpacityPct, 0, 100,
+                v -> "Opacity: " + v + "%", v -> workOpacityPct = v), i++, gridX, colW, y),
+            "How solid the HUD is over the world.");
+
+        help(slot(NeonCycle.named(0, 0, colW, 20, "Menu style", VoiceSpellsConfig.UiPalette.values(),
+                workPalette, VoiceSpellsConfigScreen::prettyPalette,
+                val -> {
+                    workPalette = val;
+                    Theme.applyPalette(val);
+                    // StringWidget caches its colour at construction, so existing widgets keep
+                    // the old palette until the screen is rebuilt.
+                    rebuildWidgets();
+                }), i++, gridX, colW, y),
+            "The menu surface. Vanilla is the light container look; Midnight is a dark panel; "
+            + "Slate sits between them.");
+
+        help(slot(NeonCycle.namedWithLocks(0, 0, colW, 20, "Accent",
+                VoiceSpellsConfig.ThemePreset.values(), workTheme,
+                p -> {
+                    String name = p.name().charAt(0) + p.name().substring(1).toLowerCase();
+                    // Locked themes show their required cast count so the player knows the goal.
+                    return VoiceStats.totalCasts() >= p.requiredCasts
+                        ? name
+                        : name + " [" + p.requiredCasts + "]";
+                },
+                p -> VoiceStats.totalCasts() < p.requiredCasts,
+                val -> {
+                    // Locked? Don't commit and don't apply. The label still shows the locked
+                    // theme with its goal, but nothing visual or persisted changes.
+                    if (VoiceStats.totalCasts() < val.requiredCasts) return;
+                    workTheme = val;
+                    Theme.applyPreset(val);
+                    rebuildWidgets();
+                }), i++, gridX, colW, y),
+            "Accent colour, used for meters and highlights. Locked themes show the number of "
+            + "voice casts needed to unlock them.");
+    }
+
+    private static String prettyPalette(VoiceSpellsConfig.UiPalette p) {
+        // DARK is the light vanilla-container palette; the constant name is kept for config
+        // compatibility, so the LABEL has to say what the player actually gets.
+        return switch (p) {
+            case DARK     -> "Vanilla";
+            case MIDNIGHT -> "Midnight";
+            case SLATE    -> "Slate";
+        };
     }
 
     private static String prettyCorner(VoiceSpellsConfig.Corner c) {
@@ -408,7 +428,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 // Silently dropping it would read as a broken toggle, so state the reason.
                 Theme.text(g, font, "Live Monitor needs a taller window",
                     panelX + Theme.PAD,
-                    panelY + Theme.HEADER_H + 4 + TAB_H + Theme.GAP_MD + rowH * 5 + 6,
+                    panelY + Theme.HEADER_H + 4 + TAB_H + Theme.GAP_MD + 3 * GRID_ROW + 6,
                     Theme.C_WARN);
             }
         }
@@ -419,7 +439,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // Anchor the monitor right under the last row of the Recognition tab. We now have
         // 5 rows there (added "Only owned spells"), so step down by ROW_H*5 plus the tab-bar
         // and gap offsets.
-        int my = panelY + Theme.HEADER_H + 4 + TAB_H + Theme.GAP_MD + rowH * 5 + 6;
+        int my = panelY + Theme.HEADER_H + 4 + TAB_H + Theme.GAP_MD + 3 * GRID_ROW + 6;
         int mw = panelW - Theme.PAD * 2;
         int mh = MONITOR_H - 16;
 
