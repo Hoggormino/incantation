@@ -99,7 +99,14 @@ public final class ModelDownloader {
         final String MODEL_URL = entry.url();
         Path tmpZip = modelDir.resolveSibling("model-download.zip.part");
         try {
-            Files.createDirectories(modelDir);
+            // Create the PARENT only, never modelDir itself. Pre-creating modelDir handed the
+            // publish guard an existing-but-empty directory, which looksLikeModel rejects — so
+            // the ownership rule ("never replace a directory that is not a model root") refused
+            // to install into it, and auto-download could never complete on a fresh install:
+            // precisely the first-launch path every new player takes. The parent is all the
+            // zip download below actually needs.
+            Path dlParent = modelDir.toAbsolutePath().getParent();
+            if (dlParent != null) Files.createDirectories(dlParent);
             VoiceSpells.LOGGER.info("Downloading Vosk model {} ({}) from {}",
                 entry.id(), entry.prettySize(), MODEL_URL);
 
@@ -198,7 +205,14 @@ public final class ModelDownloader {
 
                 Path retired = null;
                 if (Files.exists(modelDir)) {
-                    if (!looksLikeModel(modelDir)) {
+                    // An EMPTY directory cannot be anyone's data — replacing it is always safe,
+                    // and older builds (and interrupted runs) leave one behind at exactly this
+                    // path. Only a NON-empty non-model directory is refused.
+                    boolean empty;
+                    try (java.util.stream.Stream<Path> entries = Files.list(modelDir)) {
+                        empty = entries.findFirst().isEmpty();
+                    }
+                    if (!empty && !looksLikeModel(modelDir)) {
                         VoiceSpells.LOGGER.error(
                             "Refusing to replace {} — it exists but is not a Vosk model directory "
                             + "(no am/ and conf/ inside it), so it is not ours to delete. If you "

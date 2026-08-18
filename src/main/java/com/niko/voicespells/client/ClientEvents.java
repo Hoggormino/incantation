@@ -646,7 +646,11 @@ public final class ClientEvents {
             float level = VoiceController.audioLevel();
             boolean hot = armed && level > 0.02f;
 
-            int dotColor = !armed ? Theme.C_FAINT
+            // Fixed greys for the non-accent states — C_FAINT/C_MUTED are PALETTE text tones
+            // and the palette is now light by default, which made these invisible or wrong over
+            // the world. The accent states stay: the accent comes from the ThemePreset, not the
+            // palette, so it is already world-safe. Same rule as the meter track above.
+            int dotColor = !armed ? 0xFFA0A0A0
                          : hot    ? Theme.withPulsedAlpha(Theme.C_ACCENT_BRIGHT & 0x00FFFFFF, 0.75f, 1.0f)
                                   : Theme.C_ACCENT_SOFT;
 
@@ -680,7 +684,7 @@ public final class ClientEvents {
             // imply spells are about to fire.
             if (calibrating) {
                 g.drawString(font, "calibrating", meterX + METER_W + 4,
-                    chipY + (CHIP_H - font.lineHeight) / 2 + 1, Theme.C_MUTED, true);
+                    chipY + (CHIP_H - font.lineHeight) / 2 + 1, 0xFFFFFFFF, true);
             }
         }
 
