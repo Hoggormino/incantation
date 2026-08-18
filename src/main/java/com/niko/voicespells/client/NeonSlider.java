@@ -46,36 +46,30 @@ public final class NeonSlider extends AbstractSliderButton {
         int x = getX(), y = getY(), w = getWidth(), h = getHeight();
         boolean hov = isHoveredOrFocused();
 
-        // Recessed track background.
-        g.fill(x, y, x + w, y + h, Theme.C_INSET);
+        // Vanilla slider construction: a dark sunken track the full width, a raised
+        // button-style handle riding on it, and the label drawn over the middle in white.
+        // Sliders are buttons in vanilla — they keep the dark widget tone no matter what
+        // panel they sit on, which is what keeps the white label readable. The previous
+        // version was an accent-filled progress bar with a neon thumb, a web idiom;
+        // vanilla sliders show position with the handle alone, not a coloured fill.
+        g.fill(x, y, x + w, y + h, 0xFF2B2B2B);
+        g.fill(x, y, x + w, y + 1, 0xFF000000);
+        g.fill(x, y + h - 1, x + w, y + h, 0xFF000000);
+        g.fill(x, y, x + 1, y + h, 0xFF000000);
+        g.fill(x + w - 1, y, x + w, y + h, 0xFF000000);
+        g.fill(x + 1, y + 1, x + w - 1, y + 2, 0xFF1A1A1A);   // sunken top shadow
 
-        // Progress fill from the left up to the current position.
-        int fillW = (int) (this.value * (w - 4));
-        if (fillW > 0) {
-            g.fill(x + 2, y + 2, x + 2 + fillW, y + h - 2, Theme.C_ACCENT_FAINT);
-        }
+        int handleW = 8;
+        int handleX = x + 1 + (int) (this.value * (w - 2 - handleW));
+        int hFill = hov && active ? 0xFF8A8A8A : 0xFF6C6C6C;
+        g.fill(handleX, y + 1, handleX + handleW, y + h - 1, hFill);
+        g.fill(handleX, y + 1, handleX + handleW, y + 2, 0xFF9E9E9E);
+        g.fill(handleX, y + h - 2, handleX + handleW, y + h - 1, 0xFF3F3F3F);
+        g.fill(handleX, y + 1, handleX + 1, y + h - 1, 0xFF9E9E9E);
+        g.fill(handleX + handleW - 1, y + 1, handleX + handleW, y + h - 1, 0xFF3F3F3F);
 
-        // Thumb — a narrow neon column where the value sits.
-        int thumbX = x + 2 + Math.max(0, fillW - 2);
-        int thumbW = 4;
-        g.fill(thumbX, y + 1, thumbX + thumbW, y + h - 1,
-            hov ? Theme.C_ACCENT_BRIGHT : Theme.C_ACCENT);
-
-        // Soft hover halo.
-        if (hov && active) {
-            g.fill(x + 2, y + 1,     x + w - 2, y + 2,     Theme.C_ACCENT_FAINT);
-            g.fill(x + 2, y + h - 2, x + w - 2, y + h - 1, Theme.C_ACCENT_FAINT);
-        }
-
-        int border = !active ? Theme.C_DIVIDER
-                   : (hov ? Theme.C_ACCENT : Theme.C_BORDER);
-        Theme.roundedFrame(g, x, y, w, h, border);
-
-        // Label centered on top of the bar.
-        int textColor = !active ? Theme.C_FAINT
-                       : (hov ? Theme.C_ACCENT_BRIGHT : Theme.C_TEXT);
-        int textX = x + w / 2;
-        int textY = y + (h - 8) / 2;
-        g.drawCenteredString(Minecraft.getInstance().font, getMessage(), textX, textY, textColor);
+        int textColor = !active ? 0xFFA0A0A0 : (hov ? 0xFFFFFFA0 : 0xFFFFFFFF);
+        g.drawCenteredString(Minecraft.getInstance().font, getMessage(),
+            x + w / 2, y + (h - 8) / 2, textColor);
     }
 }

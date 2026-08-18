@@ -31,8 +31,12 @@ public final class VoiceSpellsConfigScreen extends Screen {
     // turns Minecraft's GUI Scale up far enough that the available screen is smaller, the
     // runtime {@code panelW} / {@code panelH} fields below get clamped via {@link Theme#fit}
     // so the panel always fits within the screen instead of being cut off.
-    private static final int PANEL_W_PREF  = 384;
-    private static final int PANEL_BASE_H  = 254;   // header + tabs + 6 rows + buttons
+    // 320 wide, sized toward Simple Voice Chat's fixed 248x219 rather than the old 384 slab
+    // that filled most of the screen at GUI-scale auto. Bottom buttons moved to two rows to
+    // make the narrower width workable and to remove the dead vertical gap the single
+    // overcrowded row used to leave above itself.
+    private static final int PANEL_W_PREF  = 320;
+    private static final int PANEL_BASE_H  = 248;   // header + tabs + 5 rows + 2 button rows
     private static final int MONITOR_H     = 156;   // extra height when the monitor is shown
     private static final int TAB_H         = 22;
 
@@ -60,6 +64,9 @@ public final class VoiceSpellsConfigScreen extends Screen {
     /** Runtime panel size — clamped to fit within the screen so the layout doesn't get cut off
      *  when the player picks a large Minecraft GUI Scale. Recomputed every {@link #init()}. */
     private int panelX, panelY, panelW, panelH;
+    /** Per-row pitch for the current layout — Theme.ROW_H normally, smaller when the panel is
+     *  height-clamped on small windows. Set in init() before the tab builders run. */
+    private int rowH = Theme.ROW_H;
 
     /** Theme and palette as they were when the screen opened, plus whether Save ran.
      *
@@ -118,7 +125,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         StringWidget titleW = new StringWidget(panelX, panelY + (Theme.HEADER_H - 9) / 2,
             panelW, 9, title, font);
         titleW.alignCenter();
-        titleW.setColor(Theme.C_ACCENT);
+        titleW.setColor(Theme.C_TEXT);
         addRenderableWidget(titleW);
 
         // --- Tab bar under the accent rule ---
@@ -131,6 +138,14 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
         // --- Tab content ---
         int contentY = tabsY + TAB_H + Theme.GAP_MD;
+        // Rows compress when the panel is height-clamped. Theme.fit shrinks the PANEL on small
+        // windows (an 854x480 dev window at GUI scale 2 leaves only ~224px of logical height),
+        // but the content stack was laid out with the fixed 24px ROW_H regardless — so the
+        // bottom button rows landed on top of the last option row. Chrome (header, tabs, two
+        // button rows, padding) is fixed; whatever height remains is divided among the rows.
+        int rows = currentTab == Tab.HUD ? 6 : 5;
+        int fixed = (contentY - panelY) + 52 + 6; // content start + button rows + breathing room
+        rowH = Math.max(17, Math.min(Theme.ROW_H, (panelH - fixed) / rows));
         int x = panelX + Theme.PAD;
         int ctrlX = panelX + panelW / 2;
         int ctrlW = panelW / 2 - Theme.PAD;
@@ -140,47 +155,51 @@ public final class VoiceSpellsConfigScreen extends Screen {
             case HUD         -> buildHudTab(x, ctrlX, ctrlW, contentY);
         }
 
-        // --- Bottom buttons (always present, span both tabs) ---
-        int btnY = panelY + panelH - 28;
-        int btnW = 60;
-        int spellsW = 75;
-        int moreW   = 55;
-        addRenderableWidget(NeonButton.of(x, btnY, btnW, 20,
+        // --- Bottom buttons, two rows (always present, span both tabs) ---
+        // Secondary actions on one row, Cancel/Done underneath — vanilla gives its primary
+        // exits their own row (see any options screen). Five buttons on one row needed 328px
+        // of labels and is what previously forced the panel out to 384 wide.
+        int avail = panelW - Theme.PAD * 2;
+        int row1Y = panelY + panelH - 52;
+        int row2Y = panelY + panelH - 28;
+        int thirdW = (avail - 12) / 3;
+        addRenderableWidget(NeonButton.of(x, row1Y, thirdW, 20,
             Component.translatable("voicespells.config.reset"), b -> resetDefaults()));
-        addRenderableWidget(NeonButton.of(x + btnW + 6, btnY, spellsW, 20,
+        addRenderableWidget(NeonButton.of(x + thirdW + 6, row1Y, thirdW, 20,
             Component.translatable("voicespells.config.spelllist"),
             b -> { if (minecraft != null) minecraft.setScreen(new VoiceSpellsSpellListScreen(this)); }));
-        addRenderableWidget(NeonButton.of(x + btnW + 6 + spellsW + 6, btnY, moreW, 20,
+        addRenderableWidget(NeonButton.of(x + (thirdW + 6) * 2, row1Y, avail - (thirdW + 6) * 2, 20,
             Component.literal("More..."),
             b -> { if (minecraft != null) minecraft.setScreen(new ConfigMoreScreen(this)); }));
-        addRenderableWidget(NeonButton.of(panelX + panelW - Theme.PAD - btnW * 2 - 6, btnY, btnW, 20,
+        int halfW = (avail - 6) / 2;
+        addRenderableWidget(NeonButton.of(x, row2Y, halfW, 20,
             CommonComponents.GUI_CANCEL, b -> onClose()));
-        addRenderableWidget(NeonButton.of(panelX + panelW - Theme.PAD - btnW, btnY, btnW, 20,
+        addRenderableWidget(NeonButton.of(x + halfW + 6, row2Y, avail - halfW - 6, 20,
             CommonComponents.GUI_DONE, b -> save()));
     }
 
     private void buildRecognitionTab(int x, int ctrlX, int ctrlW, int y) {
         addLabel("Only owned spells", x, y + 6);
-        addLabel("Debug Monitor",     x, y + Theme.ROW_H + 6);
-        addLabel("Fuzzy Tolerance",   x, y + Theme.ROW_H * 2 + 6);
-        addLabel("Substring Match",   x, y + Theme.ROW_H * 3 + 6);
-        addLabel("Dedup Window",      x, y + Theme.ROW_H * 4 + 6);
+        addLabel("Debug Monitor",     x, y + rowH + 6);
+        addLabel("Fuzzy Tolerance",   x, y + rowH * 2 + 6);
+        addLabel("Substring Match",   x, y + rowH * 3 + 6);
+        addLabel("Dedup Window",      x, y + rowH * 4 + 6);
 
         addRenderableWidget(NeonToggle.of(ctrlX, y, ctrlW, 20, workRestrictToOwned,
             val -> workRestrictToOwned = val));
-        y += Theme.ROW_H;
+        y += rowH;
 
         addRenderableWidget(NeonToggle.of(ctrlX, y, ctrlW, 20, workDebug,
             val -> { workDebug = val; rebuildWidgets(); }));
-        y += Theme.ROW_H;
+        y += rowH;
 
         addRenderableWidget(new NeonSlider(ctrlX, y, ctrlW, 20,
             workFuzzy, 0, 2, this::fuzzyLabel, v -> workFuzzy = v));
-        y += Theme.ROW_H;
+        y += rowH;
 
         addRenderableWidget(NeonToggle.of(ctrlX, y, ctrlW, 20, workSubstring,
             val -> workSubstring = val));
-        y += Theme.ROW_H;
+        y += rowH;
 
         addRenderableWidget(new NeonSlider(ctrlX, y, ctrlW, 20,
             workDedup, 0, 3000, v -> "Dedup: " + v + " ms", v -> workDedup = v));
@@ -188,29 +207,29 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
     private void buildHudTab(int x, int ctrlX, int ctrlW, int y) {
         addLabel("Corner",   x, y + 6);
-        addLabel("Offset X", x, y + Theme.ROW_H + 6);
-        addLabel("Offset Y", x, y + Theme.ROW_H * 2 + 6);
-        addLabel("Opacity",  x, y + Theme.ROW_H * 3 + 6);
-        addLabel("Palette",  x, y + Theme.ROW_H * 4 + 6);
-        addLabel("Theme",    x, y + Theme.ROW_H * 5 + 6);
+        addLabel("Offset X", x, y + rowH + 6);
+        addLabel("Offset Y", x, y + rowH * 2 + 6);
+        addLabel("Opacity",  x, y + rowH * 3 + 6);
+        addLabel("Palette",  x, y + rowH * 4 + 6);
+        addLabel("Theme",    x, y + rowH * 5 + 6);
 
         addRenderableWidget(NeonCycle.of(ctrlX, y, ctrlW, 20,
             VoiceSpellsConfig.Corner.values(), workCorner,
             VoiceSpellsConfigScreen::prettyCorner,
             val -> workCorner = val));
-        y += Theme.ROW_H;
+        y += rowH;
 
         addRenderableWidget(new NeonSlider(ctrlX, y, ctrlW, 20,
             workOffsetX, 0, 1000, v -> "X: " + v + " px", v -> workOffsetX = v));
-        y += Theme.ROW_H;
+        y += rowH;
 
         addRenderableWidget(new NeonSlider(ctrlX, y, ctrlW, 20,
             workOffsetY, 0, 1000, v -> "Y: " + v + " px", v -> workOffsetY = v));
-        y += Theme.ROW_H;
+        y += rowH;
 
         addRenderableWidget(new NeonSlider(ctrlX, y, ctrlW, 20,
             workOpacityPct, 0, 100, v -> "Opacity: " + v + "%", v -> workOpacityPct = v));
-        y += Theme.ROW_H;
+        y += rowH;
 
         // Base palette: dark / light / midnight / slate. Independent of the accent Theme below.
         addRenderableWidget(NeonCycle.of(ctrlX, y, ctrlW, 20,
@@ -223,7 +242,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 // their old colors so we rebuild to capture the fresh palette.
                 rebuildWidgets();
             }));
-        y += Theme.ROW_H;
+        y += rowH;
 
         addRenderableWidget(NeonCycle.withLocks(ctrlX, y, ctrlW, 20,
             VoiceSpellsConfig.ThemePreset.values(), workTheme,
@@ -377,7 +396,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // Anchor the monitor right under the last row of the Recognition tab. We now have
         // 5 rows there (added "Only owned spells"), so step down by ROW_H*5 plus the tab-bar
         // and gap offsets.
-        int my = panelY + Theme.HEADER_H + 4 + TAB_H + Theme.GAP_MD + Theme.ROW_H * 5 + 6;
+        int my = panelY + Theme.HEADER_H + 4 + TAB_H + Theme.GAP_MD + rowH * 5 + 6;
         int mw = panelW - Theme.PAD * 2;
         int mh = MONITOR_H - 16;
 
@@ -475,27 +494,26 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
         @Override
         protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partial) {
-            boolean active = currentTab == tab;
+            boolean selected = currentTab == tab;
             boolean hov = isHoveredOrFocused();
-            int color = active ? Theme.C_ACCENT_BRIGHT
-                      : (hov ? Theme.C_TEXT : Theme.C_MUTED);
-            int textX = getX() + getWidth() / 2;
-            int textY = getY() + (getHeight() - 8) / 2;
-            g.drawCenteredString(Minecraft.getInstance().font,
-                Component.literal(label), textX, textY, color);
-
-            int labelW = font.width(label);
-            int barX = getX() + (getWidth() - labelW) / 2;
-            int barY = getY() + getHeight() - 2;
-            if (active) {
-                // Neon underline beneath the label, the width of the text itself.
-                g.fill(barX, barY, barX + labelW, barY + 1, Theme.C_ACCENT);
-            } else if (hov) {
-                // Faint half-width hint under hover.
-                int hintW = labelW / 2;
-                int hintX = getX() + (getWidth() - hintW) / 2;
-                g.fill(hintX, barY, hintX + hintW, barY + 1, Theme.C_ACCENT_FAINT);
-            }
+            // Drawn as a vanilla button whose selected state is PRESSED — the same language the
+            // creative inventory and recipe book use for their tabs. The old accent underline
+            // was a browser idiom; a pushed-in button is how the game itself says "you are here".
+            int fill = selected ? 0xFF4A4A4A : (hov ? 0xFF8A8A8A : 0xFF6C6C6C);
+            int x = getX(), y = getY(), w = getWidth(), h = getHeight();
+            g.fill(x, y, x + w, y + h, fill);
+            int hi = selected ? 0xFF303030 : 0xFF9E9E9E;
+            int lo = selected ? 0xFF5E5E5E : 0xFF3F3F3F;
+            g.fill(x, y, x + w, y + 1, 0xFF000000);
+            g.fill(x, y + h - 1, x + w, y + h, 0xFF000000);
+            g.fill(x, y, x + 1, y + h, 0xFF000000);
+            g.fill(x + w - 1, y, x + w, y + h, 0xFF000000);
+            g.fill(x + 1, y + 1, x + w - 1, y + 2, hi);
+            g.fill(x + 1, y + 1, x + 2, y + h - 1, hi);
+            g.fill(x + 1, y + h - 2, x + w - 1, y + h - 1, lo);
+            g.fill(x + w - 2, y + 1, x + w - 1, y + h - 1, lo);
+            g.drawCenteredString(Minecraft.getInstance().font, Component.literal(label),
+                x + w / 2, y + (h - 8) / 2, selected ? 0xFFFFFFA0 : 0xFFFFFFFF);
         }
 
         @Override

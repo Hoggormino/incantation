@@ -52,7 +52,7 @@ public final class DiagnosticsScreen extends Screen {
         StringWidget titleW = new StringWidget(px, py + (Theme.HEADER_H - 9) / 2,
             panelW, 9, title, font);
         titleW.alignCenter();
-        titleW.setColor(Theme.C_ACCENT);
+        titleW.setColor(Theme.C_TEXT);
         addRenderableWidget(titleW);
 
         results = Diagnostics.runAll();

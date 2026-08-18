@@ -1292,6 +1292,14 @@ public final class VoiceController {
         boolean after = !captureHolders.isEmpty();
         if (before == after) return;
         diagnosticCaptureOverride = after;
+        if (!after) {
+            // Drop any half-heard utterance the mic-test surface accumulated. Without this, a
+            // recognizer frozen mid-sentence when the wizard or arena closed would flush its
+            // buffered audio on the next real frame — and if what it heard happened to name a
+            // spell, that fired a cast the player never spoke in-game.
+            VoskSession sess = session;
+            if (sess != null) sess.reset();
+        }
         syncCapture();
     }
 
