@@ -258,8 +258,15 @@ public final class Theme {
         if (changed) applyPreset(currentPreset);
     }
 
-    /** Re-derive all accent variants from the given preset. All remaining palettes are dark
-     *  surfaces, so we always use alpha-faded copies for the glow layers. */
+    /**
+     * Re-derive the accent variants from the given preset.
+     *
+     * <p>The old javadoc claimed "all remaining palettes are dark surfaces, so we always use
+     * alpha-faded copies", which stopped being true the moment the default palette became a
+     * light container — and the method never consulted the palette anyway. It does not need to
+     * any more: the accent is used only by the in-world HUD, which draws over the world rather
+     * than over any panel, so a single set of variants is correct for every palette.
+     */
     public static void applyPreset(com.niko.voicespells.VoiceSpellsConfig.ThemePreset p) {
         currentPreset = p;
         int rgb = p.accent & 0x00FFFFFF;

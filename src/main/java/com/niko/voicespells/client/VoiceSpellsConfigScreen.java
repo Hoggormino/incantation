@@ -630,9 +630,14 @@ public final class VoiceSpellsConfigScreen extends Screen {
      *
      * <p>Renders nothing itself. It used to paint its own fill and bevel lines, and once every
      * other control on the screen became a real textured widget this was the one box still drawn
-     * by hand — visibly a different shade sitting right beside the HUD tab. Vanilla draws the
-     * pressed (inactive) variant of its own button sprite for the current tab, which is exactly
-     * the effect the hand-drawn version was reaching for.
+     * by hand — visibly a different shade sitting right beside the HUD tab.
+     *
+     * <p>To be precise about what the current tab actually looks like: vanilla's Button has no
+     * "pressed" sprite, so an inactive tab draws with the DISABLED one — darker, with grey text.
+     * That is the same convention vanilla uses for a control you cannot act on, which is exactly
+     * true of the tab you are already on, and it is what the game itself does for the current
+     * entry in several screens. It is not a pressed-in tab like the creative inventory's, and
+     * claiming otherwise in a comment would only mislead the next person to read this.
      */
     private final class TabButton extends Button {
         private final Tab tab;

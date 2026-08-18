@@ -160,7 +160,9 @@ public final class ConfigMoreScreen extends Screen {
             StringWidget sotd = new StringWidget(px + Theme.PAD, py + panelH - 54,
                 panelW - Theme.PAD * 2, 9, Component.literal("Today's spell: " + suggestion), font);
             sotd.alignLeft();
-            sotd.setColor(Theme.C_FAINT);
+            // C_MUTED, not C_FAINT. This line names a spell and tracks progress toward it, so it
+            // is content; the faintest tier is for things whose absence would not be noticed.
+            sotd.setColor(Theme.C_MUTED);
             addRenderableWidget(sotd);
         }
 

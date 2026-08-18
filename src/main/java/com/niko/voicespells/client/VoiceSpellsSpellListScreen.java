@@ -89,8 +89,11 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         addRenderableWidget(titleW);
 
         int controlsY = py + Theme.HEADER_H + Theme.GAP_MD;
-        int schoolW = 96;
-        int sortW   = 76;
+        // Wide enough for the longest label each chip can show, now that they carry their own
+        // names: "School: Lightning" and "Sort: Mana". Measured rather than guessed, because a
+        // vanilla button truncates nothing — it draws the text straight through its own border.
+        int schoolW = Math.max(96, font.width("School: Lightning") + 12);
+        int sortW   = Math.max(76, font.width("Sort: Casts") + 12);
         int searchW = (panelW - Theme.PAD * 2) - schoolW - sortW - 8;
 
         // Rebuild the school list from the actually-indexed spells. Sorted alphabetically,
@@ -109,18 +112,22 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         for (String s : schoolOptions) if (s.equals(currentSchool)) { stillValid = true; break; }
         if (!stillValid) currentSchool = SCHOOL_ALL;
 
-        // Chip text drops the "School:" / "Sort:" prefix so longer values ("Lightning",
-        // "Eldritch") don't collide with the cycle chevrons at the edges. The chevrons + the
-        // chip's location in the toolbar already communicate what's being cycled.
-        addRenderableWidget(NeonCycle.of(px + Theme.PAD, controlsY, schoolW, 18,
+        // These name what they cycle again.
+        //
+        // The prefix was dropped back when the widget drew its own chevrons at each edge, on the
+        // grounds that the arrows plus the toolbar position said enough. NeonCycle now renders as
+        // a plain vanilla button with no chevrons, so a chip reading just "Fire" or "Name" gave
+        // no hint that it cycles at all — it looked like a button that would do something. The
+        // label carries it instead, which is what vanilla's own cycle options do.
+        addRenderableWidget(NeonCycle.named(px + Theme.PAD, controlsY, schoolW, 18, "School",
             schoolOptions, currentSchool,
             s -> capitalizeOne(s),
             val -> {
                 currentSchool = val;
                 applyFilter(search != null ? search.getValue() : "");
             }));
-        addRenderableWidget(NeonCycle.of(px + Theme.PAD + schoolW + 4, controlsY, sortW, 18,
-            SortMode.values(), currentSort,
+        addRenderableWidget(NeonCycle.named(px + Theme.PAD + schoolW + 4, controlsY, sortW, 18,
+            "Sort", SortMode.values(), currentSort,
             s -> s.label,
             val -> {
                 currentSort = val;

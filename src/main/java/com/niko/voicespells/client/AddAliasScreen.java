@@ -139,12 +139,16 @@ public final class AddAliasScreen extends Screen {
                 y += rowH;
             }
             if (aliasRows.size() > MAX_ROWS) {
-                StringWidget moreLabel = new StringWidget(px + Theme.PAD, y,
+                // Clamped above the button row. MAX_ROWS is a fixed count but the panel is
+                // clamped to the window, so on a short screen the rows consumed the space the
+                // buttons live in and this line landed on top of Cancel / Save.
+                int moreY = Math.min(y, py + panelH - 30 - 9);
+                StringWidget moreLabel = new StringWidget(px + Theme.PAD, moreY,
                     panelW - Theme.PAD * 2, 9,
                     Component.literal("...and " + (aliasRows.size() - MAX_ROWS) + " more (edit toml)"),
                     font);
                 moreLabel.alignLeft();
-                moreLabel.setColor(Theme.C_FAINT);
+                moreLabel.setColor(Theme.C_MUTED);
                 addRenderableWidget(moreLabel);
             }
         }
