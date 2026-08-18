@@ -418,7 +418,6 @@ public final class VoiceSpellsSpellListScreen extends Screen {
 
             body.add(spellId); // always include the id at the bottom in muted
 
-            body.add(spellId); // always include the id at the bottom in muted
 
             // Hand the whole card to vanilla.
             //
