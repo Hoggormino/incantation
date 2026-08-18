@@ -75,6 +75,8 @@ public final class AudioDevicesScreen extends Screen {
     /** Scan results by raw device name: peak sample, or -1 for "would not open". */
     private final Map<String, Integer> peaks = new ConcurrentHashMap<>();
     private volatile boolean scanning = false;
+    /** Set the moment the screen leaves, so a scan finishing afterwards cannot re-take the mic. */
+    private volatile boolean closed = false;
     /** The device currently being probed, for the progress line. */
     private volatile String scanningNow = "";
 
@@ -119,8 +121,9 @@ public final class AudioDevicesScreen extends Screen {
             Component.literal("Sound output"), b -> { showingOutputs = true; scroll = 0; rebuildWidgets(); }));
         // An inactive vanilla button renders sunken, which is exactly how vanilla shows a
         // selected tab. Reusing that is cheaper and more consistent than a bespoke tab widget.
-        micTab.active = showingOutputs;
-        outTab.active = !showingOutputs;
+        // Switching tabs mid-scan would rebuild the screen under the worker thread.
+        micTab.active = showingOutputs && !scanning;
+        outTab.active = !showingOutputs && !scanning;
 
         scanBtn = addRenderableWidget(NeonButton.of(px + Theme.PAD, py + panelH - 26, 110, 20,
             Component.literal("Test all mics"), b -> startScan()));
@@ -184,6 +187,12 @@ public final class AudioDevicesScreen extends Screen {
         List<String> targets = new ArrayList<>(inputs);
         Thread t = new Thread(() -> {
             try {
+                // A latch, not just "drop the hold". Releasing the hold left the ordinary rules
+                // in charge, and tickCaptureSuspension() runs every client tick — so in a world
+                // the mod reopened its own device a tick later and then probed the same device
+                // from this thread, which is the one thing here that is genuinely driver
+                // dependent. setProbing keeps captureAllowedNow() false for the whole scan.
+                VoiceController.setProbing(true);
                 VoiceController.setDiagnosticCapture(MIC_HOLD_OWNER, false);
                 VoiceController.stopCapture();
                 for (String dev : targets) {
@@ -193,10 +202,25 @@ public final class AudioDevicesScreen extends Screen {
             } finally {
                 scanningNow = "";
                 scanning = false;
+                VoiceController.setProbing(false);
                 // Back to the render thread to re-arm: setDiagnosticCapture reaches into
                 // capture lifecycle and the session, which the client thread owns.
+                //
+                // The re-arm MUST check the screen is still open. A scan takes six seconds and
+                // the player can close the screen at any point in it; onClose released the hold,
+                // and then this ran afterwards and took it again — with nothing left to ever
+                // release it. That pins diagnosticCaptureOverride on for the rest of the session,
+                // and since it short-circuits captureArmed(), push-to-talk, hold-item gating and
+                // the listening toggle all stop working: the mic stays live and every phrase is
+                // recognised regardless of the player's settings. Closing a settings screen must
+                // not silently disable the mod's entire gating model.
                 Minecraft mc = Minecraft.getInstance();
                 mc.execute(() -> {
+                    if (closed || mc.screen != AudioDevicesScreen.this) {
+                        VoiceController.setDiagnosticCapture(MIC_HOLD_OWNER, false);
+                        VoiceController.syncCapture();
+                        return;
+                    }
                     VoiceController.setDiagnosticCapture(MIC_HOLD_OWNER, true);
                     if (scanBtn != null) scanBtn.active = !showingOutputs;
                 });
@@ -253,7 +277,13 @@ public final class AudioDevicesScreen extends Screen {
         if (button != 0 || scanning) return false;
         if (mx < listX || mx > listX + listW || my < listY || my > listY + listH) return false;
 
-        int idx = ((int) my - listY) / ROW + scroll;
+        // Only rows that were actually DRAWN are clickable. listH is rarely an exact multiple of
+        // ROW, so a strip of empty well is left under the last row — and clicking it computed a
+        // row index one past the end of the visible page, silently switching the microphone to a
+        // device the player could not see. The renderer stops at the same boundary.
+        int row = ((int) my - listY) / ROW;
+        if (row >= rowsVisible || listY + (row + 1) * ROW > listY + listH) return false;
+        int idx = row + scroll;
         List<String> list = showingOutputs ? outputs : inputs;
         // Row 0 is the synthetic "System default" entry; the rest index into the device list.
         if (idx == 0) {
@@ -291,6 +321,7 @@ public final class AudioDevicesScreen extends Screen {
 
     @Override
     public void onClose() {
+        closed = true;
         VoiceController.setDiagnosticCapture(MIC_HOLD_OWNER, false);
         if (minecraft != null) minecraft.setScreen(parent);
     }
@@ -299,6 +330,7 @@ public final class AudioDevicesScreen extends Screen {
     public void removed() {
         // Both paths release: onClose covers Esc and the Back button, removed() covers every
         // other way a screen can be swapped out from under us.
+        closed = true;
         VoiceController.setDiagnosticCapture(MIC_HOLD_OWNER, false);
         super.removed();
     }

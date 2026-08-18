@@ -756,7 +756,8 @@ public final class VoiceController {
                 "Microphone {} is open but delivering pure silence - this is what a virtual audio "
                 + "driver (iVCam, VB-Cable, NVIDIA Broadcast, an unplugged webcam) does when it is "
                 + "your Windows default recording device. Pick a real microphone in "
-                + "Config > Microphone, or run /voicespells devices to list them.", dev);
+                + "Config > More... > Microphone & Sound, or run /voicespells devices to list "
+                + "them.", dev);
         }
     }
 
@@ -1378,8 +1379,27 @@ public final class VoiceController {
         setDiagnosticCapture("legacy", on);
     }
 
+    /** True while the device picker is probing every capture device from its own thread. */
+    private static volatile boolean probing = false;
+
+    /**
+     * Suspend all capture while an external probe walks the device list.
+     *
+     * <p>The device scan opens each microphone in turn from a worker thread. Merely releasing the
+     * diagnostic hold was not enough to keep the mod off the hardware: {@code
+     * tickCaptureSuspension()} runs every client tick and reopens the device as soon as the
+     * ordinary rules allow it, so in a world the mod grabbed the same device the scan was about
+     * to open. This latch is checked FIRST, ahead of the override, because during a scan nobody
+     * may hold the device — not even a mic-test screen.
+     */
+    public static void setProbing(boolean on) {
+        probing = on;
+        if (on) stopCapture();
+    }
+
     private static boolean captureAllowedNow() {
         Minecraft mc = Minecraft.getInstance();
+        if (probing) return false;
         // The override deliberately precedes the in-world check: a mic test is the one case where
         // capturing outside a world is the whole point.
         if (diagnosticCaptureOverride) return true;

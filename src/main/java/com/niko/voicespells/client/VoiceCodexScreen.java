@@ -196,9 +196,20 @@ public final class VoiceCodexScreen extends Screen {
     }
 
     private void line(GuiGraphics g, int x, int y, String label, String value) {
-        g.drawString(font, Component.literal(label), x, y, Theme.C_MUTED, !Theme.lightSurface());
         int colW = panelW / 2 - Theme.PAD - 6;
         int vw = font.width(value);
+        // Trim the LABEL to whatever the value leaves, rather than letting the two overlap.
+        // "Speak to cast (session)" against "after 1st cast" needs more than the column has, and
+        // the two strings were drawn straight through each other.
+        String shown = label;
+        int room = colW - vw - 6;
+        if (font.width(shown) > room && room > 8) {
+            while (shown.length() > 1 && font.width(shown + "...") > room) {
+                shown = shown.substring(0, shown.length() - 1);
+            }
+            shown = shown + "...";
+        }
+        g.drawString(font, Component.literal(shown), x, y, Theme.C_MUTED, !Theme.lightSurface());
         g.drawString(font, Component.literal(value), x + colW - vw, y, Theme.C_TEXT, !Theme.lightSurface());
     }
 

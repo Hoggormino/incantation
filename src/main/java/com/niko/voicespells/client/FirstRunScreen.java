@@ -103,8 +103,13 @@ public final class FirstRunScreen extends Screen {
         // not discovered yet. The keyed capture holds mean the wizard and the picker can both
         // want the microphone without either revoking it from the other.
         if (step == 1) {
-            addRenderableWidget(NeonButton.of(px + panelW / 2 - 80, btnY - 24, 160, 20,
-                Component.literal("Meter dead? Choose microphone…"),
+            // Width from the text, not a guess: "Meter dead? Choose microphone..." measured 6px
+            // wider than the 160 it was given, so vanilla drew the label straight through the
+            // button's right edge.
+            int micBtnW = Math.min(panelW - Theme.PAD * 2,
+                font.width("Choose microphone...") + 24);
+            addRenderableWidget(NeonButton.of(px + (panelW - micBtnW) / 2, btnY - 24, micBtnW, 20,
+                Component.literal("Choose microphone..."),
                 b -> { if (minecraft != null) minecraft.setScreen(new AudioDevicesScreen(this)); }));
         }
         String nextLabel = (step == STEPS - 1) ? "Done" : "Next";
@@ -335,7 +340,9 @@ public final class FirstRunScreen extends Screen {
      * on every window the panel fits in at all.
      */
     private void drawLines(GuiGraphics g, int x, int y, String[] lines) {
-        int limit = py + panelH - 28 - 4;                       // top of the button row
+        // On the mic-check step there is an extra button row above the nav row, so the text has
+        // to stop higher or it draws into it.
+        int limit = py + panelH - 28 - 4 - (step == 1 ? 24 : 0);
         int lineH = Math.max(8, Math.min(11, (limit - y) / Math.max(1, lines.length)));
         for (int i = 0; i < lines.length; i++) {
             int ly = y + i * lineH;
@@ -348,7 +355,7 @@ public final class FirstRunScreen extends Screen {
     /** The step-body line height {@link #drawLines} will use for {@code n} lines starting at
      *  {@code y} — so callers that lay out content BELOW a block agree with what was drawn. */
     private int linesHeight(int y, int n) {
-        int limit = py + panelH - 28 - 4;
+        int limit = py + panelH - 28 - 4 - (step == 1 ? 24 : 0);
         return Math.max(8, Math.min(11, (limit - y) / Math.max(1, n))) * n;
     }
 

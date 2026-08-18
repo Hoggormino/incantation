@@ -36,10 +36,31 @@ public final class VoiceSpellsConfigScreen extends Screen {
     // that filled most of the screen at GUI-scale auto. Bottom buttons moved to two rows to
     // make the narrower width workable and to remove the dead vertical gap the single
     // overcrowded row used to leave above itself.
-    private static final int PANEL_W_PREF  = 320;
-    private static final int PANEL_BASE_H  = 206;   // header + tabs + 3 grid rows + 2 button rows
+    /**
+     * Which of Minecraft's two screen archetypes this uses.
+     *
+     * <p>The game has exactly two, and mixing them is what makes a modded screen feel off. A
+     * CONTAINER screen (chest, furnace) is a textured panel with dark text and no buttons. An
+     * OPTIONS screen (Video Settings, Controls) has no panel at all — just the blurred world, a
+     * white centred title and a grid of buttons. This screen is a settings screen wearing a
+     * container's clothes, so both readings are defensible and it is worth being able to see
+     * each one running rather than arguing about it.
+     */
+    private static final boolean PANELLESS = true;
+
+    // Vanilla's own option-button metrics: 150 wide, 20 tall, 4 apart, which is what every
+    // two-column options screen in the game uses.
+    private static final int COL_W         = 150;
+    private static final int COL_GAP       = 4;
+    private static final int GRID_W        = COL_W * 2 + COL_GAP;
+
+    private static final int PANEL_W_PREF  = GRID_W + 24;   // grid + a 12px margin each side
+    private static final int PANEL_BASE_H  = 190;   // title + tabs + 3 grid rows + 2 button rows
     private static final int MONITOR_H     = 156;   // extra height when the monitor is shown
-    private static final int TAB_H         = 22;
+    private static final int TAB_H         = 18;
+    /** Space above the title inside the panel, and below it before the tabs. */
+    private static final int TITLE_TOP     = 8;
+    private static final int TITLE_H       = 18;
 
     private enum Tab { RECOGNITION, HUD }
 
@@ -65,6 +86,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
     /** Runtime panel size — clamped to fit within the screen so the layout doesn't get cut off
      *  when the player picks a large Minecraft GUI Scale. Recomputed every {@link #init()}. */
     private int panelX, panelY, panelW, panelH;
+    /** Y of the header and footer separator lines in panelless mode. */
+    private int headerY, footerY;
     /** Per-row pitch for the current layout — Theme.ROW_H normally, smaller when the panel is
      *  height-clamped on small windows. Set in init() before the tab builders run. */
     /** Whether the Live Monitor has room to draw without colliding with the option rows.
@@ -117,41 +140,71 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // exactly the setup most people tune on. Only while the monitor is actually visible -
         // the config screen has no business holding the mic open on its other tabs.
         VoiceController.setDiagnosticCapture("livemonitor", showMonitor);
-        // Clamp to fit the current screen so large GUI Scale settings don't push buttons off
-        // the bottom or sides. The preferred dimensions still apply when there's enough room.
+        // Geometry. In panelless mode the content is simply centred on the SCREEN, the way
+        // vanilla options screens are; otherwise it is centred inside a panel sized to hug it.
         panelW = Theme.fit(PANEL_W_PREF, width);
         panelH = Theme.fit(PANEL_BASE_H + (showMonitor ? MONITOR_H : 0), height);
         panelX = (width  - panelW) / 2;
         panelY = (height - panelH) / 2;
 
-        // --- Title centered in the header band (StringWidget so it renders bright) ---
-        StringWidget titleW = new StringWidget(panelX, panelY + (Theme.HEADER_H - 9) / 2,
-            panelW, 9, title, font);
+        int gridW = Math.min(GRID_W, panelW - 24);
+        int colW  = (gridW - COL_GAP) / 2;
+        int gridX = PANELLESS ? (width - gridW) / 2 : panelX + (panelW - gridW) / 2;
+
+        int titleY, tabsY, contentY, row1Y, row2Y;
+        if (PANELLESS) {
+            // Vanilla's options rhythm: a header strip with the title, a footer strip with the
+            // primary buttons, a separator line under each, and the content CENTRED in what is
+            // left. Centring is the part that matters — anchoring the content to the top left a
+            // growing hole between the last option and the buttons as the window got taller,
+            // which is the emptiest a screen can look.
+            titleY   = 14;
+            headerY  = 32;                                   // separator under the header
+            row2Y    = height - 26;
+            row1Y    = row2Y - 24;
+            footerY  = row1Y - 8;                            // separator above the footer
+            tabsY    = headerY + 10;
+            // Top-aligned under the tabs, NOT centred in the band. Centring opened a visible
+            // hole between the tab row and the first option — the eye reads that as the screen
+            // being broken, whereas trailing space above the footer is what every vanilla
+            // options screen looks like when it has few entries.
+            contentY = tabsY + TAB_H + Theme.GAP_MD;
+        } else {
+            titleY   = panelY + TITLE_TOP;
+            tabsY    = panelY + TITLE_TOP + TITLE_H;
+            contentY = tabsY + TAB_H + Theme.GAP_MD;
+            row2Y    = panelY + panelH - 26;
+            row1Y    = row2Y - 24;
+        }
+
+        // --- Title ---
+        StringWidget titleW = new StringWidget(PANELLESS ? 0 : panelX, titleY,
+            PANELLESS ? width : panelW, 9, title, font);
         titleW.alignCenter();
-        titleW.setColor(Theme.C_TEXT);
+        // On a panelless screen the backdrop is the blurred world, so the title has to be white
+        // and shadowed like vanilla's; on a container panel it is the panel's dark text tone.
+        titleW.setColor(PANELLESS ? 0xFFFFFF : Theme.C_TEXT);
         addRenderableWidget(titleW);
 
-        // --- Tab bar under the accent rule ---
-        int tabsY = panelY + Theme.HEADER_H + 4;
-        int tabW = (panelW - Theme.PAD * 2) / 2;
-        addRenderableWidget(new TabButton(panelX + Theme.PAD,            tabsY, tabW, TAB_H,
-            "Recognition", Tab.RECOGNITION));
-        addRenderableWidget(new TabButton(panelX + Theme.PAD + tabW,     tabsY, tabW, TAB_H,
-            "HUD",         Tab.HUD));
+        // --- Tab bar ---
+        int tabW = gridW / 2;
+        addRenderableWidget(new TabButton(gridX,        tabsY, tabW, TAB_H, "Recognition", Tab.RECOGNITION));
+        addRenderableWidget(new TabButton(gridX + tabW, tabsY, tabW, TAB_H, "HUD",         Tab.HUD));
 
         // --- Tab content: a two-column option grid ---
         //
-        // Three rows for five settings, three for six. The old label-plus-control layout needed
-        // five and six rows respectively, which is why it had to compress rows on short windows
-        // and still collided with the buttons. Halving the row count made the whole compression
-        // mechanism unnecessary; what remains is a fixed, uniform grid.
-        int contentY = tabsY + TAB_H + Theme.GAP_MD;
-        int gridX = panelX + Theme.PAD;
-        int colW = (panelW - Theme.PAD * 2 - 4) / 2;
-        int gridRows = 3;                                   // both tabs land on three
-        // The monitor renders under the grid, so it only fits if there is room left below it.
+        // Three rows for five settings, three for six, on vanilla's own 150x20 option-button
+        // metric. The old label-plus-control layout needed five and six rows, which is why it
+        // had to compress rows on short windows and still collided with the buttons; halving the
+        // row count made the whole compression mechanism unnecessary.
+        int gridRows = 3;
+        gridTop = contentY;
+        buttonsTopY = row1Y;
         int gridBottom = contentY + gridRows * GRID_ROW;
-        monitorFits = !showMonitor || (panelY + panelH - 58) - gridBottom >= 60;
+        // Enough room for the header line plus a couple of rows, measured against the same
+        // limit renderMonitor() will use. The old check compared free space to a bare 60 while
+        // the monitor drew a fixed 140, so it passed in exactly the cases that then overlapped.
+        monitorFits = !showMonitor || (row1Y - 6) - (gridBottom + 6) >= 46;
 
         switch (currentTab) {
             case RECOGNITION -> buildRecognitionTab(gridX, colW, contentY);
@@ -159,25 +212,22 @@ public final class VoiceSpellsConfigScreen extends Screen {
         }
 
         // --- Bottom buttons, two rows (always present, span both tabs) ---
-        // Secondary actions on one row, Cancel/Done underneath — vanilla gives its primary
-        // exits their own row (see any options screen). Five buttons on one row needed 328px
-        // of labels and is what previously forced the panel out to 384 wide.
-        int avail = panelW - Theme.PAD * 2;
-        int row1Y = panelY + panelH - 52;
-        int row2Y = panelY + panelH - 28;
-        int thirdW = (avail - 12) / 3;
+        // Secondary actions on one row, Cancel/Done underneath — vanilla gives its primary exits
+        // their own row (see any options screen).
+        int avail = gridW;
+        int thirdW = (avail - 2 * COL_GAP) / 3;
         addRenderableWidget(NeonButton.of(gridX, row1Y, thirdW, 20,
             Component.translatable("voicespells.config.reset"), b -> resetDefaults()));
-        addRenderableWidget(NeonButton.of(gridX + thirdW + 6, row1Y, thirdW, 20,
+        addRenderableWidget(NeonButton.of(gridX + thirdW + COL_GAP, row1Y, thirdW, 20,
             Component.translatable("voicespells.config.spelllist"),
             b -> { if (minecraft != null) minecraft.setScreen(new VoiceSpellsSpellListScreen(this)); }));
-        addRenderableWidget(NeonButton.of(gridX + (thirdW + 6) * 2, row1Y, avail - (thirdW + 6) * 2, 20,
-            Component.literal("More..."),
+        addRenderableWidget(NeonButton.of(gridX + (thirdW + COL_GAP) * 2, row1Y,
+            avail - (thirdW + COL_GAP) * 2, 20, Component.literal("More..."),
             b -> { if (minecraft != null) minecraft.setScreen(new ConfigMoreScreen(this)); }));
-        int halfW = (avail - 6) / 2;
+        int halfW = (avail - COL_GAP) / 2;
         addRenderableWidget(NeonButton.of(gridX, row2Y, halfW, 20,
             CommonComponents.GUI_CANCEL, b -> onClose()));
-        addRenderableWidget(NeonButton.of(gridX + halfW + 6, row2Y, avail - halfW - 6, 20,
+        addRenderableWidget(NeonButton.of(gridX + halfW + COL_GAP, row2Y, avail - halfW - COL_GAP, 20,
             CommonComponents.GUI_DONE, b -> save()));
     }
 
@@ -198,6 +248,29 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
     /** Pitch of one grid row: a 20px control plus a 4px gutter. */
     private static final int GRID_ROW = 24;
+
+    /** Header / footer rule. Delegates so every screen draws the identical line. */
+    private void separator(GuiGraphics g, int y) {
+        Theme.rule(g, 0, y, width);
+    }
+
+    /** Left edge of the monitor block: the grid's own left edge under either layout. */
+    private int monitorX() {
+        int gridW = Math.min(GRID_W, panelW - 24);
+        return PANELLESS ? (width - gridW) / 2 : panelX + (panelW - gridW) / 2;
+    }
+
+    /** Top of the monitor block: directly under the three grid rows, in either layout. */
+    private int monitorY() { return gridTop + 3 * GRID_ROW + 6; }
+
+    /** The first thing below the monitor that it must not touch: the secondary button row. */
+    private int monitorBottomLimit() { return buttonsTopY - 6; }
+
+    /** Y of the upper button row, recorded by init() so the monitor can measure against it. */
+    private int buttonsTopY;
+
+    /** Y the option grid was actually laid out at; the monitor hangs off it. */
+    private int gridTop;
 
     /** Place a control at grid slot {@code i}, left column for even, right for odd. */
     private <T extends net.minecraft.client.gui.components.AbstractWidget> T slot(
@@ -421,18 +494,26 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // the panel still reads. Painting only a flat scrim, as this did before, opted out
         // of all of that and was a large part of why the screens felt foreign.
         Theme.background(this, g, mouseX, mouseY, partial);
-        g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        Theme.panel(g, panelX, panelY, panelW, panelH);
-        Theme.headerBand(g, panelX, panelY, panelW, Theme.HEADER_H);
+        if (PANELLESS) {
+            // The two separator lines vanilla puts under its header and above its footer. They
+            // are what stop an options screen from being controls floating on scenery: the eye
+            // reads a header band, a content band and a footer band instead of one soup. Drawn
+            // rather than blitted because the sprites for them only exist from 1.20.5 on, and
+            // this has to look the same on 1.20.1.
+            separator(g, headerY);
+            separator(g, footerY);
+        } else {
+            g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
+            Theme.panel(g, panelX, panelY, panelW, panelH);
+        }
 
         super.render(g, mouseX, mouseY, partial);
 
-        Theme.accentGlow(g, panelX + Theme.PAD, panelY + Theme.HEADER_H,
-            panelW - Theme.PAD * 2);
-        // Thin divider just under the tab bar to separate tabs from content.
-        Theme.divider(g, panelX + Theme.PAD,
-            panelY + Theme.HEADER_H + 4 + TAB_H + 1,
-            panelW - Theme.PAD * 2);
+        // No accent rule under the title and no divider under the tabs. Neither exists in any
+        // vanilla screen: a container has its title sitting straight on the panel, and an
+        // options screen has nothing but the title and the buttons. Both lines were decoration
+        // holding the two halves of the screen apart, and removing them is what lets the panel
+        // shrink to hug its content.
 
         if (currentTab == Tab.RECOGNITION && workDebug) {
             if (monitorFits) {
@@ -440,21 +521,25 @@ public final class VoiceSpellsConfigScreen extends Screen {
             } else {
                 // Silently dropping it would read as a broken toggle, so state the reason.
                 Theme.text(g, font, "Live Monitor needs a taller window",
-                    panelX + Theme.PAD,
-                    panelY + Theme.HEADER_H + 4 + TAB_H + Theme.GAP_MD + 3 * GRID_ROW + 6,
-                    Theme.C_WARN);
+                    monitorX(), monitorY(), Theme.C_WARN);
             }
         }
     }
 
     private void renderMonitor(GuiGraphics g) {
-        int mx = panelX + Theme.PAD;
+        int mx = monitorX();
         // Anchor the monitor right under the last row of the Recognition tab. We now have
         // 5 rows there (added "Only owned spells"), so step down by ROW_H*5 plus the tab-bar
         // and gap offsets.
-        int my = panelY + Theme.HEADER_H + 4 + TAB_H + Theme.GAP_MD + 3 * GRID_ROW + 6;
-        int mw = panelW - Theme.PAD * 2;
-        int mh = MONITOR_H - 16;
+        int my = monitorY();
+        int mw = Math.min(GRID_W, panelW - 24);
+        // Height from the space that EXISTS, not from the constant. MONITOR_H - 16 is 140px and
+        // was drawn unconditionally, while the gate that decides whether to draw at all asked
+        // only for 60px of clearance — so at common GUI scales the monitor drew straight over
+        // the Reset / Spell List / More and Cancel / Done rows, and past the panel's bottom edge.
+        // Deriving it means the well shrinks to fit instead of overlapping, and the gate below
+        // refuses only when there is not even enough room to be useful.
+        int mh = Math.max(0, monitorBottomLimit() - my - 4);
 
         // Live JVM heap stat — gives the user a sanity check on whether the recogniser is
         // bloating memory (it shouldn't; Vosk is C++, but the bridging buffers + grammar grow
