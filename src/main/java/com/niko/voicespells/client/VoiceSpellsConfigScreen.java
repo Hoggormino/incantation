@@ -67,6 +67,9 @@ public final class VoiceSpellsConfigScreen extends Screen {
     /** Per-row pitch for the current layout — Theme.ROW_H normally, smaller when the panel is
      *  height-clamped on small windows. Set in init() before the tab builders run. */
     private int rowH = Theme.ROW_H;
+    /** Whether the Live Monitor has room to draw without colliding with the option rows.
+     *  Computed in init() alongside rowH; read by render(). */
+    private boolean monitorFits = true;
 
     /** Theme and palette as they were when the screen opened, plus whether Save ran.
      *
@@ -144,8 +147,18 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // bottom button rows landed on top of the last option row. Chrome (header, tabs, two
         // button rows, padding) is fixed; whatever height remains is divided among the rows.
         int rows = currentTab == Tab.HUD ? 6 : 5;
-        int fixed = (contentY - panelY) + 52 + 6; // content start + button rows + breathing room
+        // The monitor's own height has to be RESERVED here, not just added to panelH above.
+        // Without this term the rows were sized against a panel height that included the
+        // monitor's 156px, so on any window too small for BASE+MONITOR the rows expanded into
+        // the monitor's space and the monitor rendered straight through the bottom button rows.
+        int monitorReserve = showMonitor ? MONITOR_H : 0;
+        int fixed = (contentY - panelY) + 52 + 6 + monitorReserve;
         rowH = Math.max(17, Math.min(Theme.ROW_H, (panelH - fixed) / rows));
+        // At the 17px floor the rows can still outgrow a very short window, and when they do the
+        // monitor is the thing that has to go: it is a diagnostic overlay, whereas the options
+        // underneath it are the screen's actual purpose. monitorFits is the single source of
+        // truth for both reserving the space and drawing into it, so the two cannot disagree.
+        monitorFits = !showMonitor || (panelH - fixed) >= 17 * rows;
         int x = panelX + Theme.PAD;
         int ctrlX = panelX + panelW / 2;
         int ctrlW = panelW / 2 - Theme.PAD;
@@ -388,7 +401,17 @@ public final class VoiceSpellsConfigScreen extends Screen {
             panelY + Theme.HEADER_H + 4 + TAB_H + 1,
             panelW - Theme.PAD * 2);
 
-        if (currentTab == Tab.RECOGNITION && workDebug) renderMonitor(g);
+        if (currentTab == Tab.RECOGNITION && workDebug) {
+            if (monitorFits) {
+                renderMonitor(g);
+            } else {
+                // Silently dropping it would read as a broken toggle, so state the reason.
+                Theme.text(g, font, "Live Monitor needs a taller window",
+                    panelX + Theme.PAD,
+                    panelY + Theme.HEADER_H + 4 + TAB_H + Theme.GAP_MD + rowH * 5 + 6,
+                    Theme.C_WARN);
+            }
+        }
     }
 
     private void renderMonitor(GuiGraphics g) {

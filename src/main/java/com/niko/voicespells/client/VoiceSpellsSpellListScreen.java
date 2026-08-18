@@ -250,13 +250,27 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
         Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
 
+        tooltipId = null;
         super.render(g, mouseX, mouseY, partial);
 
         // Soft rounded frame + glowing neon rule under the header.
         Theme.roundedFrame(g, px, py, panelW, panelH, Theme.C_BORDER);
         Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H,
             panelW - Theme.PAD * 2);
+
+        // Tooltip last, and raised in Z so its background lands above the rows' text rather
+        // than beneath it. 400 is the offset vanilla uses for its own tooltips.
+        if (tooltipId != null && list != null) {
+            g.pose().pushPose();
+            g.pose().translate(0.0F, 0.0F, 400.0F);
+            list.drawSpellTooltip(g, tooltipId, tooltipX, tooltipY);
+            g.pose().popPose();
+        }
     }
+
+    /** Spell hovered this frame, captured by the list widget and drawn by {@link #render}. */
+    private String tooltipId;
+    private int tooltipX, tooltipY;
 
     /**
      * Custom footer widget — recomputes the message every frame and draws it inside the widget
@@ -342,14 +356,26 @@ public final class VoiceSpellsSpellListScreen extends Screen {
             Theme.scrollbar(g, x + w - 4, y + 2, 2, h - 4,
                 filtered.size(), rowsVisible, clampScroll());
 
-            // Hover tooltip last so it sits on top of everything in the widget pass.
-            if (hoveredRow >= 0) drawSpellTooltip(g, filtered.get(hoveredRow).id(), mouseX, mouseY);
+            // Record the hover instead of drawing it here.
+            //
+            // "Last in the widget pass" is not the same as "on top", and that assumption is what
+            // made the tooltip look transparent: GuiGraphics batches fills and text into separate
+            // buffers, and the text buffer is flushed after the fills. So the card's background
+            // was painted before every row's TEXT, and the rows read straight through it —
+            // tooltip text and row text interleaved into unreadable mush. It has to be drawn
+            // after the whole widget pass and at a raised Z, which is what the screen does with
+            // this below, and is exactly how vanilla renders its own tooltips.
+            if (hoveredRow >= 0) {
+                tooltipId = filtered.get(hoveredRow).id();
+                tooltipX = mouseX;
+                tooltipY = mouseY;
+            }
         }
 
         /** Neon tooltip card for the hovered row: spell name in accent, school + mana + cast
          *  time in muted, then phrases ("say X") and the spell id. Positioned to stay
          *  on-screen relative to the cursor. */
-        private void drawSpellTooltip(GuiGraphics g, String spellId, int mouseX, int mouseY) {
+        void drawSpellTooltip(GuiGraphics g, String spellId, int mouseX, int mouseY) {
             SpellInfo info = SpellInfo.of(spellId);
             String title = (info.name == null || info.name.isEmpty()) ? prettifyId(spellId) : info.name;
 

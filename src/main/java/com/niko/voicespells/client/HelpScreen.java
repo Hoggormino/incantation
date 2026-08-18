@@ -175,16 +175,30 @@ public final class HelpScreen extends Screen {
             g.fill(dx, dotsY, dx + dotW, dotsY + dotH, color);
         }
 
-        // Page content
+        // Page content.
+        //
+        // Line height is DERIVED, not fixed at 11. The pages carry up to 13 body lines and the
+        // panel is clamped to the window by Theme.fit, so on any window shorter than about 340
+        // logical pixels the block simply kept going: the last lines were drawn straight through
+        // the Prev / Next / Back row, text over button faces, unreadable. Compressing to the space
+        // that exists fixes every window that can hold the text at all, and the clip below refuses
+        // to draw a line that would still collide — losing the tail of a page is bad, but drawing
+        // it on top of the navigation is worse, because that is how the player leaves.
         String[] lines = PAGES[page];
         int x = px + Theme.PAD;
         int y = py + Theme.HEADER_H + 24;
-        // Heading in accent
+        int bodyLimit = py + panelH - 28 - 4;          // top of the button row, minus breathing room
+        int bodyCount = Math.max(1, lines.length - 1);
+        int avail = bodyLimit - (y + 14);
+        int lineH = Math.max(8, Math.min(11, avail / bodyCount));
+        // Heading
         g.drawString(font, Component.literal(lines[0]), x, y, Theme.C_HEADING, !Theme.lightSurface());
         y += 14;
         for (int i = 1; i < lines.length; i++) {
+            int ly = y + (i - 1) * lineH;
+            if (ly + 8 > bodyLimit) break;
             int color = lines[i].isEmpty() ? Theme.C_FAINT : Theme.C_TEXT;
-            g.drawString(font, Component.literal(lines[i]), x, y + (i - 1) * 11, color, !Theme.lightSurface());
+            g.drawString(font, Component.literal(lines[i]), x, ly, color, !Theme.lightSurface());
         }
     }
 }

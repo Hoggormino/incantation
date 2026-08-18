@@ -228,16 +228,35 @@ public final class ModelDownloader {
                     Files.move(modelDir, retired);
                 }
 
+                // Restore in a finally, not in a catch. The previous shape put the non-atomic
+                // fallback INSIDE a catch clause and the restore in a sibling catch — and sibling
+                // catches do not cover each other, so if the fallback move itself failed (a full
+                // disk, a file lock, a network share) the restore never ran: the player's working
+                // model stayed parked in <name>.old, modelDir did not exist, and the mod reported
+                // no model installed. The failure mode that most needed the fallback was the one
+                // path with no recovery. A finally cannot be skipped by any of them.
+                boolean moved = false;
                 try {
-                    Files.move(staging, modelDir, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
-                } catch (java.nio.file.AtomicMoveNotSupportedException amnse) {
-                    Files.move(staging, modelDir);
-                } catch (Throwable moveFailed) {
-                    // Put the player's previous model back before giving up.
-                    if (retired != null && !Files.exists(modelDir)) {
-                        try { Files.move(retired, modelDir); } catch (Throwable ignored) {}
+                    try {
+                        Files.move(staging, modelDir, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+                    } catch (java.nio.file.AtomicMoveNotSupportedException amnse) {
+                        Files.move(staging, modelDir);
                     }
-                    throw moveFailed;
+                    moved = true;
+                } finally {
+                    if (!moved && retired != null && !Files.exists(modelDir)) {
+                        try {
+                            Files.move(retired, modelDir);
+                            VoiceSpells.LOGGER.warn("Install failed; restored the previous model");
+                        } catch (Throwable restoreFailed) {
+                            // Last resort: tell the player exactly how to get their model back
+                            // by hand, since we could neither install nor restore.
+                            VoiceSpells.LOGGER.error(
+                                "Install failed AND the previous model could not be restored. "
+                                + "Your model is intact at {} — rename that directory back to {} "
+                                + "to recover it.", retired, modelDir.getFileName());
+                        }
+                    }
                 }
                 if (retired != null) deleteRecursively(retired);
                 VoiceSpells.LOGGER.info("Vosk model installed at {}", modelDir);

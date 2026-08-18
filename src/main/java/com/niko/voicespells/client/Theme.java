@@ -139,10 +139,17 @@ public final class Theme {
                 C_BORDER   = 0xFF000000;
                 C_DIVIDER  = 0xFF373737;
                 C_SHADOW   = 0xFF373737;
-                C_TEXT     = 0xFFFFFFFF;
-                C_MUTED    = 0xFF3F3F3F;
-                C_FAINT    = 0xFF5A5A5A;
-                C_HEADING  = 0xFFFFFFFF;
+                // Dark text, not white. SLATE's panel is 0x8B8B8B, whose luminance is 139, so
+                // lightSurface() classes it as a LIGHT surface and every screen therefore draws
+                // its text unshadowed. White unshadowed text on mid grey is about 2:1 contrast —
+                // the one combination vanilla never uses, and it was made worse by C_MUTED being
+                // 0x3F3F3F: the "muted" tone had BETTER contrast than the primary one, so the
+                // hierarchy ran backwards. Going dark settles both, and matches this palette's
+                // own stated aim of looking like a real inventory panel, which has dark text.
+                C_TEXT     = 0xFF2A2A2A;
+                C_MUTED    = 0xFF484848;
+                C_FAINT    = 0xFF646464;
+                C_HEADING  = 0xFF141414;
             }
             case DARK -> {
                 // The default, retuned to read as Minecraft rather than as a neon web app.
@@ -173,10 +180,18 @@ public final class Theme {
                 C_SHADOW   = 0xFF555555;
                 C_TEXT     = 0xFF404040;   // vanilla's container text colour
                 C_MUTED    = 0xFF6A6A6A;
-                C_FAINT    = 0xFF8B8B8B;
+                // 0x8B8B8B against the 0xC6C6C6 panel is under 2:1, which is fine for a divider
+                // and not fine for words. C_FAINT does carry real text — the spell-of-the-day
+                // hint, the wizard's secondary lines — so it has to stay legible while still
+                // reading as the quietest tier.
+                C_FAINT    = 0xFF757575;
                 C_HEADING  = 0xFF1E1E1E;
             }
         }
+        // Status colours key off panel lightness, so they must be re-derived here — after
+        // C_PANEL has been assigned for this palette and regardless of `changed`, since the
+        // first call has to initialise them from zero.
+        applyStatusColors();
         // Re-derive accent layers immediately if the palette flipped (SLATE needs different
         // accent variants than MIDNIGHT). Skipped on first call (before applyPreset has been
         // invoked at all) — the static initializer drives that path.
@@ -202,17 +217,49 @@ public final class Theme {
         return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 
-    // ---- Status (monitor) - neon variants (palette-independent) -----------
-    public static final int F_MATCH   = 0xFF6BFFB0; // neon mint
-    public static final int F_DEDUP   = 0xFFFFD060; // neon gold
-    public static final int F_NOMATCH = 0xFF9892B8;
+    // ---- Status colours ---------------------------------------------------
+    //
+    // These were `static final` neon tones and documented as "kept palette-independent so error /
+    // success messaging reads the same on dark and light". That reasoning inverted the moment the
+    // default container palette became LIGHT: neon mint (0x6BFFB0, luminance ~0.85) drawn on the
+    // 0xC6C6C6 panel is very nearly the same brightness as the panel itself, so every "Profile
+    // copied", "Applied N settings", "Grammar reload requested" and every diagnostics OK row went
+    // from readable to almost invisible. A status message nobody can read is worse than none,
+    // because the player concludes the button did nothing.
+    //
+    // So they are palette-derived now, like C_TEXT and C_HEADING. Meaning is carried by HUE, which
+    // survives the switch; only the LIGHTNESS flips, which is what contrast actually needs. Every
+    // screen picked up the fix without a single call site changing — nine screens and about thirty
+    // references — which is the same leverage that made the panel redesign tractable.
+    //
+    // Deliberately NOT used by the HUD: that draws over the world, where neither a light-panel nor
+    // a dark-panel tone is right, so the overlay uses its own fixed colours.
+    public static int F_MATCH;    // matched a spell
+    public static int F_DEDUP;    // deduplicated / repeat
+    public static int F_NOMATCH;  // heard, matched nothing
+    public static int C_DANGER;   // errors, FAIL state
+    public static int C_SUCCESS;  // confirmations, OK state
+    public static int C_WARN;     // caution, in-progress
 
-    // ---- Semantic state colors --------------------------------------------
-    // Used for status messages, banners, and diagnostic outputs across screens. Kept
-    // palette-independent so error / success messaging reads the same on dark and light.
-    public static final int C_DANGER  = 0xFFFF6166; // soft coral red — errors, warnings, FAIL state
-    public static final int C_SUCCESS = 0xFF6BFFB0; // neon mint     — confirmations, OK state
-    public static final int C_WARN    = 0xFFFFB347; // warm amber    — caution, in-progress
+    /** Re-derive the status colours for the current panel lightness. */
+    private static void applyStatusColors() {
+        if (lightSurface()) {
+            // Saturated and dark, the way vanilla colours text on a light container.
+            F_MATCH   = 0xFF176B3A;
+            F_DEDUP   = 0xFF7A5300;
+            F_NOMATCH = 0xFF5A5A6B;
+            C_DANGER  = 0xFFA01B1B;
+            C_SUCCESS = 0xFF176B3A;
+            C_WARN    = 0xFF7A5300;
+        } else {
+            F_MATCH   = 0xFF6BFFB0;
+            F_DEDUP   = 0xFFFFD060;
+            F_NOMATCH = 0xFF9892B8;
+            C_DANGER  = 0xFFFF6166;
+            C_SUCCESS = 0xFF6BFFB0;
+            C_WARN    = 0xFFFFB347;
+        }
+    }
 
     // -----------------------------------------------------------------------
     // Animated helpers — time-based, called every frame, no state.

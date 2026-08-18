@@ -378,6 +378,16 @@ public final class VoiceStats {
                 // A non-atomic replace is still strictly better than truncate-in-place.
                 Files.move(tmp, p, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
+            // The load-failure state ends HERE, on the first successful write. Leaving it set
+            // sent every later save back through the escape hatch, and ensureBackedUp() copies
+            // the file aside each time it runs — so save #2 onward "backed up" the file THIS
+            // METHOD had just written, not the player's damaged original. The result was up to
+            // twenty near-identical stats.dat.bakN files in the config directory and then, once
+            // the twentieth existed, ensureBackedUp() returning false and stats silently ceasing
+            // to save for the rest of the session. One backup of the original is the entire
+            // point of the hatch; after that the file is ours and there is nothing left to
+            // protect.
+            loadFailed = false;
         } catch (IOException e) {
             VoiceSpells.LOGGER.warn("Failed to save stats.dat: {}", e.toString());
         }

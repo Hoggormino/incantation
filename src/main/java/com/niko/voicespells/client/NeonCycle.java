@@ -88,9 +88,14 @@ public final class NeonCycle<T> extends AbstractWidget {
         int textX = x + w / 2;
         int textY = y + (h - 8) / 2;
         g.drawCenteredString(mc.font, Component.literal(text), textX, textY, textColor);
-        int chevronColor = locked ? Theme.C_FAINT
+        // Fixed greys, for the same reason the label above uses them: these chevrons are drawn
+        // on the BUTTON, whose body is a fixed vanilla grey, not on the panel. Theme.C_FAINT is a
+        // panel text tone — on the light default palette it is 0x757575, i.e. grey chevrons on a
+        // grey button, which is invisible. The accent is kept for hover because the accent comes
+        // from the preset rather than the palette and stays readable on the button.
+        int chevronColor = locked ? 0xFF8A8A8A
                          : hov    ? Theme.C_ACCENT_BRIGHT
-                                  : Theme.C_FAINT;
+                                  : 0xFFD0D0D0;
         g.drawString(mc.font, Component.literal("‹"), x + 4,     textY, chevronColor, true);
         g.drawString(mc.font, Component.literal("›"), x + w - 8, textY, chevronColor, true);
     }

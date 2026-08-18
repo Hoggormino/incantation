@@ -32,6 +32,10 @@ public final class ConfigMoreScreen extends Screen {
     private StringWidget statusLabel;
     private NeonButton calibBtn;
     private long statusFlashUntil = 0L;
+    /** Until when the calibrate button shows the resulting threshold instead of its label. */
+    private long calibResultUntil = 0L;
+    /** Previous frame's calibrating state, so the finish can be detected as an edge. */
+    private boolean wasCalibrating = false;
     /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
     private int px, py, panelW, panelH;
 
@@ -113,13 +117,25 @@ public final class ConfigMoreScreen extends Screen {
         grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Import profile"),
             b -> importProfile()));
 
+        // Stride derived from the space that actually exists, not the 24px this used to assume.
+        // Everything below the grid (spell-of-the-day, status line, Back) is anchored to the
+        // PANEL BOTTOM, while the grid grew downward from a fixed stride — so the two only
+        // cleared each other by luck, and the margin was one button row wide. Adding a tenth
+        // action spent the last of it. Dividing the real gap among the real rows means the next
+        // button added compresses the grid instead of silently landing on the status line.
+        int gridRows = (grid.size() + 1) / 2;
+        int gridBottom = py + panelH - 54;          // first thing anchored to the bottom (sotd)
+        int stride = Math.max(15, Math.min(24, (gridBottom - y) / Math.max(1, gridRows)));
         for (NeonButton btn : grid) {
             btn.setX(slot % 2 == 0 ? colX1 : colX2);
-            btn.setY(y + (slot / 2) * 24);
+            btn.setY(y + (slot / 2) * stride);
+            // A 20px-tall button in a compressed stride would overlap its neighbour; shrink the
+            // buttons to match so the rows stay visually separate.
+            btn.setHeight(Math.min(20, stride - 2));
             addRenderableWidget(btn);
             slot++;
         }
-        y += ((grid.size() + 1) / 2) * 24 + 4;
+        y += gridRows * stride + 4;
 
         // Anchored just above the Back row rather than to the accumulated y. The button stack
         // adds up to roughly py+262 from a 340px preferred panel, but panelH is clamped to the
@@ -321,12 +337,23 @@ public final class ConfigMoreScreen extends Screen {
         }
         // Live countdown on the calibrate button. Switches to the resulting threshold for a
         // few seconds after calibration finishes, then returns to the default label.
+        // The result window starts when calibration FINISHES. It used to be derived from
+        // statusFlashUntil — the status line's own timer, for an unrelated message — and that
+        // timer is set when the button is pressed and cleared a couple of seconds later, while a
+        // calibration runs for five. It had therefore always expired by the time there was a
+        // result to show, so "Gate set: N" never appeared at all and the player got no
+        // confirmation of the number that had just been written to their config.
+        boolean calibratingNow = VoiceController.isCalibrating();
+        if (wasCalibrating && !calibratingNow) {
+            calibResultUntil = System.currentTimeMillis() + 4000L;
+        }
+        wasCalibrating = calibratingNow;
         if (calibBtn != null) {
-            if (VoiceController.isCalibrating()) {
+            if (calibratingNow) {
                 long remainingS = (VoiceController.calibRemainingNanos() + 999_999_999L) / 1_000_000_000L;
                 calibBtn.setMessage(Component.literal("Listening… " + remainingS + "s"));
             } else if (VoiceController.lastCalibThreshold() > 0
-                    && System.currentTimeMillis() < statusFlashUntil + 3000) {
+                    && System.currentTimeMillis() < calibResultUntil) {
                 calibBtn.setMessage(Component.literal(
                     "Gate set: " + Math.round(VoiceController.lastCalibThreshold())));
             } else {

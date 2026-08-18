@@ -286,7 +286,7 @@ public final class FirstRunScreen extends Screen {
         // Live recent-recognition feed. Sized to fill the rest of the panel so there's no
         // dead space between the body text and the buttons.
         int feedX = x;
-        int bodyBottom = y + 14 + body.length * 11;
+        int bodyBottom = y + 14 + linesHeight(y + 14, body.length);
         int feedY = bodyBottom + 10;
         int feedW = panelW - Theme.PAD * 2;
         int feedH = panelH - (feedY - py) - 40; // leave room for buttons + a real gap
@@ -326,11 +326,31 @@ public final class FirstRunScreen extends Screen {
         g.drawString(font, Component.literal(text), x, y, Theme.C_HEADING, !Theme.lightSurface());
     }
 
+    /**
+     * Draw a block of lines, compressing and clipping so it can never reach the button row.
+     *
+     * <p>The 11px step was unconditional, and Theme.fit clamps the panel to the window, so on a
+     * short window the tail of a wizard step was drawn over Back / Skip / Next — the controls the
+     * player needs to get out. Deriving the step from the space that is actually left, and
+     * refusing to draw a line that would still land on the buttons, keeps the navigation legible
+     * on every window the panel fits in at all.
+     */
     private void drawLines(GuiGraphics g, int x, int y, String[] lines) {
+        int limit = py + panelH - 28 - 4;                       // top of the button row
+        int lineH = Math.max(8, Math.min(11, (limit - y) / Math.max(1, lines.length)));
         for (int i = 0; i < lines.length; i++) {
+            int ly = y + i * lineH;
+            if (ly + 8 > limit) break;
             int color = lines[i].isEmpty() ? Theme.C_FAINT : Theme.C_TEXT;
-            g.drawString(font, Component.literal(lines[i]), x, y + i * 11, color, !Theme.lightSurface());
+            g.drawString(font, Component.literal(lines[i]), x, ly, color, !Theme.lightSurface());
         }
+    }
+
+    /** The step-body line height {@link #drawLines} will use for {@code n} lines starting at
+     *  {@code y} — so callers that lay out content BELOW a block agree with what was drawn. */
+    private int linesHeight(int y, int n) {
+        int limit = py + panelH - 28 - 4;
+        return Math.max(8, Math.min(11, (limit - y) / Math.max(1, n))) * n;
     }
 
     /** Status pill: label + value + a left-edge bar that goes neon green when good. */
