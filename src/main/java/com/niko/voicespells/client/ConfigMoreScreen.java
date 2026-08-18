@@ -46,10 +46,26 @@ public final class ConfigMoreScreen extends Screen {
 
     @Override
     protected void init() {
-        // Clamp to fit the current screen so large GUI Scale settings don't push buttons off
-        // the bottom or sides. The preferred dimensions still apply when there's enough room.
+        // Height from the CONTENT, not a constant.
+        //
+        // PANEL_H_PREF was 340 while the ten actions need about 210, so every style — panelled or
+        // not — showed a block of empty surface between the last button and the spell-of-the-day
+        // line, with Back marooned at the bottom. A panel should be the size of what is in it;
+        // the constant only survives as a ceiling for the clamp.
+        //
+        // Ten actions in two columns is five rows. Counted here rather than hardcoded so adding
+        // an eleventh grows the panel instead of silently eating the margin, which is exactly
+        // how the last overflow bug happened.
+        final int ACTION_COUNT = 10;
+        int rowsNeeded = (ACTION_COUNT + 1) / 2;
+        int contentH = Theme.HEADER_H            // title band
+                     + rowsNeeded * 24           // the action grid
+                     + 10                        // gap under the grid
+                     + 9 + 5                     // spell-of-the-day line
+                     + 9 + 8                     // status line
+                     + 20 + Theme.PAD;           // Back row + bottom padding
         panelW = Theme.fit(PANEL_W_PREF, width);
-        panelH = Theme.fit(PANEL_H_PREF, height);
+        panelH = Theme.fit(Math.min(PANEL_H_PREF, contentH), height);
         px = (width - panelW) / 2;
         py = (height - panelH) / 2;
 

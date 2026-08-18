@@ -153,22 +153,27 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
         int titleY, tabsY, contentY, row1Y, row2Y;
         if (PANELLESS) {
-            // Vanilla's options rhythm: a header strip with the title, a footer strip with the
-            // primary buttons, a separator line under each, and the content CENTRED in what is
-            // left. Centring is the part that matters — anchoring the content to the top left a
-            // growing hole between the last option and the buttons as the window got taller,
-            // which is the emptiest a screen can look.
-            titleY   = 14;
-            headerY  = 32;                                   // separator under the header
-            row2Y    = height - 26;
-            row1Y    = row2Y - 24;
-            footerY  = row1Y - 8;                            // separator above the footer
-            tabsY    = headerY + 10;
-            // Top-aligned under the tabs, NOT centred in the band. Centring opened a visible
-            // hole between the tab row and the first option — the eye reads that as the screen
-            // being broken, whereas trailing space above the footer is what every vanilla
-            // options screen looks like when it has few entries.
+            // One centred block: title, tabs, options, buttons, with a rule above and below it.
+            //
+            // The buttons used to be pinned to the bottom of the SCREEN while the options sat at
+            // the top, which is what vanilla does — but vanilla fills the space between with a
+            // scrolling list, and this screen has five fixed options. On a tall window that left
+            // a several-hundred-pixel void in the middle and the screen read as broken. Every
+            // other screen in the mod is a centred block, so this one is too; the two rules give
+            // it the header/footer framing without pretending there is a list to fill.
+            int blockH = 18                                  // title
+                       + 6 + TAB_H                           // tab row
+                       + Theme.GAP_MD + 3 * GRID_ROW         // option grid
+                       + 12 + 24 + 20;                       // the two button rows
+            int blockTop = Math.max(8, (height - blockH) / 2);
+
+            titleY   = blockTop;
+            headerY  = blockTop + 14;                        // rule under the title
+            tabsY    = headerY + 8;
             contentY = tabsY + TAB_H + Theme.GAP_MD;
+            row1Y    = contentY + 3 * GRID_ROW + 12;
+            row2Y    = row1Y + 24;
+            footerY  = row1Y - 8;                            // rule above the buttons
         } else {
             titleY   = panelY + TITLE_TOP;
             tabsY    = panelY + TITLE_TOP + TITLE_H;
