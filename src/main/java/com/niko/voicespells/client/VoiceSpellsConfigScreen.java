@@ -4,6 +4,7 @@ import com.niko.voicespells.VoiceSpellsConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
@@ -388,12 +389,11 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // of all of that and was a large part of why the screens felt foreign.
         Theme.background(this, g, mouseX, mouseY, partial);
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        g.fill(panelX, panelY, panelX + panelW, panelY + panelH, Theme.C_PANEL);
+        Theme.panel(g, panelX, panelY, panelW, panelH);
         Theme.headerBand(g, panelX, panelY, panelW, Theme.HEADER_H);
 
         super.render(g, mouseX, mouseY, partial);
 
-        Theme.roundedFrame(g, panelX, panelY, panelW, panelH, Theme.C_BORDER);
         Theme.accentGlow(g, panelX + Theme.PAD, panelY + Theme.HEADER_H,
             panelW - Theme.PAD * 2);
         // Thin divider just under the tab bar to separate tabs from content.
@@ -503,52 +503,35 @@ public final class VoiceSpellsConfigScreen extends Screen {
     }
 
     // ---------------------------------------------------------------------------------
-    // Tab button — flat label with neon underline on active. Matches the panel chrome.
+    // Tab button.
     // ---------------------------------------------------------------------------------
-    private final class TabButton extends AbstractWidget {
-        private final String label;
+    /**
+     * A tab in the tab bar: a vanilla button whose selected state is PRESSED — the language the
+     * creative inventory and the recipe book use for "you are here".
+     *
+     * <p>Renders nothing itself. It used to paint its own fill and bevel lines, and once every
+     * other control on the screen became a real textured widget this was the one box still drawn
+     * by hand — visibly a different shade sitting right beside the HUD tab. Vanilla draws the
+     * pressed (inactive) variant of its own button sprite for the current tab, which is exactly
+     * the effect the hand-drawn version was reaching for.
+     */
+    private final class TabButton extends Button {
         private final Tab tab;
 
         TabButton(int x, int y, int w, int h, String label, Tab tab) {
-            super(x, y, w, h, Component.literal(label));
-            this.label = label;
+            super(x, y, w, h, Component.literal(label), b -> {}, Button.DEFAULT_NARRATION);
             this.tab = tab;
+            // Not clickable while it IS the current tab, which is also what draws it pressed.
+            this.active = currentTab != tab;
         }
 
         @Override
-        protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partial) {
-            boolean selected = currentTab == tab;
-            boolean hov = isHoveredOrFocused();
-            // Drawn as a vanilla button whose selected state is PRESSED — the same language the
-            // creative inventory and recipe book use for their tabs. The old accent underline
-            // was a browser idiom; a pushed-in button is how the game itself says "you are here".
-            int fill = selected ? 0xFF4A4A4A : (hov ? 0xFF8A8A8A : 0xFF6C6C6C);
-            int x = getX(), y = getY(), w = getWidth(), h = getHeight();
-            g.fill(x, y, x + w, y + h, fill);
-            int hi = selected ? 0xFF303030 : 0xFF9E9E9E;
-            int lo = selected ? 0xFF5E5E5E : 0xFF3F3F3F;
-            g.fill(x, y, x + w, y + 1, 0xFF000000);
-            g.fill(x, y + h - 1, x + w, y + h, 0xFF000000);
-            g.fill(x, y, x + 1, y + h, 0xFF000000);
-            g.fill(x + w - 1, y, x + w, y + h, 0xFF000000);
-            g.fill(x + 1, y + 1, x + w - 1, y + 2, hi);
-            g.fill(x + 1, y + 1, x + 2, y + h - 1, hi);
-            g.fill(x + 1, y + h - 2, x + w - 1, y + h - 1, lo);
-            g.fill(x + w - 2, y + 1, x + w - 1, y + h - 1, lo);
-            g.drawCenteredString(Minecraft.getInstance().font, Component.literal(label),
-                x + w / 2, y + (h - 8) / 2, selected ? 0xFFFFFFA0 : 0xFFFFFFFF);
-        }
-
-        @Override
-        public void onClick(double mx, double my) {
+        public void onPress() {
             if (currentTab != tab) {
                 currentTab = tab;
                 rebuildWidgets();
             }
         }
-
-        @Override
-        protected void updateWidgetNarration(NarrationElementOutput n) {}
     }
 
 }

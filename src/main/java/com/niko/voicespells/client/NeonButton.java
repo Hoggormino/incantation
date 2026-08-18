@@ -43,56 +43,16 @@ public final class NeonButton extends Button {
         return new NeonButton(x, y, w, h, msg, onPress);
     }
 
-    @Override
-    protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partial) {
-        int x = getX(), y = getY(), w = getWidth(), h = getHeight();
-        boolean hovered = isHoveredOrFocused() && active;
-
-        // Fixed vanilla button tone, brighter on hover, flatter when dead.
-        int fill = !active ? BTN_OFF : (hovered ? BTN_HOVER : BTN);
-        g.fill(x, y, x + w, y + h, fill);
-
-        // The vanilla bevel: black outline, light top/left, dark bottom/right. Inactive buttons
-        // are drawn sunken, which is how vanilla communicates "not pressable" without colour.
-        bevel(g, x, y, w, h, fill, !active);
-
-        // No accent underline. Vanilla signals hover with the brighter fill and the pale yellow
-        // label, both already above, and Simple Voice Chat — the reference for this whole look —
-        // has no accent anywhere in its UI. A coloured bar under one button was the last thing
-        // marking these screens as modded. The theme accent still appears where it carries
-        // meaning: meters, the live monitor, progress bars and selection highlights.
-
-        int textColor = !active ? 0xFFA0A0A0 : (hovered ? TEXT_HOVER : 0xFFFFFFFF);
-        g.drawCenteredString(Minecraft.getInstance().font, getMessage(),
-            x + w / 2, y + (h - 8) / 2, textColor);
-    }
-
-    /** Local bevel so the button can key its edges off its own fill rather than the panel's. */
-    private static void bevel(GuiGraphics g, int x, int y, int w, int h, int base, boolean sunken) {
-        int hi = sunken ? shade(base, -0.35f) : shade(base, 0.35f);
-        int lo = sunken ? shade(base, 0.20f) : shade(base, -0.40f);
-        g.fill(x, y, x + w, y + 1, 0xFF000000);
-        g.fill(x, y + h - 1, x + w, y + h, 0xFF000000);
-        g.fill(x, y, x + 1, y + h, 0xFF000000);
-        g.fill(x + w - 1, y, x + w, y + h, 0xFF000000);
-        g.fill(x + 1, y + 1, x + w - 1, y + 2, hi);
-        g.fill(x + 1, y + 1, x + 2, y + h - 1, hi);
-        g.fill(x + 1, y + h - 2, x + w - 1, y + h - 1, lo);
-        g.fill(x + w - 2, y + 1, x + w - 1, y + h - 1, lo);
-    }
-
-    /** Shift an ARGB toward white (positive f) or black (negative f), preserving alpha. */
-    private static int shade(int argb, float f) {
-        int a = (argb >>> 24) & 0xFF;
-        int r = (argb >> 16) & 0xFF, gg = (argb >> 8) & 0xFF, b = argb & 0xFF;
-        if (f >= 0) {
-            r = (int) (r + (255 - r) * f);
-            gg = (int) (gg + (255 - gg) * f);
-            b = (int) (b + (255 - b) * f);
-        } else {
-            float k = 1 + f;
-            r = (int) (r * k); gg = (int) (gg * k); b = (int) (b * k);
-        }
-        return (a << 24) | (r << 16) | (gg << 8) | b;
-    }
+    // No renderWidget override, and no bevel/shade helpers either.
+    //
+    // Those drew a flat fill plus hand-computed edge lines: a careful imitation of a Minecraft
+    // button, which is not the same as one. The real control is a nine-sliced texture, so the
+    // imitation always sat at slightly the wrong tone with slightly the wrong edges next to a
+    // vanilla control — and it could not follow a resource pack, so a player with a GUI pack
+    // watched every vanilla button restyle while ours stayed put. Vanilla's own renderWidget
+    // draws the genuine sprite, with its hover and disabled variants and its label colours, and
+    // it already differs correctly between 1.20.1 and 1.21.1 so the version split disappears too.
+    //
+    // The class stays because every screen references it, and because `of(...)` is a shorter
+    // constructor than Button.builder(...).bounds(...).build() at 40-odd call sites.
 }

@@ -314,7 +314,6 @@ public final class AudioDevicesScreen extends Screen {
 
         super.render(g, mouseX, mouseY, partial);
 
-        Theme.roundedFrame(g, px, py, panelW, panelH, Theme.C_BORDER);
 
         // Recessed list well, the way a vanilla container inventory is recessed.
         g.fill(listX, listY, listX + listW, listY + listH, Theme.C_INSET);

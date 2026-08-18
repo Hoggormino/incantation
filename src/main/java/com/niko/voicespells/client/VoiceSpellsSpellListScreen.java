@@ -247,14 +247,13 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         // of all of that and was a large part of why the screens felt foreign.
         Theme.background(this, g, mouseX, mouseY, partial);
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        g.fill(px, py, px + panelW, py + panelH, Theme.C_PANEL);
+        Theme.panel(g, px, py, panelW, panelH);
         Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
 
         tooltipId = null;
         super.render(g, mouseX, mouseY, partial);
 
         // Soft rounded frame + glowing neon rule under the header.
-        Theme.roundedFrame(g, px, py, panelW, panelH, Theme.C_BORDER);
         Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H,
             panelW - Theme.PAD * 2);
 

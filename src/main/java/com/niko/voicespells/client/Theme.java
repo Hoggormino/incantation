@@ -327,13 +327,99 @@ public final class Theme {
         return (a << 24) | (r << 16) | (gg << 8) | b;
     }
 
+    // ---- The panel, drawn from Minecraft's own container texture ------------------------
+    //
+    // The comment above used to justify drawing this with fills: "the sprite APIs diverge
+    // between the two shipping versions (1.21.1 has blitSprite, 1.20.1 only blitNineSliced),
+    // and the texture paths moved too". That was checked and it is wrong for the call actually
+    // needed here — `blit(ResourceLocation, x, y, u, v, w, h)` has an identical signature on
+    // both, and assets/minecraft/textures/gui/container/generic_54.png exists unchanged in both,
+    // 256x256 with the panel at (0,0,176,222). Verified by reading the pixels out of each
+    // client jar rather than by assuming.
+    //
+    // It matters because a hand-drawn panel is an IMITATION of a texture. Vanilla's border is a
+    // 1px black outline, then a 2px pure-white bevel that tapers across the corner, over a
+    // 0xC6C6C6 body — and an approximation of that, at slightly the wrong tone with slightly
+    // the wrong corner, is what made these screens read as a web page pasted into the game no
+    // matter how the numbers were tuned. Blitting the real thing also means a player's resource
+    // pack restyles our panels along with every container in the game.
+    //
+    // Nine-sliced by hand: 4px corners lifted from the four corners of the panel region, edges
+    // and interior tiled from 4px chunks of known-uniform areas of the same texture. Tiling
+    // rather than stretching keeps the border crisp at any panel size.
+
+    private static final net.minecraft.resources.ResourceLocation PANEL_TEX =
+//? if forge {
+/*        new net.minecraft.resources.ResourceLocation("minecraft", "textures/gui/container/generic_54.png");
+*///?} else {
+        net.minecraft.resources.ResourceLocation.withDefaultNamespace(
+            "textures/gui/container/generic_54.png");
+//?}
+
+    /** Corner slice size: the 1px outline plus vanilla's 3px bevel. */
+    private static final int SLICE = 4;
+    /** Panel region inside the 256x256 texture. */
+    private static final int SRC_W = 176, SRC_H = 222;
+    /** A patch of flat body colour inside the texture (the title area, above the slots). */
+    private static final int BODY_U = 8, BODY_V = 6;
+
     /**
-     * A complete Minecraft-style raised panel: black outline, bevelled edges, flat fill.
-     * This is the one call a screen needs for its main surface.
+     * A complete Minecraft panel, blitted from the game's own container texture and tinted to
+     * the active palette. This is the one call a screen needs for its main surface — it draws
+     * the body AND the border, so callers must not add a frame of their own on top.
      */
     public static void panel(GuiGraphics g, int x, int y, int w, int h) {
-        g.fill(x, y, x + w, y + h, C_PANEL);
-        bevel(g, x, y, w, h, false);
+        if (w < SLICE * 2 || h < SLICE * 2) {           // too small to slice; fall back
+            g.fill(x, y, x + w, y + h, C_PANEL);
+            return;
+        }
+        // Tint carries the palette. The texture is a light stone panel, so multiplying gives a
+        // darker panel that KEEPS the real border relief, which recolouring a flat fill cannot.
+        float[] t = panelTint();
+        g.setColor(t[0], t[1], t[2], 1.0F);
+
+        int iw = w - SLICE * 2, ih = h - SLICE * 2;     // interior span to fill
+        // Corners
+        g.blit(PANEL_TEX, x,              y,              0,                 0,                 SLICE, SLICE);
+        g.blit(PANEL_TEX, x + w - SLICE,  y,              SRC_W - SLICE,     0,                 SLICE, SLICE);
+        g.blit(PANEL_TEX, x,              y + h - SLICE,  0,                 SRC_H - SLICE,     SLICE, SLICE);
+        g.blit(PANEL_TEX, x + w - SLICE,  y + h - SLICE,  SRC_W - SLICE,     SRC_H - SLICE,     SLICE, SLICE);
+        // Top and bottom edges
+        for (int dx = 0; dx < iw; dx += SLICE) {
+            int cw = Math.min(SLICE, iw - dx);
+            g.blit(PANEL_TEX, x + SLICE + dx, y,             SLICE, 0,             cw, SLICE);
+            g.blit(PANEL_TEX, x + SLICE + dx, y + h - SLICE, SLICE, SRC_H - SLICE, cw, SLICE);
+        }
+        // Left and right edges
+        for (int dy = 0; dy < ih; dy += SLICE) {
+            int ch = Math.min(SLICE, ih - dy);
+            g.blit(PANEL_TEX, x,             y + SLICE + dy, 0,             SLICE, SLICE, ch);
+            g.blit(PANEL_TEX, x + w - SLICE, y + SLICE + dy, SRC_W - SLICE, SLICE, SLICE, ch);
+        }
+        // Interior
+        for (int dy = 0; dy < ih; dy += SLICE) {
+            int ch = Math.min(SLICE, ih - dy);
+            for (int dx = 0; dx < iw; dx += SLICE) {
+                int cw = Math.min(SLICE, iw - dx);
+                g.blit(PANEL_TEX, x + SLICE + dx, y + SLICE + dy, BODY_U, BODY_V, cw, ch);
+            }
+        }
+        g.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
+    /**
+     * Multiplier applied to the panel texture for the active palette.
+     *
+     * <p>Derived from C_PANEL against vanilla's own body tone, so a palette only has to state
+     * what colour it wants the panel to be and the texture follows — no per-palette tint table
+     * to keep in sync with the colours right above it.
+     */
+    private static float[] panelTint() {
+        final float VANILLA_BODY = 0xC6 / 255.0F;
+        float r = ((C_PANEL >> 16) & 0xFF) / 255.0F / VANILLA_BODY;
+        float gg = ((C_PANEL >> 8) & 0xFF) / 255.0F / VANILLA_BODY;
+        float b = (C_PANEL & 0xFF) / 255.0F / VANILLA_BODY;
+        return new float[] { Math.min(1.0F, r), Math.min(1.0F, gg), Math.min(1.0F, b) };
     }
 
     /**
@@ -387,7 +473,10 @@ public final class Theme {
      * a hole) so the nine screens did not each need editing.
      */
     public static void headerBand(GuiGraphics g, int x, int y, int w, int h) {
-        g.fill(x, y, x + w, y + h, C_HEADER_T);
+        // Deliberately empty. A container screen has no header band — the title is text on the
+        // panel — and now that the panel is a real texture, painting a flat rectangle over the
+        // top of it would erase exactly the part the player notices. Kept as a call so the ten
+        // screens that invoke it did not each need editing.
     }
 
     /**
