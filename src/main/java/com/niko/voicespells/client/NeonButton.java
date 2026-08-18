@@ -56,8 +56,11 @@ public final class NeonButton extends Button {
         // are drawn sunken, which is how vanilla communicates "not pressable" without colour.
         bevel(g, x, y, w, h, fill, !active);
 
-        // One accent touch, seated like a vanilla underline rather than a glow.
-        if (hovered) g.fill(x + 2, y + h - 2, x + w - 2, y + h - 1, Theme.C_ACCENT);
+        // No accent underline. Vanilla signals hover with the brighter fill and the pale yellow
+        // label, both already above, and Simple Voice Chat — the reference for this whole look —
+        // has no accent anywhere in its UI. A coloured bar under one button was the last thing
+        // marking these screens as modded. The theme accent still appears where it carries
+        // meaning: meters, the live monitor, progress bars and selection highlights.
 
         int textColor = !active ? 0xFFA0A0A0 : (hovered ? TEXT_HOVER : 0xFFFFFFFF);
         g.drawCenteredString(Minecraft.getInstance().font, getMessage(),

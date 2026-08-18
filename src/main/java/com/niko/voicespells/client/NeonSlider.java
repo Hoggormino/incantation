@@ -52,21 +52,30 @@ public final class NeonSlider extends AbstractSliderButton {
         // panel they sit on, which is what keeps the white label readable. The previous
         // version was an accent-filled progress bar with a neon thumb, a web idiom;
         // vanilla sliders show position with the handle alone, not a coloured fill.
-        g.fill(x, y, x + w, y + h, 0xFF2B2B2B);
+        // Body in the BUTTON tone, not near-black. A vanilla slider is a button with a handle on
+        // it — the same grey body, the same raised bevel — and every options screen in the game
+        // shows one next to a plain button to prove it. The old 0xFF2B2B2B track read as a black
+        // inset trough, which is fine on a dark panel and looks like a hole punched in a light
+        // container panel, where it was the last obviously-foreign control on the screen.
+        g.fill(x, y, x + w, y + h, 0xFF6C6C6C);
         g.fill(x, y, x + w, y + 1, 0xFF000000);
         g.fill(x, y + h - 1, x + w, y + h, 0xFF000000);
         g.fill(x, y, x + 1, y + h, 0xFF000000);
         g.fill(x + w - 1, y, x + w, y + h, 0xFF000000);
-        g.fill(x + 1, y + 1, x + w - 1, y + 2, 0xFF1A1A1A);   // sunken top shadow
+        g.fill(x + 1, y + 1, x + w - 1, y + 2, 0xFF9E9E9E);   // raised top highlight
+        g.fill(x + 1, y + 1, x + 2, y + h - 1, 0xFF9E9E9E);
+        g.fill(x + 1, y + h - 2, x + w - 1, y + h - 1, 0xFF3F3F3F);
+        g.fill(x + w - 2, y + 1, x + w - 1, y + h - 1, 0xFF3F3F3F);
 
+        // Handle lighter than the body so position is legible against it.
         int handleW = 8;
         int handleX = x + 1 + (int) (this.value * (w - 2 - handleW));
-        int hFill = hov && active ? 0xFF8A8A8A : 0xFF6C6C6C;
+        int hFill = hov && active ? 0xFFDBDBDB : 0xFFC6C6C6;
         g.fill(handleX, y + 1, handleX + handleW, y + h - 1, hFill);
-        g.fill(handleX, y + 1, handleX + handleW, y + 2, 0xFF9E9E9E);
-        g.fill(handleX, y + h - 2, handleX + handleW, y + h - 1, 0xFF3F3F3F);
-        g.fill(handleX, y + 1, handleX + 1, y + h - 1, 0xFF9E9E9E);
-        g.fill(handleX + handleW - 1, y + 1, handleX + handleW, y + h - 1, 0xFF3F3F3F);
+        g.fill(handleX, y + 1, handleX + handleW, y + 2, 0xFFF0F0F0);
+        g.fill(handleX, y + h - 2, handleX + handleW, y + h - 1, 0xFF6C6C6C);
+        g.fill(handleX, y + 1, handleX + 1, y + h - 1, 0xFFF0F0F0);
+        g.fill(handleX + handleW - 1, y + 1, handleX + handleW, y + h - 1, 0xFF6C6C6C);
 
         int textColor = !active ? 0xFFA0A0A0 : (hov ? 0xFFFFFFA0 : 0xFFFFFFFF);
         g.drawCenteredString(Minecraft.getInstance().font, getMessage(),

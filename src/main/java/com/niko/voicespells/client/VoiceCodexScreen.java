@@ -178,10 +178,19 @@ public final class VoiceCodexScreen extends Screen {
         double avgMs = VoiceController.averageLatencyMs();
         // "Speak to cast" — measured from first audio of the utterance to dispatch. Median,
         // not mean, so a hesitant cast every now and then doesn't blow the number up.
-        line(g, x, y, "Speak to cast",
-            avgMs < 0 ? "—" : String.format(java.util.Locale.ROOT, "%.0fms (median)", avgMs)); y += ROW_H;
+        //
+        // The window lives in memory only, so it is empty until the first cast of the session
+        // even for a player with hundreds of lifetime casts. Showing a bare "—" next to
+        // "Total casts 44" reads as a broken counter, so the label says which scope it means and
+        // the placeholder says what to do about it.
+        line(g, x, y, "Speak to cast (session)",
+            avgMs < 0 ? "after 1st cast"
+                      : String.format(java.util.Locale.ROOT, "%.0fms (median)", avgMs)); y += ROW_H;
         int streak = VoiceStats.sotdStreak();
-        line(g, x, y, "Daily streak", streak > 0 ? streak + " day(s)" : "—"); y += ROW_H;
+        // This counts consecutive days of completing the SPELL-OF-THE-DAY challenge, not days
+        // the mod was used — "Daily streak" invited the second reading and then showed "—" to a
+        // player casting every day, which looks like a bug rather than an uncompleted challenge.
+        line(g, x, y, "Daily challenge", streak > 0 ? streak + " day(s)" : "not done today"); y += ROW_H;
 
         // (Right-column heading is drawn inside TopList.renderWidget so it sits below the
         //  accent rule glow instead of overlapping it.)

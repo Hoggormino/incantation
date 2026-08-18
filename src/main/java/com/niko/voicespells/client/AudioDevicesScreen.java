@@ -54,6 +54,12 @@ public final class AudioDevicesScreen extends Screen {
     /** How long each device is listened to during a scan. */
     private static final long PROBE_MS = 900L;
 
+    /** Row pitch for the device list. Deliberately tighter than Theme.ROW_H: that pitch is for
+     *  option rows with a control on the right, whereas these rows are one line of text, and a
+     *  machine with a webcam, a headset, an interface and a virtual cable can list seven of them.
+     *  At 24px only four fit the clamped panel, so the active device was usually off-screen. */
+    private static final int ROW = 18;
+
     /** Identifies this screen's claim on the microphone. */
     private static final String MIC_HOLD_OWNER = "device-picker";
 
@@ -125,7 +131,25 @@ public final class AudioDevicesScreen extends Screen {
         listY = tabY + 18 + 8;
         // Leave room for the meter row and the button row below the list.
         listH = (py + panelH - 26 - 8) - listY - (showingOutputs ? 0 : 22);
-        rowsVisible = Math.max(1, listH / Theme.ROW_H);
+        rowsVisible = Math.max(1, listH / ROW);
+        // After the geometry, never before: this needs the real row count to know what "in view"
+        // means, and listH is still zero further up.
+        scrollSelectedIntoView();
+    }
+
+    /**
+     * Put the active device on screen. Opening on row 0 meant a player whose microphone is the
+     * seventh entry saw four rows of devices they had not chosen and no indication of which one
+     * was live — the exact question the screen exists to answer.
+     */
+    private void scrollSelectedIntoView() {
+        List<String> list = showingOutputs ? outputs : inputs;
+        String current = showingOutputs ? currentOutput() : currentInput();
+        if (current.isEmpty()) { scroll = 0; return; }
+        int idx = list.indexOf(current);
+        if (idx < 0) { scroll = 0; return; }
+        int row = idx + 1;                              // row 0 is "System default"
+        if (row >= rowsVisible) scroll = row - rowsVisible + 1;
     }
 
     /** Vanilla's own output-device list, with "" standing for the system default. */
@@ -229,7 +253,7 @@ public final class AudioDevicesScreen extends Screen {
         if (button != 0 || scanning) return false;
         if (mx < listX || mx > listX + listW || my < listY || my > listY + listH) return false;
 
-        int idx = ((int) my - listY) / Theme.ROW_H + scroll;
+        int idx = ((int) my - listY) / ROW + scroll;
         List<String> list = showingOutputs ? outputs : inputs;
         // Row 0 is the synthetic "System default" entry; the rest index into the device list.
         if (idx == 0) {
@@ -306,25 +330,25 @@ public final class AudioDevicesScreen extends Screen {
         for (int row = 0; row < rowsVisible; row++) {
             int idx = row + scroll;
             if (idx >= total) break;
-            int ry = listY + row * Theme.ROW_H;
-            if (ry + Theme.ROW_H > listY + listH) break;
+            int ry = listY + row * ROW;
+            if (ry + ROW > listY + listH) break;
 
             boolean isDefaultRow = idx == 0;
             String raw = isDefaultRow ? "" : list.get(idx - 1);
             boolean selected = current.equals(raw);
             boolean hovered = mouseX >= listX && mouseX <= listX + listW
-                && mouseY >= ry && mouseY < ry + Theme.ROW_H;
+                && mouseY >= ry && mouseY < ry + ROW;
 
-            if (selected) g.fill(listX + 1, ry + 1, listX + listW - 1, ry + Theme.ROW_H - 1,
-                Theme.C_ACCENT_GHOST);
-            else if (hovered) g.fill(listX + 1, ry + 1, listX + listW - 1, ry + Theme.ROW_H - 1,
-                Theme.C_INSET_2);
+            // Selection needs to survive on a light panel, where an 0x11-alpha accent ghost is
+            // invisible. A solid accent-soft band plus the marker below is unambiguous.
+            if (selected) g.fill(listX + 1, ry, listX + listW - 1, ry + ROW, Theme.C_ACCENT_SOFT);
+            else if (hovered) g.fill(listX + 1, ry, listX + listW - 1, ry + ROW, Theme.C_INSET_2);
 
             // Verdict chip on the right, so the name can use the full remaining width.
             String verdict = isDefaultRow ? verdictFor(defaultRaw()) : verdictFor(raw);
             int verdictW = verdict.isEmpty() ? 0 : font.width(verdict) + 8;
             if (!verdict.isEmpty()) {
-                Theme.text(g, font, verdict, listX + listW - verdictW, ry + (Theme.ROW_H - 8) / 2,
+                Theme.text(g, font, verdict, listX + listW - verdictW, ry + (ROW - 8) / 2,
                     verdictColor(isDefaultRow ? defaultRaw() : raw));
             }
 
@@ -334,7 +358,7 @@ public final class AudioDevicesScreen extends Screen {
             String mark = selected ? "▸ " : "  ";
             int nameMax = listW - 8 - verdictW - font.width(mark);
             Theme.text(g, font, mark + trim(label, nameMax),
-                listX + 4, ry + (Theme.ROW_H - 8) / 2,
+                listX + 4, ry + (ROW - 8) / 2,
                 selected ? Theme.C_HEADING : Theme.C_TEXT);
 
             if (row > 0) Theme.divider(g, listX + 2, ry, listW - 4);

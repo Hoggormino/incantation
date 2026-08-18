@@ -468,7 +468,10 @@ public final class Theme {
         // Vanilla list scrollbar: dark track, plain grey thumb with a light top edge —
         // the construction every vanilla selection list uses. No accent; this was the last
         // place the neon survived.
-        g.fill(x, y, x + w, y + h, 0xFF000000);
+        // Track keyed to the surface, not hard-coded black. A black groove is right on a dark
+        // options screen and reads as a hole cut in a light container panel, which is where the
+        // default palette now lives.
+        g.fill(x, y, x + w, y + h, lightSurface() ? 0xFF6E6E6E : 0xFF000000);
         int thumbH = Math.max(12, h * visible / total);
         int maxScroll = total - visible;
         int thumbY = y + (h - thumbH) * Math.min(scroll, maxScroll) / Math.max(1, maxScroll);
