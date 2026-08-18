@@ -231,7 +231,7 @@ public final class VoiceCodexScreen extends Screen {
                 g.drawString(font, Component.literal(name), x + 18, ry, Theme.C_TEXT, !Theme.lightSurface());
                 int cw = font.width(countStr);
                 g.drawString(font, Component.literal(countStr), x + w - cw - 6, ry,
-                    Theme.C_ACCENT, !Theme.lightSurface());
+                    Theme.C_HEADING, !Theme.lightSurface());
                 ry += ROW_H;
                 rank++;
             }

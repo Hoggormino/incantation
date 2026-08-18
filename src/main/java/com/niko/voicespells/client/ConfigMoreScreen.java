@@ -62,78 +62,66 @@ public final class ConfigMoreScreen extends Screen {
         addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 80, py + panelH - 28,
             80, 20, CommonComponents.GUI_BACK, b -> onClose()));
 
+        // Two-column grid, the Video Settings idiom. The single full-width stack needed
+        // roughly 300px of height for nine rows and overflowed the panel even at fullscreen
+        // (panelH clamps to ~254 at 1080p GUI-scale auto) — the Today's-spell label collided
+        // with a button and the last rows ran off the bottom. Nine actions in two columns is
+        // five rows, which fits every window down to the 854x480 dev size, and it is how
+        // vanilla lays out exactly this many options.
         int y = py + Theme.HEADER_H + Theme.GAP_MD;
-        int btnW = panelW - Theme.PAD * 2;
-
-        addRenderableWidget(NeonButton.of(px + Theme.PAD, y, btnW, 20,
-            Component.literal("Open Welcome Wizard"),
-            b -> { if (minecraft != null) minecraft.setScreen(new FirstRunScreen(this)); }));
-        y += 24;
-
-        addRenderableWidget(NeonButton.of(px + Theme.PAD, y, btnW, 20,
-            Component.literal("Voice Codex (stats + rank)"),
-            b -> { if (minecraft != null) minecraft.setScreen(new VoiceCodexScreen(this)); }));
-        y += 24;
-
-        addRenderableWidget(NeonButton.of(px + Theme.PAD, y, btnW, 20,
-            Component.literal("Diagnostics (check everything)"),
-            b -> { if (minecraft != null) minecraft.setScreen(new DiagnosticsScreen(this)); }));
-        y += 24;
-
-        addRenderableWidget(NeonButton.of(px + Theme.PAD, y, btnW, 20,
-            Component.literal("Help / Guide"),
-            b -> { if (minecraft != null) minecraft.setScreen(new HelpScreen(this)); }));
-        y += 24;
-
-        // Test Arena requires mic frames, which only flow when in a world. Disable the
-        // button from the main menu so users don't open an empty practice screen.
+        int colW = (panelW - Theme.PAD * 2 - 6) / 2;
+        int colX1 = px + Theme.PAD;
+        int colX2 = px + Theme.PAD + colW + 6;
         boolean inWorld = minecraft != null && minecraft.player != null;
-        NeonButton arenaBtn = NeonButton.of(px + Theme.PAD, y, btnW, 20,
-            Component.literal(inWorld ? "Test Arena (safe practice)"
-                                       : "Test Arena (load a world first)"),
+        int slot = 0;
+
+        java.util.List<NeonButton> grid = new java.util.ArrayList<>();
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Welcome Wizard"),
+            b -> { if (minecraft != null) minecraft.setScreen(new FirstRunScreen(this)); }));
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Voice Codex"),
+            b -> { if (minecraft != null) minecraft.setScreen(new VoiceCodexScreen(this)); }));
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Diagnostics"),
+            b -> { if (minecraft != null) minecraft.setScreen(new DiagnosticsScreen(this)); }));
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Help / Guide"),
+            b -> { if (minecraft != null) minecraft.setScreen(new HelpScreen(this)); }));
+        NeonButton arenaBtn = NeonButton.of(0, 0, colW, 20,
+            Component.literal(inWorld ? "Test Arena" : "Test Arena (in-world)"),
             b -> { if (minecraft != null) minecraft.setScreen(new TestArenaScreen(this)); });
         arenaBtn.active = inWorld;
-        addRenderableWidget(arenaBtn);
-        y += 24;
-
-        addRenderableWidget(NeonButton.of(px + Theme.PAD, y, btnW, 20,
-            Component.literal("Reload grammar now"),
+        grid.add(arenaBtn);
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Reload grammar"),
             b -> {
                 VoiceController.onConfigChanged();
                 flashStatus("Grammar reload requested", Theme.F_MATCH);
             }));
-        y += 24;
-
-        // Auto-calibrate noise gate — samples 5 seconds of mic input then picks a threshold.
-        // Button label flips into a countdown while sampling so the player has visible feedback
-        // (label is refreshed each frame in render()).
-        calibBtn = NeonButton.of(px + Theme.PAD, y, btnW, 20,
-            Component.literal("Auto-calibrate noise gate (talk for 5s)"),
+        calibBtn = NeonButton.of(0, 0, colW, 20,
+            Component.literal("Calibrate mic (5s)"),
             b -> {
                 if (!VoiceController.isCalibrating()) {
                     VoiceController.startNoiseGateCalibration();
                     flashStatus("Calibrating — say a few spell names…", Theme.C_ACCENT_BRIGHT);
                 }
             });
-        addRenderableWidget(calibBtn);
-        y += 24;
-
-        addRenderableWidget(NeonButton.of(px + Theme.PAD, y, btnW, 20,
-            Component.literal("Export Profile to Clipboard"),
+        grid.add(calibBtn);
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Export profile"),
             b -> exportProfile()));
-        y += 24;
-
-        addRenderableWidget(NeonButton.of(px + Theme.PAD, y, btnW, 20,
-            Component.literal("Import Profile from Clipboard"),
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Import profile"),
             b -> importProfile()));
-        y += 28;
+
+        for (NeonButton btn : grid) {
+            btn.setX(slot % 2 == 0 ? colX1 : colX2);
+            btn.setY(y + (slot / 2) * 24);
+            addRenderableWidget(btn);
+            slot++;
+        }
+        y += ((grid.size() + 1) / 2) * 24 + 4;
 
         // Anchored just above the Back row rather than to the accumulated y. The button stack
         // adds up to roughly py+262 from a 340px preferred panel, but panelH is clamped to the
         // window, so at GUI Scale 3-4 (including 1080p on Auto) the accumulated y landed below
         // the panel and the status line — the only feedback Import/Export gives — rendered
         // off-screen entirely.
-        statusLabel = new StringWidget(px + Theme.PAD, py + panelH - 42, btnW, 9,
+        statusLabel = new StringWidget(px + Theme.PAD, py + panelH - 42, panelW - Theme.PAD * 2, 9,
             Component.empty(), font);
         statusLabel.alignLeft();
         statusLabel.setColor(Theme.C_MUTED);
@@ -144,7 +132,7 @@ public final class ConfigMoreScreen extends Screen {
         String suggestion = spellOfTheDay();
         if (!suggestion.isEmpty()) {
             StringWidget sotd = new StringWidget(px + Theme.PAD, py + panelH - 50,
-                btnW, 9, Component.literal("Today's spell: " + suggestion), font);
+                panelW - Theme.PAD * 2, 9, Component.literal("Today's spell: " + suggestion), font);
             sotd.alignLeft();
             sotd.setColor(Theme.C_FAINT);
             addRenderableWidget(sotd);
@@ -335,9 +323,10 @@ public final class ConfigMoreScreen extends Screen {
             } else if (VoiceController.lastCalibThreshold() > 0
                     && System.currentTimeMillis() < statusFlashUntil + 3000) {
                 calibBtn.setMessage(Component.literal(
-                    "Set noise gate to " + Math.round(VoiceController.lastCalibThreshold())));
+                    "Gate set: " + Math.round(VoiceController.lastCalibThreshold())));
             } else {
-                calibBtn.setMessage(Component.literal("Auto-calibrate noise gate (talk for 5s)"));
+                // Must fit the half-width grid button; the old full-width label spilled out.
+                calibBtn.setMessage(Component.literal("Calibrate mic (5s)"));
             }
         }
         // Vanilla backdrop first (blurred world in-game, dirt on the title screen, and it

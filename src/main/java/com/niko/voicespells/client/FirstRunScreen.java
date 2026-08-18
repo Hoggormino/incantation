@@ -202,7 +202,7 @@ public final class FirstRunScreen extends Screen {
             "Cast Iron's Spells by speaking their",
             "names out loud — no other mod needed.",
             "",
-            "No keybinds — just talk like normal.",
+            "You don't press anything to cast.",
             "When you say a spell name you have",
             "equipped, it casts.",
             "",
@@ -311,7 +311,7 @@ public final class FirstRunScreen extends Screen {
 
     // ------------------------------------------------------------------------ Shared
     private void drawHeading(GuiGraphics g, int x, int y, String text) {
-        g.drawString(font, Component.literal(text), x, y, Theme.C_ACCENT, !Theme.lightSurface());
+        g.drawString(font, Component.literal(text), x, y, Theme.C_HEADING, !Theme.lightSurface());
     }
 
     private void drawLines(GuiGraphics g, int x, int y, String[] lines) {

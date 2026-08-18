@@ -665,7 +665,12 @@ public final class ClientEvents {
             // width and does not jitter as speech starts and stops.
             int meterX = dotX + DOT_SIZE + 4;
             int meterY = chipY + (CHIP_H - METER_H) / 2;
-            g.fill(meterX, meterY, meterX + METER_W, meterY + METER_H, Theme.C_PANEL);
+            // Fixed translucent dark, the way vanilla draws HUD tracks (boss bar, experience
+            // background). This used Theme.C_PANEL, which was harmless while panels were dark
+            // and became a floating light slab over the world once the container palette made
+            // the panel tone light. The HUD must not borrow screen-panel colours: it draws over
+            // the world, not on a panel.
+            g.fill(meterX, meterY, meterX + METER_W, meterY + METER_H, 0x90101010);
             if (armed && level > 0f) {
                 int filled = Math.max(1, Math.min(METER_W, Math.round(level * METER_W)));
                 g.fill(meterX, meterY, meterX + filled, meterY + METER_H, dotColor);

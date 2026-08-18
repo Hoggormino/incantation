@@ -78,6 +78,10 @@ public final class Theme {
     public static int C_ACCENT_GHOST;
 
     // ---- Text (palette-driven) --------------------------------------------
+    /** Section headings: darker than body on light panels, white on dark ones. The headings
+     *  used to be accent purple, which was the last routine use of the accent outside the
+     *  Codex progression screen. */
+    public static int C_HEADING;
     public static int C_TEXT;
     public static int C_MUTED;
     public static int C_FAINT;
@@ -121,6 +125,7 @@ public final class Theme {
                 C_TEXT     = 0xFFFFFFFF;
                 C_MUTED    = 0xFFA0A0A0;
                 C_FAINT    = 0xFF6A6A6A;
+                C_HEADING  = 0xFFFFFFFF;
             }
             case SLATE -> {
                 // Vanilla's actual stone-grey widget tone — this is the closest of the three
@@ -137,6 +142,7 @@ public final class Theme {
                 C_TEXT     = 0xFFFFFFFF;
                 C_MUTED    = 0xFF3F3F3F;
                 C_FAINT    = 0xFF5A5A5A;
+                C_HEADING  = 0xFFFFFFFF;
             }
             case DARK -> {
                 // The default, retuned to read as Minecraft rather than as a neon web app.
@@ -168,6 +174,7 @@ public final class Theme {
                 C_TEXT     = 0xFF404040;   // vanilla's container text colour
                 C_MUTED    = 0xFF6A6A6A;
                 C_FAINT    = 0xFF8B8B8B;
+                C_HEADING  = 0xFF1E1E1E;
             }
         }
         // Re-derive accent layers immediately if the palette flipped (SLATE needs different
@@ -411,13 +418,15 @@ public final class Theme {
     public static void scrollbar(GuiGraphics g, int x, int y, int w, int h,
                                   int total, int visible, int scroll) {
         if (total <= visible) return; // no overflow, no bar
-        g.fill(x, y, x + w, y + h, C_DIVIDER);
+        // Vanilla list scrollbar: dark track, plain grey thumb with a light top edge —
+        // the construction every vanilla selection list uses. No accent; this was the last
+        // place the neon survived.
+        g.fill(x, y, x + w, y + h, 0xFF000000);
         int thumbH = Math.max(12, h * visible / total);
         int maxScroll = total - visible;
         int thumbY = y + (h - thumbH) * Math.min(scroll, maxScroll) / Math.max(1, maxScroll);
-        g.fill(x, thumbY, x + w, thumbY + thumbH, C_ACCENT_SOFT);
-        // Subtle bright tip on the thumb for that neon edge.
-        g.fill(x, thumbY, x + w, thumbY + 1,            C_ACCENT_BRIGHT);
-        g.fill(x, thumbY + thumbH - 1, x + w, thumbY + thumbH, C_ACCENT_BRIGHT);
+        g.fill(x, thumbY, x + w, thumbY + thumbH, 0xFF8B8B8B);
+        g.fill(x, thumbY, x + w, thumbY + 1, 0xFFC6C6C6);
+        g.fill(x, thumbY + thumbH - 1, x + w, thumbY + thumbH, 0xFF555555);
     }
 }
