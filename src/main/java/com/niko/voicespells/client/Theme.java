@@ -155,7 +155,7 @@ public final class Theme {
                 C_HEADER_T = 0xFF303030;
                 C_HEADER_B = 0xFF303030;
                 C_INSET    = 0x90101010;
-                C_INSET_2  = 0x60FFFFFF;
+                C_INSET_2  = 0x18FFFFFF;
                 C_BORDER   = 0xFF000000;
                 C_DIVIDER  = 0x40FFFFFF;
                 C_SHADOW   = 0xFF000000;
@@ -239,7 +239,9 @@ public final class Theme {
             C_SCRIM    = 0x00000000;   // vanilla's own backdrop is the whole point
             C_PANEL    = 0xFF303030;   // only used by insets/fallbacks now
             C_INSET    = 0x90101010;   // wells are translucent dark over the world
-            C_INSET_2  = 0x60FFFFFF;
+            // Zebra striping and hover wash. 0x60 white was loud enough that the list read as
+            // stripes first and text second; a list should be quiet until you point at it.
+            C_INSET_2  = 0x18FFFFFF;
             C_DIVIDER  = 0x40FFFFFF;
             C_SHADOW   = 0xFF000000;
             C_BORDER   = 0xFF000000;

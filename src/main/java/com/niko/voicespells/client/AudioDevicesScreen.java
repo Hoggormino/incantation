@@ -377,7 +377,7 @@ public final class AudioDevicesScreen extends Screen {
             // invisible. A solid accent-soft band plus the marker below is unambiguous.
             // Vanilla highlights a selected list row with a plain translucent white wash.
             if (selected) g.fill(listX + 1, ry, listX + listW - 1, ry + ROW, 0x40FFFFFF);
-            else if (hovered) g.fill(listX + 1, ry, listX + listW - 1, ry + ROW, Theme.C_INSET_2);
+            else if (hovered) g.fill(listX + 1, ry, listX + listW - 1, ry + ROW, 0x30FFFFFF);
 
             // Verdict chip on the right, so the name can use the full remaining width.
             String verdict = isDefaultRow ? verdictFor(defaultRaw()) : verdictFor(raw);
