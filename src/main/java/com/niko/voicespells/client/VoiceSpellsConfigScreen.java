@@ -540,7 +540,10 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // the Reset / Spell List / More and Cancel / Done rows, and past the panel's bottom edge.
         // Deriving it means the well shrinks to fit instead of overlapping, and the gate below
         // refuses only when there is not even enough room to be useful.
-        int mh = Math.max(0, monitorBottomLimit() - my - 4);
+        // Bounded at both ends: it must not overdraw the buttons (the limit) and it should not
+        // balloon either — on a 1600x1000 window the derived height was 500px of mostly empty
+        // log. MONITOR_H is what the block was designed to show, so it stays the ceiling.
+        int mh = Math.max(0, Math.min(MONITOR_H - 16, monitorBottomLimit() - my - 4));
 
         // Live JVM heap stat — gives the user a sanity check on whether the recogniser is
         // bloating memory (it shouldn't; Vosk is C++, but the bridging buffers + grammar grow
