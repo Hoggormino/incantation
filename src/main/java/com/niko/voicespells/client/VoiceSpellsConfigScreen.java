@@ -246,11 +246,24 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 i++, gridX, colW, y),
             "Which corner of the screen the voice HUD sits in.");
 
-        help(slot(new NeonSlider(0, 0, colW, 20, workOffsetX, 0, 1000,
+        // Slider top end, NOT the config's own limit.
+        //
+        // The config allows 0..1000 so somebody on a 4K display can push the HUD a long way, and
+        // the slider inherited that range — which meant the realistic values (the defaults are 5
+        // and 28) put the handle hard against the left edge, where one pixel of travel is four
+        // units and the control cannot be aimed at all. A HUD nudged off its corner lives in the
+        // first couple of hundred pixels.
+        //
+        // The bound stretches to fit a value that is already larger, so somebody who set 800 in
+        // the toml still sees their value and can still adjust it. Narrowing the range outright
+        // would have silently clamped their setting the first time they pressed Done, which is
+        // the kind of fix that is worse than the bug.
+        int offsetMax = Math.max(200, Math.max(workOffsetX, workOffsetY));
+        help(slot(new NeonSlider(0, 0, colW, 20, workOffsetX, 0, offsetMax,
                 v -> "Offset X: " + v, v -> workOffsetX = v), i++, gridX, colW, y),
             "Nudge the HUD horizontally away from its corner.");
 
-        help(slot(new NeonSlider(0, 0, colW, 20, workOffsetY, 0, 1000,
+        help(slot(new NeonSlider(0, 0, colW, 20, workOffsetY, 0, offsetMax,
                 v -> "Offset Y: " + v, v -> workOffsetY = v), i++, gridX, colW, y),
             "Nudge the HUD vertically away from its corner.");
 
