@@ -76,7 +76,8 @@ public final class NeonCycle<T> extends AbstractWidget {
         int fill = (!active || locked) ? BTN_OFF : (hov ? BTN_HOVER : BTN);
         g.fill(x, y, x + w, y + h, fill);
         bevel(g, x, y, w, h, fill, locked || !active);
-        if (hov && active && !locked) g.fill(x + 2, y + h - 2, x + w - 2, y + h - 1, Theme.C_ACCENT);
+        // No accent underline, matching NeonButton: vanilla's hover cue is the brighter
+        // fill and the pale yellow label, and the SVC-style container look has no accent.
 
         // Label with a leading "✗ " when locked so the state reads at a glance.
         String text = labeller.apply(values[idx]);

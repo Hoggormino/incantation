@@ -58,7 +58,8 @@ public final class NeonToggle extends AbstractWidget {
         g.fill(x, y, x + w, y + h, fill);
         bevel(g, x, y, w, h, fill, value || !active);
 
-        if (hov && active) g.fill(x + 2, y + h - 2, x + w - 2, y + h - 1, Theme.C_ACCENT);
+        // No accent underline, matching NeonButton: vanilla's hover cue is the brighter
+        // fill and the pale yellow label, and the SVC-style container look has no accent.
 
         String text = value ? "ON" : "OFF";
         int textColor = !active ? 0xFFA0A0A0 : (hov ? 0xFFFFFFA0 : 0xFFFFFFFF);

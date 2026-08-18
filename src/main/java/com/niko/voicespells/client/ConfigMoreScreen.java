@@ -108,7 +108,10 @@ public final class ConfigMoreScreen extends Screen {
             b -> {
                 if (!VoiceController.isCalibrating()) {
                     VoiceController.startNoiseGateCalibration();
-                    flashStatus("Calibrating — say a few spell names…", Theme.C_ACCENT_BRIGHT);
+                    // C_WARN, not the accent: the accent comes from the ThemePreset rather than the
+                    // palette, so on the light container panel it is a pastel on pale grey. C_WARN
+                    // is palette-derived and means "in progress", which is what this is.
+                    flashStatus("Calibrating — say a few spell names…", Theme.C_WARN);
                 }
             });
         grid.add(calibBtn);
@@ -124,7 +127,7 @@ public final class ConfigMoreScreen extends Screen {
         // action spent the last of it. Dividing the real gap among the real rows means the next
         // button added compresses the grid instead of silently landing on the status line.
         int gridRows = (grid.size() + 1) / 2;
-        int gridBottom = py + panelH - 54;          // first thing anchored to the bottom (sotd)
+        int gridBottom = py + panelH - 58;          // first thing anchored to the bottom (sotd)
         int stride = Math.max(15, Math.min(24, (gridBottom - y) / Math.max(1, gridRows)));
         for (NeonButton btn : grid) {
             btn.setX(slot % 2 == 0 ? colX1 : colX2);
@@ -142,7 +145,9 @@ public final class ConfigMoreScreen extends Screen {
         // window, so at GUI Scale 3-4 (including 1080p on Auto) the accumulated y landed below
         // the panel and the status line — the only feedback Import/Export gives — rendered
         // off-screen entirely.
-        statusLabel = new StringWidget(px + Theme.PAD, py + panelH - 42, panelW - Theme.PAD * 2, 9,
+        // 8px apart for 9px text: the status line and the spell-of-the-day hint below it
+        // overlapped by a pixel, so every "Profile copied" landed on top of "Today's spell".
+        statusLabel = new StringWidget(px + Theme.PAD, py + panelH - 40, panelW - Theme.PAD * 2, 9,
             Component.empty(), font);
         statusLabel.alignLeft();
         statusLabel.setColor(Theme.C_MUTED);
@@ -152,7 +157,7 @@ public final class ConfigMoreScreen extends Screen {
         // unfamiliar spells. Sits at the bottom of the panel as a quiet hint.
         String suggestion = spellOfTheDay();
         if (!suggestion.isEmpty()) {
-            StringWidget sotd = new StringWidget(px + Theme.PAD, py + panelH - 50,
+            StringWidget sotd = new StringWidget(px + Theme.PAD, py + panelH - 54,
                 panelW - Theme.PAD * 2, 9, Component.literal("Today's spell: " + suggestion), font);
             sotd.alignLeft();
             sotd.setColor(Theme.C_FAINT);

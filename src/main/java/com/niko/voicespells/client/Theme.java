@@ -173,13 +173,19 @@ public final class Theme {
                 C_PANEL    = 0xFFC6C6C6;
                 C_HEADER_T = 0xFFC6C6C6;   // container GUIs have no header band at all
                 C_HEADER_B = 0xFFC6C6C6;
-                C_INSET    = 0xFF8B8B8B;
+                // The inset well has to stay close enough to the panel that text tuned for the
+                // panel is still readable inside it. At 0x8B8B8B it was 55 levels darker, and
+                // C_MUTED detail lines (0x6A6A6A) sat on it at about 1.35:1 — the diagnostics
+                // screen's reasons, the one thing that screen exists to convey, were washed out
+                // to the edge of legibility. A gentler step still reads as recessed once the
+                // sunken bevel is drawn around it, which is what actually communicates depth.
+                C_INSET    = 0xFFB2B2B2;
                 C_INSET_2  = 0xFFDBDBDB;
                 C_BORDER   = 0xFF000000;
                 C_DIVIDER  = 0xFF8B8B8B;
                 C_SHADOW   = 0xFF555555;
                 C_TEXT     = 0xFF404040;   // vanilla's container text colour
-                C_MUTED    = 0xFF6A6A6A;
+                C_MUTED    = 0xFF5C5C5C;   // secondary text; must clear the inset well too
                 // 0x8B8B8B against the 0xC6C6C6 panel is under 2:1, which is fine for a divider
                 // and not fine for words. C_FAINT does carry real text — the spell-of-the-day
                 // hint, the wizard's secondary lines — so it has to stay legible while still

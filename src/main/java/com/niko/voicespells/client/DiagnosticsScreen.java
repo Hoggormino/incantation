@@ -188,7 +188,9 @@ public final class DiagnosticsScreen extends Screen {
                 case OK   -> Theme.C_SUCCESS;
                 case WARN -> Theme.C_WARN;
                 case FAIL -> Theme.C_DANGER;
-                case INFO -> Theme.C_FAINT;
+                // C_MUTED, not C_FAINT: this pill sits on the inset well, where the faintest
+                // tier is indistinguishable from the surface it is drawn on.
+                case INFO -> Theme.C_MUTED;
             };
         }
 
