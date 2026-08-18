@@ -95,6 +95,18 @@ public final class FirstRunScreen extends Screen {
                         new VoiceSpellsSpellListScreen(this));
                 }));
         }
+        // On the mic-check step, offer the device picker on its own row above the nav buttons.
+        // This is the step a player with a dead default capture device gets stuck on — the meter
+        // never moves, Next stays disabled, and Skip was the only way out. Since the Windows
+        // default recording device is so often a virtual driver that returns pure silence, the
+        // fix has to be reachable from exactly here rather than from a submenu the player has
+        // not discovered yet. The keyed capture holds mean the wizard and the picker can both
+        // want the microphone without either revoking it from the other.
+        if (step == 1) {
+            addRenderableWidget(NeonButton.of(px + panelW / 2 - 80, btnY - 24, 160, 20,
+                Component.literal("Meter dead? Choose microphone…"),
+                b -> { if (minecraft != null) minecraft.setScreen(new AudioDevicesScreen(this)); }));
+        }
         String nextLabel = (step == STEPS - 1) ? "Done" : "Next";
         nextBtn = NeonButton.of(px + panelW - Theme.PAD - btnW, btnY, btnW, 20,
             Component.literal(nextLabel), b -> {

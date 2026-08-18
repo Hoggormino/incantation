@@ -650,13 +650,20 @@ public final class ClientEvents {
             // and the palette is now light by default, which made these invisible or wrong over
             // the world. The accent states stay: the accent comes from the ThemePreset, not the
             // palette, so it is already world-safe. Same rule as the meter track above.
-            int dotColor = !armed ? 0xFFA0A0A0
+            int dotColor = VoiceController.deviceSilent() ? 0xFFFF6166
+                         : !armed ? 0xFFA0A0A0
                          : hot    ? Theme.withPulsedAlpha(Theme.C_ACCENT_BRIGHT & 0x00FFFFFF, 0.75f, 1.0f)
                                   : Theme.C_ACCENT_SOFT;
 
             boolean calibrating = VoiceController.isTranscribing();
+            // A device that is open and delivering pure silence is the one failure the chip could
+            // not previously express: the dot sat in its armed colour and the meter stayed flat,
+            // which looks exactly like "nobody is talking". Saying it on the HUD means the player
+            // finds out while playing rather than after giving up.
+            boolean silent = !calibrating && VoiceController.deviceSilent();
+            String tail = calibrating ? "calibrating" : silent ? "mic silent" : "";
             int chipW = PAD_X + DOT_SIZE + 4 + METER_W
-                      + (calibrating ? 4 + font.width("calibrating") : 0) + PAD_X;
+                      + (tail.isEmpty() ? 0 : 4 + font.width(tail)) + PAD_X;
             int x = alignX(anchorX, chipW);
 
             // Sits opposite the toast so the two never overlap as history stacks up.
@@ -682,9 +689,10 @@ public final class ClientEvents {
 
             // Calibration mode replaces casting entirely, so say so rather than letting the chip
             // imply spells are about to fire.
-            if (calibrating) {
-                g.drawString(font, "calibrating", meterX + METER_W + 4,
-                    chipY + (CHIP_H - font.lineHeight) / 2 + 1, 0xFFFFFFFF, true);
+            if (!tail.isEmpty()) {
+                g.drawString(font, tail, meterX + METER_W + 4,
+                    chipY + (CHIP_H - font.lineHeight) / 2 + 1,
+                    silent ? 0xFFFF6166 : 0xFFFFFFFF, true);
             }
         }
 

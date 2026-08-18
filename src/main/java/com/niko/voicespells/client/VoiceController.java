@@ -662,6 +662,7 @@ public final class VoiceController {
         }
         long now = System.nanoTime();
         lastFrameNanos = now;
+        trackDeadDevice(pcm, now);
         double rms = updateAudioLevel(pcm);
         sampleCalibration(rms);
         VoskSession s = session;
@@ -693,6 +694,71 @@ public final class VoiceController {
 
     /** Tracks the open→closed edge of the noise gate for the capture path's flush trigger. */
     private static volatile boolean gateWasOpen = false;
+
+    // ----- dead-device detection -----------------------------------------------------------
+    //
+    // The failure this exists for is invisible by every other measure. A virtual audio driver
+    // (iVCam, VB-Cable, NVIDIA Broadcast, OBS, a disconnected webcam mic) is very often the
+    // Windows DEFAULT recording device, and blank captureDevice means "system default". Such a
+    // device opens without error, reports samples available, and hands back frames of value 0
+    // forever. Capture status reads "capturing", no exception is thrown, no warning is logged,
+    // and the player concludes the mod does not work. Measured on the author's own machine: the
+    // default device returned 39 consecutive chunks with an absolute peak of exactly 0 while
+    // two other connected microphones were both live.
+    //
+    // Digital silence is distinguishable from a quiet room: a real microphone always has a
+    // noise floor, so |sample| is never 0 across every sample of every frame for seconds on end.
+    // Only an EXACT all-zero run counts here, which is why this cannot fire on someone who is
+    // merely not talking.
+
+    /** Frames must be all-zero for this long before the device is called dead. */
+    private static final long DEAD_DEVICE_NANOS = 4_000_000_000L;
+
+    /** When the current run of all-zero frames began; 0 when the last frame had any signal. */
+    private static volatile long silentSinceNanos = 0L;
+    /** True once an armed, open device has produced nothing but exact zeroes for 4s. */
+    private static volatile boolean deviceSilent = false;
+
+    /**
+     * True when the microphone is open and armed but delivering pure digital silence.
+     *
+     * <p>Surfaced by the HUD, the diagnostics screen and the device picker. Distinct from "no
+     * device" (nothing to open) and from "quiet" (a real mic in a quiet room).
+     */
+    public static boolean deviceSilent() { return deviceSilent; }
+
+    /** Clear the verdict — called when the device changes, so a new pick is judged afresh. */
+    public static void resetDeadDeviceWatch() {
+        silentSinceNanos = 0L;
+        deviceSilent = false;
+        warnedDeadDevice = false;
+    }
+
+    private static boolean warnedDeadDevice = false;
+
+    private static void trackDeadDevice(short[] pcm, long now) {
+        for (short v : pcm) {
+            if (v != 0) {                 // any signal at all clears the run
+                silentSinceNanos = 0L;
+                deviceSilent = false;
+                return;
+            }
+        }
+        if (silentSinceNanos == 0L) { silentSinceNanos = now; return; }
+        if (deviceSilent || now - silentSinceNanos < DEAD_DEVICE_NANOS) return;
+        deviceSilent = true;
+        if (!warnedDeadDevice) {
+            warnedDeadDevice = true;
+            String dev = activeDevice == null || activeDevice.isBlank()
+                ? "the system default device (" + com.niko.voicespells.client.MicCapture.defaultDevice() + ")"
+                : "\"" + activeDevice + "\"";
+            VoiceSpells.LOGGER.warn(
+                "Microphone {} is open but delivering pure silence - this is what a virtual audio "
+                + "driver (iVCam, VB-Cable, NVIDIA Broadcast, an unplugged webcam) does when it is "
+                + "your Windows default recording device. Pick a real microphone in "
+                + "Config > Microphone, or run /voicespells devices to list them.", dev);
+        }
+    }
 
     /**
      * Compute the frame's RMS energy and fold it into a smoothed level used by the HUD's audio
@@ -1243,6 +1309,9 @@ public final class VoiceController {
             stopCapture();
         }
         activeDevice = VoiceSpellsConfig.cCaptureDevice;
+        // A new device gets judged from scratch: a verdict inherited from the previous one would
+        // either clear a genuine problem or condemn a working mic the player just picked.
+        resetDeadDeviceWatch();
         com.niko.voicespells.client.MicCapture fresh =
             new com.niko.voicespells.client.MicCapture(activeDevice, VoiceController::onMicFrame16k);
         capture = fresh;
@@ -1360,6 +1429,7 @@ public final class VoiceController {
             capture = null;
             activeDevice = null;
         }
+        resetDeadDeviceWatch();
         // Outside the monitor: the join below must not block anyone else.
         if (c != null) c.close();
     }

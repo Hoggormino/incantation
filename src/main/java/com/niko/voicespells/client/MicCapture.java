@@ -94,6 +94,63 @@ public final class MicCapture implements AutoCloseable {
         }
     }
 
+    /**
+     * Open one capture device, listen briefly, and report the loudest sample seen.
+     *
+     * <p>Exists because "which of my six microphones actually works" is not answerable from a
+     * device list. Virtual audio drivers (iVCam, VB-Cable, NVIDIA Broadcast, an unplugged webcam)
+     * enumerate exactly like real hardware and open without error, then deliver frames of value 0
+     * forever - and one of them is very often the Windows default. Measuring is the only way to
+     * tell them apart, so the device picker measures.
+     *
+     * @param device device name, or {@code null}/blank for the system default
+     * @param millis how long to listen; ~1000 is enough to catch a room's noise floor
+     * @return peak absolute sample (0 means digital silence), or {@code -1} if the device could
+     *         not be opened at all
+     */
+    public static int probePeak(String device, long millis) {
+        String name = (device == null || device.isBlank()) ? null : device.trim();
+        long d = 0L;
+        try {
+            d = ALC11.alcCaptureOpenDevice(name, SAMPLE_RATE,
+                AL10.AL_FORMAT_MONO16, DEVICE_BUFFER_SAMPLES);
+            if (d == 0L) return -1;
+            ALC11.alcCaptureStart(d);
+            ByteBuffer pcm = ByteBuffer.allocateDirect(CHUNK_SAMPLES * 2).order(ByteOrder.nativeOrder());
+            int peak = 0;
+            long until = System.currentTimeMillis() + Math.max(200L, millis);
+            while (System.currentTimeMillis() < until) {
+                if (ALC10.alcGetInteger(d, ALC11.ALC_CAPTURE_SAMPLES) < CHUNK_SAMPLES) {
+                    sleep(IDLE_POLL_MS);
+                    continue;
+                }
+                pcm.clear();
+                ALC11.alcCaptureSamples(d, pcm, CHUNK_SAMPLES);
+                ShortBuffer sb = pcm.asShortBuffer();
+                for (int i = 0; i < CHUNK_SAMPLES; i++) {
+                    int v = Math.abs(sb.get(i));
+                    if (v > peak) peak = v;
+                }
+            }
+            return peak;
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.debug("Probe of {} failed: {}", name, t.toString());
+            return -1;
+        } finally {
+            if (d != 0L) {
+                try { ALC11.alcCaptureStop(d); } catch (Throwable ignored) {}
+                try { ALC11.alcCaptureCloseDevice(d); } catch (Throwable ignored) {}
+            }
+        }
+    }
+
+    /** Strip OpenAL Soft's backend prefix so the picker shows the name Windows shows. */
+    public static String prettyName(String raw) {
+        if (raw == null) return "";
+        String s = raw.startsWith("OpenAL Soft on ") ? raw.substring("OpenAL Soft on ".length()) : raw;
+        return s.trim();
+    }
+
     public String status()    { return status; }
 
     /** Start the capture thread. Safe to call repeatedly; a second call is a no-op. */

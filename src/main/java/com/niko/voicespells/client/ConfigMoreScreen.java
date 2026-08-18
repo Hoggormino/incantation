@@ -76,6 +76,11 @@ public final class ConfigMoreScreen extends Screen {
         int slot = 0;
 
         java.util.List<NeonButton> grid = new java.util.ArrayList<>();
+        // First slot, and it earns it: picking the wrong capture device is the most common reason
+        // the mod appears to do nothing at all, and until this screen existed the only cure was
+        // hand-editing a device name into the toml.
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Microphone & Sound"),
+            b -> { if (minecraft != null) minecraft.setScreen(new AudioDevicesScreen(this)); }));
         grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Welcome Wizard"),
             b -> { if (minecraft != null) minecraft.setScreen(new FirstRunScreen(this)); }));
         grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Voice Codex"),

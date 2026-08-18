@@ -105,6 +105,17 @@ public final class Diagnostics {
         }
         String status = cap.status();
         if ("capturing".equals(status)) {
+            // "capturing" alone used to report OK, and that was the most misleading line in the
+            // whole diagnostics screen: a virtual audio driver that is the Windows default opens
+            // fine, reports samples, and delivers nothing but zeroes. Every other check passed,
+            // this one said OK, and voice casting still never fired. An open device that has
+            // produced pure silence for seconds is a FAIL with a fix attached, not an OK.
+            if (VoiceController.deviceSilent()) {
+                return new Result("Microphone", Status.FAIL,
+                    "Device is open but delivering pure silence — likely a virtual driver "
+                    + "(iVCam, VB-Cable, NVIDIA Broadcast). Pick a real mic in More… → "
+                    + "Microphone & Sound");
+            }
             return new Result("Microphone", Status.OK,
                 "Capturing at " + com.niko.voicespells.client.MicCapture.SAMPLE_RATE + " Hz");
         }
