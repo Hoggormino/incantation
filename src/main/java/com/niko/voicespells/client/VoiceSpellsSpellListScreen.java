@@ -418,49 +418,30 @@ public final class VoiceSpellsSpellListScreen extends Screen {
 
             body.add(spellId); // always include the id at the bottom in muted
 
-            int maxW = font.width(title);
-            for (String line : body) maxW = Math.max(maxW, font.width(line));
-            int padX = 8, padY = 6, lineH = 11;
-            int tw = maxW + padX * 2;
-            int dividerExtra = (descStart >= 0) ? 4 : 0;
-            int th = padY * 2 + lineH + (body.size() * lineH) + 2 + dividerExtra;
+            body.add(spellId); // always include the id at the bottom in muted
 
-            // Keep the tooltip on screen. Prefer above-right of the cursor.
-            int screenW = VoiceSpellsSpellListScreen.this.width;
-            int screenH = VoiceSpellsSpellListScreen.this.height;
-            int tx = mouseX + 12;
-            int ty = mouseY - th - 4;
-            if (tx + tw > screenW - 2) tx = mouseX - tw - 8;
-            if (ty < 2)                 ty = mouseY + 12;
-            if (ty + th > screenH - 2)  ty = screenH - th - 2;
-
-            // Background + neon frame.
-            g.fill(tx, ty, tx + tw, ty + th, Theme.C_PANEL);
-            Theme.roundedFrame(g, tx, ty, tw, th, Theme.C_ACCENT);
-            // Subtle inner halo so the card glows a touch.
-            g.fill(tx + 2, ty + 1, tx + tw - 2, ty + 2, Theme.C_ACCENT_FAINT);
-            g.fill(tx + 2, ty + th - 2, tx + tw - 2, ty + th - 1, Theme.C_ACCENT_FAINT);
-
-            int ly = ty + padY;
-            g.drawString(font, Component.literal(title), tx + padX, ly,
-                Theme.C_ACCENT_BRIGHT, !Theme.lightSurface());
-            ly += lineH;
-            // Thin accent rule under the title.
-            g.fill(tx + padX, ly - 1, tx + tw - padX, ly, Theme.C_ACCENT_SOFT);
-            ly += 1;
+            // Hand the whole card to vanilla.
+            //
+            // What was here drew a bespoke one: a C_PANEL background, an accent frame, an accent
+            // title and hand-positioned lines with their own clamping. Two things were wrong with
+            // it. It did not look like a Minecraft tooltip — the game's tooltip is dark with a
+            // violet gradient border and light text, and no player has ever seen a light one — and
+            // on the container palette its accent title came out as a pastel on pale grey, barely
+            // readable. renderComponentTooltip draws the real thing, handles the wrapping and the
+            // keep-it-on-screen clamping, and has the same signature on 1.20.1 and 1.21.1.
+            //
+            // Colour now travels in the Components themselves, which is also how vanilla item
+            // tooltips carry their name-vs-lore distinction.
+            java.util.List<net.minecraft.network.chat.Component> lines = new ArrayList<>();
+            lines.add(Component.literal(title).withStyle(net.minecraft.ChatFormatting.WHITE));
             for (int i = 0; i < body.size(); i++) {
-                // Inject a quiet divider just before the reflective description block.
-                if (i == descStart) {
-                    g.fill(tx + padX, ly + 2, tx + tw - padX, ly + 3, Theme.C_DIVIDER);
-                    ly += 4;
-                }
-                int color;
-                if (i == body.size() - 1)                color = Theme.C_FAINT; // id row
-                else if (descStart >= 0 && i >= descStart) color = Theme.C_MUTED; // description rows
-                else                                      color = Theme.C_TEXT;  // meta rows
-                g.drawString(font, Component.literal(body.get(i)), tx + padX, ly, color, !Theme.lightSurface());
-                ly += lineH;
+                net.minecraft.ChatFormatting style;
+                if (i == body.size() - 1)                   style = net.minecraft.ChatFormatting.DARK_GRAY;
+                else if (descStart >= 0 && i >= descStart)   style = net.minecraft.ChatFormatting.GRAY;
+                else                                        style = net.minecraft.ChatFormatting.GRAY;
+                lines.add(Component.literal(body.get(i)).withStyle(style));
             }
+            g.renderComponentTooltip(font, lines, mouseX, mouseY);
         }
 
         private String prettifyId(String spellId) {
