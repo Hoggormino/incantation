@@ -130,9 +130,16 @@ public final class FirstRunScreen extends Screen {
                 if (step == STEPS - 1) finish();
                 else { step++; rebuildWidgets(); }
             });
-        // On the mic-check step, gate Next behind actually seeing audio. Keeps the player from
-        // sleepwalking past a broken mic by clicking past with no proof things work.
-        if (step == 1 && !micDetectedThisVisit) nextBtn.active = false;
+        // On the mic-check step, gate Next behind actually seeing audio - but not forever.
+        //
+        // The gate exists so nobody sleepwalks past a broken microphone. Left absolute it becomes
+        // a wall: a player whose mic genuinely does not work cannot reach step 3 at all, and the
+        // only way on is Skip, which ends the wizard rather than continuing it. After a dozen
+        // seconds the point has been made and the button unlocks.
+        if (step == 1 && !micDetectedThisVisit
+                && System.nanoTime() - openedAtNanos < 12_000_000_000L) {
+            nextBtn.active = false;
+        }
         addRenderableWidget(nextBtn);
     }
 
@@ -182,6 +189,12 @@ public final class FirstRunScreen extends Screen {
             if (!micDetectedThisVisit && step == 1 && nextBtn != null) nextBtn.active = true;
             micDetectedThisVisit = true;
         }
+        // ...and unlock it on the timeout too, from here rather than from init(): init() only
+        // runs on a rebuild, so a player sitting on the step waiting would have waited forever.
+        if (step == 1 && nextBtn != null && !nextBtn.active
+                && System.nanoTime() - openedAtNanos >= 12_000_000_000L) {
+            nextBtn.active = true;
+        }
         // Step 3 auto-advance: if the player actually casts something while this screen is up,
         // they've passed "try a spell" — finish the wizard for them.
         if (step == STEPS - 1
@@ -194,10 +207,15 @@ public final class FirstRunScreen extends Screen {
         // honours the player's Menu Background Blur setting), then our own dim on top so
         // the panel still reads. Painting only a flat scrim, as this did before, opted out
         // of all of that and was a large part of why the screens felt foreign.
-        Theme.background(this, g, mouseX, mouseY, partial);
-        g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        Theme.panel(g, px, py, panelW, panelH);
-        Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
+        // Chrome tied to THIS screen's content, not to a notional panel.
+        //
+        // panel() in the panelless style draws the header/footer rules at the bounds it is given,
+        // and these screens were handing it their old centred-panel rectangle - so the rules
+        // landed well above the title and well below the last button, reading as two blurry lines
+        // floating in the background. Anchoring them just under the title and just above the
+        // button row makes them frame the content, which is what a rule is for.
+        Theme.screenChrome(this, g, mouseX, mouseY, partial,
+            py + 22, py + panelH - 34);
 
         super.render(g, mouseX, mouseY, partial);
 

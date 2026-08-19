@@ -38,6 +38,8 @@ public final class ConfigMoreScreen extends Screen {
     private boolean wasCalibrating = false;
     /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
     private int px, py, panelW, panelH;
+    /** Header / footer rule positions for the shared chrome. */
+    private int headerY, footerY;
 
     public ConfigMoreScreen(Screen parent) {
         super(Component.literal("More"));
@@ -58,29 +60,31 @@ public final class ConfigMoreScreen extends Screen {
         // how the last overflow bug happened.
         final int ACTION_COUNT = 11;
         int rowsNeeded = (ACTION_COUNT + 1) / 2;
-        int contentH = Theme.HEADER_H            // title band
-                     + rowsNeeded * 24           // the action grid
-                     + 10                        // gap under the grid
-                     + 9 + 5                     // spell-of-the-day line
-                     + 9 + 8                     // status line
-                     + 20 + Theme.PAD;           // Back row + bottom padding
-        panelW = Theme.fit(PANEL_W_PREF, width);
-        panelH = Theme.fit(Math.min(PANEL_H_PREF, contentH), height);
-        px = (width - panelW) / 2;
-        py = (height - panelH) / 2;
+        // Full-window layout, matching the config screen: title at the top, actions under the
+        // header rule, Back on the bottom edge. The old centred panel is why this screen drew two
+        // rules at apparently random heights — they were the panel's edges, and the panel was
+        // nowhere near the content.
+        int colGap = 10;
+        int gridW  = Math.min(310, width - 40);
+        int colW   = (gridW - colGap) / 2;
+        px = (width - gridW) / 2;
+        panelW = gridW;
+        py = 46;
+        headerY = 32;
+        footerY = height - 40;
+        panelH = rowsNeeded * 24;
 
-        StringWidget titleW = new StringWidget(px, py + (Theme.HEADER_H - 9) / 2,
-            panelW, 9, title, font);
+        StringWidget titleW = new StringWidget(0, 14, width, 9, title, font);
         titleW.alignCenter();
-        titleW.setColor(Theme.C_TEXT);
+        titleW.setColor(0xFFFFFF);
         addRenderableWidget(titleW);
 
         // Back is registered BEFORE the button stack so it wins hit-testing. Widgets are probed
         // in insertion order, and when panelH is clamped the stack grows down into the Back
         // row — "Import Profile from Clipboard" spans nearly the full panel width, so it sat on
         // top of Back and swallowed the click, leaving Escape as the only way out.
-        addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 80, py + panelH - 28,
-            80, 20, CommonComponents.GUI_BACK, b -> onClose()));
+        addRenderableWidget(NeonButton.of(width / 2 - 75, height - 28, 150, 20,
+            CommonComponents.GUI_BACK, b -> onClose()));
 
         // Two-column grid, the Video Settings idiom. The single full-width stack needed
         // roughly 300px of height for nine rows and overflowed the panel even at fullscreen
@@ -88,10 +92,9 @@ public final class ConfigMoreScreen extends Screen {
         // with a button and the last rows ran off the bottom. Nine actions in two columns is
         // five rows, which fits every window down to the 854x480 dev size, and it is how
         // vanilla lays out exactly this many options.
-        int y = py + Theme.HEADER_H + Theme.GAP_MD;
-        int colW = (panelW - Theme.PAD * 2 - 6) / 2;
-        int colX1 = px + Theme.PAD;
-        int colX2 = px + Theme.PAD + colW + 6;
+        int y = py;
+        int colX1 = px;
+        int colX2 = px + colW + colGap;
         boolean inWorld = minecraft != null && minecraft.player != null;
         int slot = 0;
 
@@ -145,7 +148,7 @@ public final class ConfigMoreScreen extends Screen {
         // action spent the last of it. Dividing the real gap among the real rows means the next
         // button added compresses the grid instead of silently landing on the status line.
         int gridRows = (grid.size() + 1) / 2;
-        int gridBottom = py + panelH - 58;          // first thing anchored to the bottom (sotd)
+        int gridBottom = footerY - 34;             // leave room for the two hint lines
         int stride = Math.max(15, Math.min(24, (gridBottom - y) / Math.max(1, gridRows)));
         for (NeonButton btn : grid) {
             btn.setX(slot % 2 == 0 ? colX1 : colX2);
@@ -165,7 +168,7 @@ public final class ConfigMoreScreen extends Screen {
         // off-screen entirely.
         // 8px apart for 9px text: the status line and the spell-of-the-day hint below it
         // overlapped by a pixel, so every "Profile copied" landed on top of "Today's spell".
-        statusLabel = new StringWidget(px + Theme.PAD, py + panelH - 40, panelW - Theme.PAD * 2, 9,
+        statusLabel = new StringWidget(px, footerY - 12, panelW, 9,
             Component.empty(), font);
         statusLabel.alignLeft();
         statusLabel.setColor(Theme.C_MUTED);
@@ -175,8 +178,7 @@ public final class ConfigMoreScreen extends Screen {
         // unfamiliar spells. Sits at the bottom of the panel as a quiet hint.
         String suggestion = spellOfTheDay();
         if (!suggestion.isEmpty()) {
-            StringWidget sotd = new StringWidget(px + Theme.PAD, py + panelH - 54,
-                panelW - Theme.PAD * 2, 9, Component.literal("Today's spell: " + suggestion), font);
+            StringWidget sotd = new StringWidget(px, footerY - 24, panelW, 9, Component.literal("Today's spell: " + suggestion), font);
             sotd.alignLeft();
             // C_MUTED, not C_FAINT. This line names a spell and tracks progress toward it, so it
             // is content; the faintest tier is for things whose absence would not be noticed.
@@ -400,10 +402,7 @@ public final class ConfigMoreScreen extends Screen {
         // honours the player's Menu Background Blur setting), then our own dim on top so
         // the panel still reads. Painting only a flat scrim, as this did before, opted out
         // of all of that and was a large part of why the screens felt foreign.
-        Theme.background(this, g, mouseX, mouseY, partial);
-        g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        Theme.panel(g, px, py, panelW, panelH);
-        Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
+        Theme.screenChrome(this, g, mouseX, mouseY, partial, headerY, footerY);
         super.render(g, mouseX, mouseY, partial);
         Theme.headerRule(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
     }

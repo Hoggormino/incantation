@@ -67,6 +67,8 @@ public final class VoiceSpellsSpellListScreen extends Screen {
 
     /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
     private int px, py, panelW, panelH;
+    /** Header / footer rule positions for the shared chrome. */
+    private int headerRuleY, footerRuleY;
 
     public VoiceSpellsSpellListScreen(Screen parent) {
         super(Component.translatable("voicespells.spelllist.title"));
@@ -77,24 +79,26 @@ public final class VoiceSpellsSpellListScreen extends Screen {
     protected void init() {
         // Clamp to fit the current screen so large GUI Scale settings don't push buttons off
         // the bottom or sides. The preferred dimensions still apply when there's enough room.
-        panelW = Theme.fit(PANEL_W_PREF, width);
-        panelH = Theme.fit(PANEL_H_PREF, height);
+        // Full window: a list of 111 spells should use the screen it is given. The old centred
+        // panel left a band of empty space below the list while clipping rows off the top of it.
+        panelW = Math.min(560, width - 40);
         px = (width - panelW) / 2;
-        py = (height - panelH) / 2;
+        py = 46;
+        headerRuleY = 32;
+        panelH = height - py - 46;
 
-        StringWidget titleW = new StringWidget(px, py + (Theme.HEADER_H - 9) / 2,
-            panelW, 9, title, font);
+        StringWidget titleW = new StringWidget(0, 14, width, 9, title, font);
         titleW.alignCenter();
-        titleW.setColor(Theme.C_TEXT);
+        titleW.setColor(0xFFFFFF);
         addRenderableWidget(titleW);
 
-        int controlsY = py + Theme.HEADER_H + Theme.GAP_MD;
+        int controlsY = py;
         // Wide enough for the longest label each chip can show, now that they carry their own
         // names: "School: Lightning" and "Sort: Mana". Measured rather than guessed, because a
         // vanilla button truncates nothing — it draws the text straight through its own border.
         int schoolW = Math.max(96, font.width("School: Lightning") + 12);
         int sortW   = Math.max(76, font.width("Sort: Casts") + 12);
-        int searchW = (panelW - Theme.PAD * 2) - schoolW - sortW - 8;
+        int searchW = panelW - schoolW - sortW - 8;
 
         // Rebuild the school list from the actually-indexed spells. Sorted alphabetically,
         // with "All" pinned to the front so the chip always has the no-filter option first.
@@ -119,14 +123,14 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         // a plain vanilla button with no chevrons, so a chip reading just "Fire" or "Name" gave
         // no hint that it cycles at all — it looked like a button that would do something. The
         // label carries it instead, which is what vanilla's own cycle options do.
-        addRenderableWidget(NeonCycle.named(px + Theme.PAD, controlsY, schoolW, 18, "School",
+        addRenderableWidget(NeonCycle.named(px, controlsY, schoolW, 18, "School",
             schoolOptions, currentSchool,
             s -> capitalizeOne(s),
             val -> {
                 currentSchool = val;
                 applyFilter(search != null ? search.getValue() : "");
             }));
-        addRenderableWidget(NeonCycle.named(px + Theme.PAD + schoolW + 4, controlsY, sortW, 18,
+        addRenderableWidget(NeonCycle.named(px + schoolW + 4, controlsY, sortW, 18,
             "Sort", SortMode.values(), currentSort,
             s -> s.label,
             val -> {
@@ -134,7 +138,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
                 applyFilter(search != null ? search.getValue() : "");
             }));
 
-        int searchX = px + Theme.PAD + schoolW + sortW + 8;
+        int searchX = px + schoolW + sortW + 8;
         int searchY = controlsY;
         search = new EditBox(font, searchX, searchY, searchW, 18,
             Component.translatable("voicespells.spelllist.search"));
@@ -146,28 +150,30 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         // Layout bottom-up: buttons at panelH-28, footer just above the buttons, list fills
         // the remaining space above the footer. Keeps the footer text from being clipped by
         // the action buttons sitting at the same y-row.
-        int buttonsY = py + panelH - 28;
-        int footerY  = buttonsY - 12;            // 9px text + 3px gap above buttons
-        int listX = px + Theme.PAD;
+        int buttonsY = height - 28;
+        int footerY  = buttonsY - 14;            // 9px text + gap above the buttons
+        footerRuleY  = buttonsY - 8;
+        int listX = px;
         int listY = searchY + 18 + Theme.GAP_MD;
-        int listW = panelW - Theme.PAD * 2;
-        int listH = (footerY - Theme.GAP_SM) - listY;
+        int listW = panelW;
+        // Whole rows only: a partial row at the bottom is a row the player can see half of and
+        // not click, which is how the last hit-test bug got in.
+        int listH = ((footerY - Theme.GAP_SM) - listY) / ROW_H * ROW_H + 4;
         list = new ListWidget(listX, listY, listW, listH);
         addRenderableWidget(list);
 
         // Custom footer widget — draws the current footerText() fresh every frame inside the
         // widget pass so there's no stale-message risk and no overdraw on state transitions.
-        addRenderableWidget(new FooterWidget(px + Theme.PAD, footerY,
-            panelW - Theme.PAD * 2, 9));
+        addRenderableWidget(new FooterWidget(px, footerY, panelW, 9));
 
         // "Add alias..." pops the inline editor for the selected row. Disabled while nothing
         // is selected so the affordance points at the click-a-row UX.
-        aliasButton = NeonButton.of(px + Theme.PAD, py + panelH - 28, 110, 20,
+        aliasButton = NeonButton.of(px, buttonsY, 110, 20,
             Component.literal("Add alias..."), b -> openAliasEditor());
         aliasButton.active = !selectedId.isEmpty();
         addRenderableWidget(aliasButton);
 
-        addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 80, py + panelH - 28, 80, 20,
+        addRenderableWidget(NeonButton.of(px + panelW - 80, buttonsY, 80, 20,
             CommonComponents.GUI_BACK, b -> onClose()));
 
         // Re-apply filter/sort so the list reflects the persisted SchoolFilter / SortMode after
@@ -252,17 +258,9 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         // honours the player's Menu Background Blur setting), then our own dim on top so
         // the panel still reads. Painting only a flat scrim, as this did before, opted out
         // of all of that and was a large part of why the screens felt foreign.
-        Theme.background(this, g, mouseX, mouseY, partial);
-        g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        Theme.panel(g, px, py, panelW, panelH);
-        Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
-
+        Theme.screenChrome(this, g, mouseX, mouseY, partial, headerRuleY, footerRuleY);
         tooltipId = null;
         super.render(g, mouseX, mouseY, partial);
-
-        // Soft rounded frame + glowing neon rule under the header.
-        Theme.headerRule(g, px + Theme.PAD, py + Theme.HEADER_H,
-            panelW - Theme.PAD * 2);
 
         // Tooltip last, and raised in Z so its background lands above the rows' text rather
         // than beneath it. 400 is the offset vanilla uses for its own tooltips.
@@ -311,7 +309,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
 
         ListWidget(int x, int y, int w, int h) {
             super(x, y, w, h, Component.empty());
-            this.rowsVisible = h / ROW_H;
+            this.rowsVisible = Math.max(0, (h - 4) / ROW_H);   // -4 for the frame inset
         }
 
         @Override
@@ -332,11 +330,14 @@ public final class VoiceSpellsSpellListScreen extends Screen {
             int hoveredRow = -1;
             for (int i = clampedScroll; i < end; i++) {
                 SpellIndex.SpellRow r = filtered.get(i);
-                int ry = y + (i - clampedScroll) * ROW_H;
+                // +2 so the first row clears the well's own frame. Drawn flush, the top row
+                // lost its first pixel row of glyphs — the "cut off at the top" report.
+                int ry = y + 2 + (i - clampedScroll) * ROW_H;
                 boolean hov = mouseX >= x && mouseX <= contentRight && mouseY >= ry && mouseY < ry + ROW_H;
                 boolean sel = !selectedId.isEmpty() && selectedId.equals(r.id());
                 // Very subtle zebra striping — gives the eye a row anchor without chrome.
-                if ((i & 1) == 1 && !hov && !sel) g.fill(x + 1, ry, contentRight, ry + ROW_H, Theme.C_INSET_2);
+                // No zebra striping. It made the list read as bands first and text second, and
+                // hover plus selection already say everything striping was saying.
                 if (sel && !hov) {
                     // Persistent selection: dim accent so the row stays anchored after click.
                     g.fill(x + 1, ry, contentRight, ry + ROW_H, 0x22FFFFFF);
@@ -494,7 +495,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
             // multiple of ROW_H, so a strip of empty list sits under the last row — clicking it
             // computed a row one past the visible page and silently selected, and clipboard-
             // copied, a spell the player could not see.
-            int visibleRow = (int) ((my - getY()) / ROW_H);
+            int visibleRow = (int) ((my - getY() - 2) / ROW_H);   // matches the +2 draw inset
             if (visibleRow < 0 || visibleRow >= rowsVisible) return;
             int row = visibleRow + clampScroll();
             if (row >= 0 && row < filtered.size()) {

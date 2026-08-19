@@ -336,6 +336,30 @@ public final class Theme {
     }
 
     /** One of vanilla's header/footer rules: a dark line with a soft highlight under it. */
+    /**
+     * The standard chrome every screen in the mod wears: vanilla's backdrop, a dim over it, and
+     * the header / footer rules.
+     *
+     * <p>Screens used to call {@code panel()} with their old panel bounds, and in the panelless
+     * style that drew the two rules wherever a notional panel would have been — which on a screen
+     * whose content is a centred block put them at apparently random heights, reading as two
+     * blurry lines floating in the background. Passing the header and footer positions the screen
+     * actually uses ties the rules to the content.
+     *
+     * @param headerY y of the rule under the title
+     * @param footerY y of the rule above the button row
+     */
+    public static void screenChrome(net.minecraft.client.gui.screens.Screen screen, GuiGraphics g,
+                                    int mouseX, int mouseY, float partialTick,
+                                    int headerY, int footerY) {
+        background(screen, g, mouseX, mouseY, partialTick);
+        int w = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
+        int h = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight();
+        g.fill(0, 0, w, h, C_SCRIM);
+        rule(g, 0, headerY, w);
+        rule(g, 0, footerY, w);
+    }
+
     /** Public form of the header/footer rule, for screens that place their own. */
     public static void rule(GuiGraphics g, int x, int y, int w) { separatorRule(g, x, y, w); }
 

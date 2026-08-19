@@ -368,10 +368,15 @@ public final class AudioDevicesScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
-        Theme.background(this, g, mouseX, mouseY, partial);
-        g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        Theme.panel(g, px, py, panelW, panelH);
-        Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
+        // Chrome tied to THIS screen's content, not to a notional panel.
+        //
+        // panel() in the panelless style draws the header/footer rules at the bounds it is given,
+        // and these screens were handing it their old centred-panel rectangle - so the rules
+        // landed well above the title and well below the last button, reading as two blurry lines
+        // floating in the background. Anchoring them just under the title and just above the
+        // button row makes them frame the content, which is what a rule is for.
+        Theme.screenChrome(this, g, mouseX, mouseY, partial,
+            py + 22, py + panelH - 34);
 
         super.render(g, mouseX, mouseY, partial);
 

@@ -1423,18 +1423,20 @@ public final class VoiceController {
     private static boolean captureAllowedNow() {
         Minecraft mc = Minecraft.getInstance();
         if (probing) return false;
-        // The master toggle releases the HARDWARE, not just the frames.
+        // A mic-test surface wins over everything except an active probe.
         //
-        // "Voice casting: OFF" previously only dropped incoming frames in captureArmed(); the
-        // OpenAL device stayed open, so Windows kept showing the microphone-in-use indicator and
-        // other applications still saw the device as claimed. The one control that reads as
-        // "stop listening to me" was the only gate that did not actually stop. Placed above the
-        // diagnostic override deliberately: if the player has switched voice casting off, a
-        // mic-test screen should not quietly reopen the device behind that decision.
-        if (!listeningEnabled) return false;
-        // The override deliberately precedes the in-world check: a mic test is the one case where
-        // capturing outside a world is the whole point.
+        // This check used to sit BELOW the master toggle, and that was a bad call: with voice
+        // casting switched off, the first-run wizard's mic check got no audio, so its Next button
+        // never unlocked and the player could not reach step 3 at all. The device picker's meter
+        // and calibration died the same way. A screen that says "talk into your mic now" has
+        // asked for the device explicitly; the toggle is about casting, not about whether a
+        // diagnostic may measure.
         if (diagnosticCaptureOverride) return true;
+        // The master toggle releases the HARDWARE, not just the frames. "Voice casting: OFF"
+        // previously only dropped incoming frames, so the OpenAL device stayed open and Windows
+        // kept the microphone-in-use light on - the one control that reads as "stop listening to
+        // me" was the only gate that did not actually stop.
+        if (!listeningEnabled) return false;
         if (mc.level == null || mc.player == null) return false;
         return !(VoiceSpellsConfig.cSuspendUnfocused && (!mc.isWindowActive() || mc.isPaused()));
     }
