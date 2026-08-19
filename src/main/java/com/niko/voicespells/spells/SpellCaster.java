@@ -280,9 +280,22 @@ public final class SpellCaster {
                 }
             }
 
-            boolean ok = (boolean) cast.invoke(
-                spell, castStack, castLevel, player.level(), player,
-                castSource, triggerCooldown, castSlot);
+            // Mark the cast as ours for the duration of the invoke.
+            //
+            // Iron's Spells' cooldown, level and pre-cast events fire deep inside this call and
+            // carry nothing that says who started it, so SpellRules reads this stamp to tell a
+            // spoken cast from a clicked one. In a finally, because a cast that throws must not
+            // leave the player marked as permanently voice-casting - that would hand them the
+            // voice bonuses for free and, under the ALWAYS rule, let them click-cast forever.
+            boolean ok;
+            SpellRules.beginVoiceCast(player.getUUID(), spellId.toString());
+            try {
+                ok = (boolean) cast.invoke(
+                    spell, castStack, castLevel, player.level(), player,
+                    castSource, triggerCooldown, castSlot);
+            } finally {
+                SpellRules.endVoiceCast(player.getUUID());
+            }
             if (!ok) {
                 feedback(player, "voicespells.cast.failed",
                     spellId.getPath().replace('_', ' '));
@@ -801,7 +814,12 @@ public final class SpellCaster {
      * forgot everyone who logged off. Those are released on server stop instead.
      */
     public static void forgetPlayer(UUID uuid) {
-        if (uuid != null) RECENT_CASTS.remove(uuid);
+        if (uuid == null) return;
+        RECENT_CASTS.remove(uuid);
+        // Drop the in-flight voice-cast stamp too. A player who disconnects mid-cast would
+        // otherwise stay marked as casting until the stamp aged out, and under the ALWAYS
+        // incantation rule that is a window in which their next clicked cast would be allowed.
+        SpellRules.endVoiceCast(uuid);
     }
 
     /**
@@ -813,6 +831,8 @@ public final class SpellCaster {
      * real and is why this is wired to ServerStopped rather than left to process exit.
      */
     public static void clearServerState() {
+        // Learned incantations and any in-flight stamp are per server run, like the totals below.
+        SpellRules.forgetAll();
         RECENT_CASTS.clear();
         SUBSCRIBERS.clear();
         PLAYER_TOTALS.clear();

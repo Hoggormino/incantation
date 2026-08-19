@@ -11,6 +11,9 @@ import org.apache.commons.lang3.tuple.Pair;
 public final class VoiceSpellsServerConfig {
 
     /** Where the spoken spell must be available before voice will cast it. */
+    /** Whether spells may be cast without speaking them. See the config comments. */
+    public enum IncantationRule { OFF, FIRST_CAST, ALWAYS }
+
     public enum CastMode {
         /** Default. Spellbook (an {@code ISpellbook}) in a Curios slot, containing the spell.
          *  Casts via SPELLBOOK source — mana and cooldown apply. */
@@ -42,6 +45,11 @@ public final class VoiceSpellsServerConfig {
         public final ModConfigSpec.BooleanValue        voiceVolumeScaling;
         public final ModConfigSpec.BooleanValue        broadcastVoiceCasts;
         public final ModConfigSpec.IntValue            broadcastRadius;
+        // Requested by a server host running a wizard-battle event: make voice-cast spells
+        // mechanically different from clicked ones, so casting by voice is a real choice.
+        public final ModConfigSpec.IntValue            voiceCooldownPercent;
+        public final ModConfigSpec.IntValue            voiceLevelBonus;
+        public final ModConfigSpec.EnumValue<IncantationRule> incantationOnly;
 
         Server(ModConfigSpec.Builder b) {
             b.push("casting");
@@ -77,6 +85,26 @@ public final class VoiceSpellsServerConfig {
             broadcastVoiceCasts = b.define("broadcastVoiceCasts", false);
             b.comment("Radius in blocks for the voice-cast chat broadcast. 0 = only the caster.");
             broadcastRadius = b.defineInRange("broadcastRadius", 16, 0, 256);
+            b.pop();
+
+            b.push("voiceAdvantage");
+            b.comment("Cooldown applied to a spell cast BY VOICE, as a percentage of normal.",
+                      "100 = no change. 50 = half cooldown. 0 = no cooldown at all.",
+                      "Values above 100 make voice casting cost more, not less.",
+                      "Applies only to casts the mod itself initiated, never to clicked ones.");
+            voiceCooldownPercent = b.defineInRange("voiceCooldownPercent", 100, 0, 300);
+            b.comment("Extra spell levels granted to a spell cast BY VOICE. 0 = no change.",
+                      "Spell level is what Iron's Spells scales damage, duration and count from,",
+                      "so this is the 'voice casts hit harder' knob.");
+            voiceLevelBonus = b.defineInRange("voiceLevelBonus", 0, 0, 5);
+            b.comment("Whether spells may be cast WITHOUT speaking them.",
+                      "OFF        - normal Iron's Spells behaviour (default).",
+                      "FIRST_CAST - a spell must be voice-cast once before it can be clicked;",
+                      "             learning the incantation unlocks the spell for that player.",
+                      "ALWAYS     - spells can only ever be cast by voice.",
+                      "Both non-OFF modes apply to every player on the server, and neither can",
+                      "work unless the client has the mod installed.");
+            incantationOnly = b.defineEnum("incantationOnly", IncantationRule.OFF);
             b.pop();
         }
     }

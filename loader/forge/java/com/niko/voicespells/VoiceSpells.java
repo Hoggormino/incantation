@@ -64,6 +64,9 @@ public final class VoiceSpells {
         // most for the integrated server: statics outlive a world, so without this one
         // world's subscribers and leaderboard leaked into the next.
         com.niko.voicespells.server.ServerLifecycle.register();
+        // See the NeoForge entrypoint: same rules, same reflective hooks, Forge's bus.
+        com.niko.voicespells.spells.SpellRuleEvents.register(
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS);
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
             // Client-only config. Register on the mod bus so values are available before

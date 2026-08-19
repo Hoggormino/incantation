@@ -33,6 +33,11 @@ public final class VoiceSpells {
         // most for the integrated server: statics outlive a world, so without this one
         // world's subscribers and leaderboard leaked into the next.
         com.niko.voicespells.server.ServerLifecycle.register();
+        // Voice-advantage rules (cooldown / power for spoken casts, and the optional
+        // incantation requirement). Hooks Iron's Spells' own events reflectively and no-ops
+        // when it is absent, so this is safe to call unconditionally and on a dedicated server.
+        com.niko.voicespells.spells.SpellRuleEvents.register(
+            net.neoforged.neoforge.common.NeoForge.EVENT_BUS);
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
             // Client-only config. Register on the mod bus so values are available before

@@ -5,22 +5,17 @@
   "key.voicespells.accept_suggestion": "Accept Alias Suggestion",
   "key.voicespells.quick_recast": "Quick Recast Last Spell",
   "key.voicespells.push_to_talk": "Hold To Cast",
-
   "text.voicespells.model_missing": "Incantation: Vosk model not found. Unzip a small English model into %s and try again.",
-
-  "text.voicespells.listening_on":  "Voice casting: ON",
+  "text.voicespells.listening_on": "Voice casting: ON",
   "text.voicespells.listening_off": "Voice casting: OFF",
-  "text.voicespells.hud_on":  "Voice HUD: ON",
+  "text.voicespells.hud_on": "Voice HUD: ON",
   "text.voicespells.hud_off": "Voice HUD: OFF",
-
   "voicespells.config.title": "Iron's Spells: Incantation",
   "voicespells.config.reset": "Reset",
   "voicespells.config.spelllist": "Spell List",
-
   "voicespells.spelllist.title": "Indexed Spells",
   "voicespells.spelllist.search": "Search id or phrase…",
   "voicespells.spelllist.empty": "No spells match",
-
   "voicespells.cast.unknown": "Unknown spell heard",
   "voicespells.cast.failed": "Could not cast %s",
   "voicespells.cast.no_spellbook": "No spellbook or imbued weapon with %s equipped",
@@ -32,7 +27,6 @@
   "voicespells.cast.no_mana": "Not enough mana for %s",
   "voicespells.cast.not_in_curios": "%s found but not in your Curios spellbook slot (switch to ANY_SPELLBOOK to allow hand-held)",
   "voicespells.cast.not_allowed": "Voice casting is not enabled for you on this server",
-
   "advancements.voicespells.root.title": "Voice Casting",
   "advancements.voicespells.root.description": "Say a spell name out loud to cast it",
   "advancements.voicespells.voice_first.title": "Speak the Word",
@@ -48,5 +42,7 @@
   "advancements.voicespells.voice_combo.title": "Combo!",
   "advancements.voicespells.voice_combo.description": "Voice-cast 5 spells in a row without a pause",
   "advancements.voicespells.voice_maestro.title": "Maestro",
-  "advancements.voicespells.voice_maestro.description": "Voice-cast 10 spells in a row without a pause"
+  "advancements.voicespells.voice_maestro.description": "Voice-cast 10 spells in a row without a pause",
+  "voicespells.incantation.always": "%s can only be cast by speaking its name.",
+  "voicespells.incantation.first": "Speak %s once to learn its incantation."
 }
