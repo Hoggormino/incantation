@@ -35,7 +35,18 @@ public final class NeonSlider extends AbstractSliderButton {
     private int current() { return (int) Math.round(min + value * (max - min)); }
 
     @Override protected void updateMessage() {
-        setMessage(Component.literal(label.apply(current())));
+        // Split "Name: value" so the value can carry colour, matching NeonToggle and NeonCycle.
+        // The labeller returns one string, so the split is on the first ": " it contains; a
+        // label without one is drawn plain rather than guessed at.
+        String text = label.apply(current());
+        int sep = text.indexOf(": ");
+        if (sep <= 0) {
+            setMessage(Component.literal(text));
+            return;
+        }
+        setMessage(Component.literal(text.substring(0, sep + 2))
+            .append(Component.literal(text.substring(sep + 2))
+                .withStyle(net.minecraft.ChatFormatting.AQUA)));
     }
     @Override protected void applyValue() {
         onChange.accept(current());

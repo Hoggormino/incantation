@@ -86,8 +86,12 @@ public final class NeonCycle<T> extends Button {
         T v = values[idx];
         boolean locked = isLocked != null && Boolean.TRUE.equals(isLocked.apply(v));
         String text = labeller.apply(v);
-        if (!name.isEmpty()) text = name + ": " + text;
-        setMessage(Component.literal(locked ? "✗ " + text : text));
+        // Same rule as NeonToggle: the NAME is plain and the VALUE carries the colour, so a row
+        // of these can be skimmed for what is set rather than read word by word.
+        Component value = Component.literal(locked ? "✗ " + text : text)
+            .withStyle(locked ? net.minecraft.ChatFormatting.DARK_GRAY
+                              : net.minecraft.ChatFormatting.AQUA);
+        setMessage(name.isEmpty() ? value : Component.literal(name + ": ").append(value));
     }
 
     private void step(int delta) {

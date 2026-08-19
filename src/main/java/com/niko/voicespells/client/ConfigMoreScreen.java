@@ -56,7 +56,7 @@ public final class ConfigMoreScreen extends Screen {
         // Ten actions in two columns is five rows. Counted here rather than hardcoded so adding
         // an eleventh grows the panel instead of silently eating the margin, which is exactly
         // how the last overflow bug happened.
-        final int ACTION_COUNT = 10;
+        final int ACTION_COUNT = 11;
         int rowsNeeded = (ACTION_COUNT + 1) / 2;
         int contentH = Theme.HEADER_H            // title band
                      + rowsNeeded * 24           // the action grid
@@ -107,6 +107,9 @@ public final class ConfigMoreScreen extends Screen {
             b -> { if (minecraft != null) minecraft.setScreen(new VoiceCodexScreen(this)); }));
         grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Diagnostics"),
             b -> { if (minecraft != null) minecraft.setScreen(new DiagnosticsScreen(this)); }));
+        // The Live Monitor moved off the config screen and onto its own, so it needs a door.
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Live Monitor"),
+            b -> { if (minecraft != null) minecraft.setScreen(new LiveMonitorScreen(this)); }));
         grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Help / Guide"),
             b -> { if (minecraft != null) minecraft.setScreen(new HelpScreen(this)); }));
         NeonButton arenaBtn = NeonButton.of(0, 0, colW, 20,

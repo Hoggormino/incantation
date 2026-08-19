@@ -60,7 +60,9 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private static final int TITLE_TOP     = 8;
     private static final int TITLE_H       = 18;
 
-    private enum Tab { RECOGNITION, HUD }
+    /** Three pages, because the mod has 33 settings and the screen was showing nine of them.
+     *  The rest were toml-only, which is also why the screen looked empty: it was empty. */
+    private enum Tab { RECOGNITION, HUD, BEHAVIOUR }
 
     private final Screen parent;
 
@@ -75,6 +77,22 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private int workOffsetX;
     private int workOffsetY;
     private int workOpacityPct; // 0..100 in UI, 0..1 in config
+    // Settings that existed only in the toml until now.
+    private VoiceSpellsConfig.GatingMode workGating;
+    private int     workMinConfPct;     // 0..100 in UI, 0..1 in config
+    private boolean workRequireSneak;
+    private int     workEchoLockout;
+    private boolean workShowMisses;
+    private boolean workAlwaysShowHeard;
+    private boolean workCastVignette;
+    private boolean workStreamer;
+    private boolean workCombatOnly;
+    private boolean workPauseAfk;
+    private int     workAfkSeconds;
+    private boolean workHandsFree;
+    private int     workCastQueue;
+    private boolean workSuspendUnfocused;
+    private boolean workHotbarSelect;
 
     private boolean initializedOnce = false;
     private Tab currentTab = Tab.RECOGNITION;
@@ -86,11 +104,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private int headerY, footerY;
     /** Per-row pitch for the current layout — Theme.ROW_H normally, smaller when the panel is
      *  height-clamped on small windows. Set in init() before the tab builders run. */
-    /** Whether the Live Monitor has room to draw without colliding with the option rows.
-     *  Computed in init() from the grid geometry; read by render(). */
-    private boolean monitorFits = true;
-    /** Whether this layout actually set space aside for the monitor block. */
-    private boolean monitorReserved = false;
 
     /** Theme and palette as they were when the screen opened, plus whether Save ran.
      *
@@ -120,21 +133,26 @@ public final class VoiceSpellsConfigScreen extends Screen {
             workOffsetX    = c.hudOffsetX.get();
             workOffsetY    = c.hudOffsetY.get();
             workOpacityPct = (int) Math.round(c.globalOpacity.get() * 100);
+            workGating          = c.gatingMode.get();
+            workMinConfPct      = (int) Math.round(c.minConfidence.get() * 100);
+            workRequireSneak    = c.requireSneak.get();
+            workEchoLockout     = c.echoLockoutMillis.get();
+            workShowMisses      = c.showMisses.get();
+            workAlwaysShowHeard = c.alwaysShowHeard.get();
+            workCastVignette    = c.castVignette.get();
+            workStreamer        = c.streamerMode.get();
+            workCombatOnly      = c.combatOnly.get();
+            workPauseAfk        = c.pauseWhenAfk.get();
+            workAfkSeconds      = c.afkSeconds.get();
+            workHandsFree       = c.handsFreeConfirm.get();
+            workCastQueue       = c.castQueueSize.get();
+            workSuspendUnfocused = c.suspendWhenUnfocused.get();
+            workHotbarSelect    = c.voiceHotbarSelect.get();
             // Remembered so Cancel can undo the live theme preview — see onClose().
             initializedOnce = true;
         }
-
-        // Monitor only renders on the Recognition tab so the HUD tab stays compact.
-        boolean showMonitor = currentTab == Tab.RECOGNITION && workDebug;
-        // The Live Monitor is a real-time view of what the recognizer is hearing, so it needs
-        // the device open. In single player any open screen pauses the game and
-        // captureAllowedNow() then closes the mic, leaving the monitor permanently blank on
-        // exactly the setup most people tune on. Only while the monitor is actually visible -
-        // the config screen has no business holding the mic open on its other tabs.
-        // Geometry. In panelless mode the content is simply centred on the SCREEN, the way
-        // vanilla options screens are; otherwise it is centred inside a panel sized to hug it.
         panelW = Theme.fit(PANEL_W_PREF, width);
-        panelH = Theme.fit(PANEL_BASE_H + (showMonitor ? MONITOR_H : 0), height);
+        panelH = Theme.fit(PANEL_BASE_H, height);
         panelX = (width  - panelW) / 2;
         panelY = (height - panelH) / 2;
 
@@ -152,49 +170,21 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // other screen in the mod is a centred block, so this one is too; the two rules give
         // it the header/footer framing without pretending there is a list to fill.
         // The monitor is part of the block, not something that squeezes in afterwards.
+        // Header at the top, footer at the bottom, options between: vanilla's own options
+        // layout, and the reason it works at any window size.
         //
-        // blockH never budgeted for it, so the buttons sat directly under the last option
-        // row and the clearance the gate measures — (row1Y - 6) - (gridBottom + 6) — was
-        // exactly 0 against a required 46. The Live Monitor could therefore NEVER draw: the
-        // toggle turned on, held the microphone open, and showed "needs a taller window" on
-        // a 4K display. Budgeting it here moves the buttons down and makes the gate mean
-        // what it says.
-        // The block without the monitor. This part always has to fit.
-        // One rhythm for the whole screen: every row is a 20px control on a 25px pitch, so every
-        // gap between rows is 5px - including the one under the tab bar, which used GAP_MD and
-        // was therefore double the size of the gaps between the options underneath it.
-        int baseH = 22                                   // title + the rule under it
-                  + GRID_ROW                             // tab row, on the same pitch
-                  + gridRows() * GRID_ROW
-                  + 12 + GRID_ROW + 20;                  // the two button rows
-        // ...and the monitor takes whatever room is left over, rather than demanding all of it.
-        //
-        // Three versions of this were wrong in three different ways. It first drew a fixed 156px
-        // with no reservation, straight over the buttons. Reserving the 156 fixed that but let
-        // the block outgrow the window and push Cancel / Done off the bottom. Dropping it
-        // whenever 156 did not fit then meant a 427x240 window — an ordinary 854x480 at GUI
-        // scale 2 — refused to show the monitor at all and just said "needs a taller window",
-        // which is a strange thing for a screen to say about a panel it could perfectly well
-        // have drawn smaller.
-        //
-        // So it scales. It uses up to MONITOR_H, never more than the space that actually exists,
-        // and only declines when what is left cannot even hold a header and a couple of rows.
-        int monitorRoom  = (height - 16) - baseH;
-        int monitorBlock = 0;
-        if (showMonitor && monitorRoom >= MONITOR_MIN) {
-            monitorBlock = Math.min(MONITOR_H, monitorRoom);
-        }
-        int blockH = baseH + monitorBlock;
-        int blockTop = Math.max(8, (height - blockH) / 2);
-
-        titleY   = blockTop;
-        headerY  = blockTop + 14;                        // rule under the title
-        tabsY    = headerY + 8;
-        contentY = tabsY + GRID_ROW;                     // 20px tab + the same 5px gap as the rows
-        monitorReserved = monitorBlock > 0;
-        row1Y    = contentY + gridRows() * GRID_ROW + monitorBlock + 12;
-        row2Y    = row1Y + GRID_ROW;
-        footerY  = row1Y - 8;                            // rule above the buttons
+        // A centred block was the alternative, and it is what this used to be — but a fixed block
+        // in a large window is an island with nothing around it, which is exactly the complaint.
+        // Pinning the two ends means the screen occupies the window it is given, and the options
+        // hang under the header the way a list would. The Live Monitor, which used to fight these
+        // controls for the middle of the screen, has its own screen now.
+        titleY   = 14;
+        headerY  = 32;                                   // rule under the header band
+        tabsY    = headerY + 10;
+        contentY = tabsY + GRID_ROW;                     // 20px tab + the shared 5px gap
+        row2Y    = height - 28;                          // Cancel / Done on the bottom edge
+        row1Y    = row2Y - GRID_ROW;
+        footerY  = row1Y - 10;                           // rule above the footer
 
         // --- Title ---
         StringWidget titleW = new StringWidget(0, titleY, width, 9, title, font);
@@ -212,11 +202,15 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // the buttons under it. Nothing was broken and it looked wrong, which on a screen this
         // sparse is the same thing: with only eight controls on screen, a five-pixel disagreement
         // is the most visible feature of the layout. One metric, one alignment.
-        tabRowY = tabsY; tabRowX = gridX; tabRowW = gridW; tabColW = colW;
-        addRenderableWidget(new TabButton(gridX, tabsY, colW, TAB_H,
+        // Three tabs share the grid width, on the same gutter as everything else.
+        tabRowY = tabsY; tabRowX = gridX; tabRowW = gridW;
+        tabColW = (gridW - COL_GAP * 2) / 3;
+        addRenderableWidget(new TabButton(gridX, tabsY, tabColW, TAB_H,
             "Recognition", Tab.RECOGNITION));
-        addRenderableWidget(new TabButton(gridX + colW + COL_GAP, tabsY, colW, TAB_H,
+        addRenderableWidget(new TabButton(gridX + tabColW + COL_GAP, tabsY, tabColW, TAB_H,
             "HUD", Tab.HUD));
+        addRenderableWidget(new TabButton(gridX + (tabColW + COL_GAP) * 2, tabsY, tabColW, TAB_H,
+            "Behaviour", Tab.BEHAVIOUR));
 
         // --- Tab content: a two-column option grid ---
         //
@@ -224,26 +218,12 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // metric. The old label-plus-control layout needed five and six rows, which is why it
         // had to compress rows on short windows and still collided with the buttons; halving the
         // row count made the whole compression mechanism unnecessary.
-        int gridRows = gridRows();
         gridTop = contentY;
-        buttonsTopY = row1Y;
-        int gridBottom = contentY + gridRows * GRID_ROW;
-        // Enough room for the header line plus a couple of rows, measured against the same
-        // limit renderMonitor() will use. The old check compared free space to a bare 60 while
-        // the monitor drew a fixed 140, so it passed in exactly the cases that then overlapped.
-        // One source of truth: the monitor draws exactly when space was reserved for it. The
-        // sizing above already refused anything under MONITOR_MIN, so re-deriving a second
-        // opinion here from row positions is how the two halves disagreed before.
-        monitorFits = !showMonitor || monitorReserved;
-        // The hold goes HERE, after monitorFits is known — asking for it earlier read the value
-        // left over from the previous init(). Only hold the microphone open when the monitor can
-        // actually be seen: holding it for a block that refuses to draw is the worst of both,
-        // the device open and nothing shown.
-        VoiceController.setDiagnosticCapture("livemonitor", showMonitor && monitorFits);
 
         switch (currentTab) {
             case RECOGNITION -> buildRecognitionTab(gridX, colW, contentY);
             case HUD         -> buildHudTab(gridX, colW, contentY);
+            case BEHAVIOUR   -> buildBehaviourTab(gridX, colW, contentY);
         }
 
         // --- Bottom buttons, two rows (always present, span both tabs) ---
@@ -292,11 +272,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
     }
 
     /** Left edge of the monitor block: the grid's own left edge under either layout. */
-    private int monitorX() {
-        int gridW = Math.min(GRID_W, panelW - 24);
-        return (width - gridW) / 2;
-    }
-
     /** Rows the current tab's options occupy, two per row.
      *
      *  Counted, not hardcoded. It was fixed at 3 for both tabs, which was right only while the
@@ -304,18 +279,18 @@ public final class VoiceSpellsConfigScreen extends Screen {
      *  a hardcoded 3 would have reserved a phantom row and reopened the empty-space problem the
      *  layout was just fixed for. */
     private int gridRows() {
-        int options = currentTab == Tab.HUD ? 4 : 5;
-        return (options + 1) / 2;
+        return (optionCount() + 1) / 2;
     }
 
-    /** Top of the monitor block: directly under the grid rows, in either layout. */
-    private int monitorY() { return gridTop + gridRows() * GRID_ROW + 6; }
-
-    /** The first thing below the monitor that it must not touch: the secondary button row. */
-    private int monitorBottomLimit() { return buttonsTopY - 6; }
-
-    /** Y of the upper button row, recorded by init() so the monitor can measure against it. */
-    private int buttonsTopY;
+    /** How many controls the current tab builds. Kept beside the builders so adding one to a
+     *  tab and forgetting this cannot silently clip the last row. */
+    private int optionCount() {
+        return switch (currentTab) {
+            case RECOGNITION -> 8;
+            case HUD         -> 8;
+            case BEHAVIOUR   -> 8;
+        };
+    }
 
     /** Y the option grid was actually laid out at; the monitor hangs off it. */
     private int gridTop;
@@ -346,10 +321,10 @@ public final class VoiceSpellsConfigScreen extends Screen {
             "Only listen for spells you actually have equipped. Off means every indexed spell "
             + "is a candidate, which makes false matches far more likely.");
 
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Live monitor", workDebug,
-                v -> { workDebug = v; rebuildWidgets(); }), i++, gridX, colW, y),
-            "Show a real-time panel of what the recogniser is hearing, with the match tier for "
-            + "each phrase. Useful while tuning, noisy the rest of the time.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Verbose log", workDebug,
+                v -> workDebug = v), i++, gridX, colW, y),
+            "Log every recognition to the game log at INFO, and keep the Live Monitor's history. "
+            + "The monitor itself lives in More... > Live Monitor.");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workFuzzy, 0, 2,
                 this::fuzzyLabel, v -> workFuzzy = v), i++, gridX, colW, y),
@@ -365,6 +340,37 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 v -> "Repeat gap: " + v + " ms", v -> workDedup = v), i++, gridX, colW, y),
             "Ignore the same spell heard again within this long. Stops one drawn-out word from "
             + "casting twice.");
+
+        help(slot(NeonCycle.named(0, 0, colW, 20, "Listen", VoiceSpellsConfig.GatingMode.values(),
+                workGating, VoiceSpellsConfigScreen::prettyGating, v -> workGating = v),
+                i++, gridX, colW, y),
+            "When the microphone is open at all. Hold item is the default: it listens only while "
+            + "you are holding a spellbook, staff or imbued weapon, or wearing one in a Curios "
+            + "slot. Always on listens whenever you are in a world.");
+
+        help(slot(new NeonSlider(0, 0, colW, 20, workMinConfPct, 0, 100,
+                v -> "Confidence: " + v + "%", v -> workMinConfPct = v), i++, gridX, colW, y),
+            "How sure the recogniser has to be before a phrase counts. Higher means fewer wrong "
+            + "casts and more phrases ignored.");
+
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Sneak to cast", workRequireSneak,
+                v -> workRequireSneak = v), i++, gridX, colW, y),
+            "Require holding sneak while speaking. A strong filter if you talk on voice chat "
+            + "while playing.");
+
+        help(slot(new NeonSlider(0, 0, colW, 20, workEchoLockout, 0, 10000,
+                v -> "Echo guard: " + v + " ms", v -> workEchoLockout = v), i++, gridX, colW, y),
+            "Ignore the microphone briefly after a cast, so the game's own sound coming back "
+            + "through your speakers cannot trigger another one.");
+    }
+
+    private static String prettyGating(VoiceSpellsConfig.GatingMode m) {
+        return switch (m) {
+            case ALWAYS_ON          -> "Always on";
+            case HOLD_KEY           -> "Hold key";
+            case HOLD_ITEM          -> "Hold item";
+            case HOLD_KEY_AND_ITEM  -> "Key + item";
+        };
     }
 
     private void buildHudTab(int gridX, int colW, int y) {
@@ -398,6 +404,61 @@ public final class VoiceSpellsConfigScreen extends Screen {
         help(slot(new NeonSlider(0, 0, colW, 20, workOpacityPct, 0, 100,
                 v -> "Opacity: " + v + "%", v -> workOpacityPct = v), i++, gridX, colW, y),
             "How solid the HUD is over the world.");
+
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Show misses", workShowMisses,
+                v -> workShowMisses = v), i++, gridX, colW, y),
+            "Show phrases the recogniser heard but could not match. Useful while learning which "
+            + "names it struggles with; noise once you know.");
+
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Show heard", workAlwaysShowHeard,
+                v -> workAlwaysShowHeard = v), i++, gridX, colW, y),
+            "Print everything heard to chat, matched or not.");
+
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Cast vignette", workCastVignette,
+                v -> workCastVignette = v), i++, gridX, colW, y),
+            "Screen-edge glow while a long spell is being cast.");
+
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Streamer mode", workStreamer,
+                v -> workStreamer = v), i++, gridX, colW, y),
+            "Hide anything that would expose what you said on stream.");
+    }
+
+    private void buildBehaviourTab(int gridX, int colW, int y) {
+        int i = 0;
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Combat only", workCombatOnly,
+                v -> workCombatOnly = v), i++, gridX, colW, y),
+            "Only cast while something hostile is nearby. Stops conversation casting spells "
+            + "while you are building.");
+
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Pause when AFK", workPauseAfk,
+                v -> workPauseAfk = v), i++, gridX, colW, y),
+            "Stop listening after a spell of no input.");
+
+        help(slot(new NeonSlider(0, 0, colW, 20, workAfkSeconds, 5, 600,
+                v -> "AFK after: " + v + " s", v -> workAfkSeconds = v), i++, gridX, colW, y),
+            "How long counts as away.");
+
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Pause unfocused", workSuspendUnfocused,
+                v -> workSuspendUnfocused = v), i++, gridX, colW, y),
+            "Release the microphone entirely while the game window is not focused, so other "
+            + "applications can use it and the OS microphone light goes out.");
+
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Hands-free confirm", workHandsFree,
+                v -> workHandsFree = v), i++, gridX, colW, y),
+            "Say yes or no to answer the mod's prompts instead of pressing a key.");
+
+        help(slot(new NeonSlider(0, 0, colW, 20, workCastQueue, 1, 5,
+                v -> "Queue: " + v, v -> workCastQueue = v), i++, gridX, colW, y),
+            "How many casts may wait in line when you speak faster than spells can fire.");
+
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Voice hotbar", workHotbarSelect,
+                v -> workHotbarSelect = v), i++, gridX, colW, y),
+            "Let \"slot one\" through \"slot nine\" change your held item.");
+
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Owned only", workRestrictToOwned,
+                v -> workRestrictToOwned = v), i++, gridX, colW, y),
+            "Duplicate of the Recognition tab's setting, kept here because it decides what the "
+            + "mod will act on as much as what it will hear.");
 
     }
 
@@ -436,12 +497,30 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 workSubstring = true;
                 workDedup     = 800;
                 workRestrictToOwned = true;
+                workGating       = VoiceSpellsConfig.GatingMode.HOLD_ITEM;
+                workMinConfPct   = 55;
+                workRequireSneak = false;
+                workEchoLockout  = 1500;
             }
             case HUD -> {
                 workCorner    = VoiceSpellsConfig.Corner.BOTTOM_LEFT;
                 workOffsetX   = 5;
                 workOffsetY   = 28;
                 workOpacityPct = 100;
+                workShowMisses      = true;
+                workAlwaysShowHeard = false;
+                workCastVignette    = false;
+                workStreamer        = false;
+            }
+            case BEHAVIOUR -> {
+                workCombatOnly       = false;
+                workPauseAfk         = false;
+                workAfkSeconds       = 60;
+                workSuspendUnfocused = true;
+                workHandsFree        = false;
+                workCastQueue        = 3;
+                workHotbarSelect     = false;
+                workRestrictToOwned  = true;
             }
         }
         rebuildWidgets();
@@ -458,6 +537,22 @@ public final class VoiceSpellsConfigScreen extends Screen {
         c.hudOffsetX.set(workOffsetX);
         c.hudOffsetY.set(workOffsetY);
         c.globalOpacity.set(workOpacityPct / 100.0);
+        // The settings that used to be toml-only.
+        c.gatingMode.set(workGating);
+        c.minConfidence.set(workMinConfPct / 100.0);
+        c.requireSneak.set(workRequireSneak);
+        c.echoLockoutMillis.set(workEchoLockout);
+        c.showMisses.set(workShowMisses);
+        c.alwaysShowHeard.set(workAlwaysShowHeard);
+        c.castVignette.set(workCastVignette);
+        c.streamerMode.set(workStreamer);
+        c.combatOnly.set(workCombatOnly);
+        c.pauseWhenAfk.set(workPauseAfk);
+        c.afkSeconds.set(workAfkSeconds);
+        c.handsFreeConfirm.set(workHandsFree);
+        c.castQueueSize.set(workCastQueue);
+        c.suspendWhenUnfocused.set(workSuspendUnfocused);
+        c.voiceHotbarSelect.set(workHotbarSelect);
         // set() alone does not reach the disk on NeoForge - see VoiceSpellsConfig.saveToDisk().
         VoiceSpellsConfig.saveToDisk();
         // set() persists but the reload event is debounced — refresh cache now so the mic
@@ -506,131 +601,31 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
         super.render(g, mouseX, mouseY, partial);
 
-        // Tabs, drawn the way tabs have always been drawn: the selected one is joined to the
-        // content, the other one sits behind a rule.
+        // Tab selection, made obvious rather than subtle.
         //
-        // Two earlier attempts read wrong. Setting the current tab inactive used vanilla's
-        // DISABLED sprite, so it looked broken rather than selected; making both plain buttons
-        // then made the row indistinguishable from the options below it, and a bright underline
-        // on its own just looked like a stray line. What actually says "tab" is the CONTENT
-        // EDGE: a rule runs under the row, and it BREAKS under the tab you are on, so that tab
-        // and the panel below it are visibly one surface. The other tab is dimmed to sit behind.
-        int ruleY  = tabRowY + TAB_H;
-        int leftX  = tabRowX;
-        int rightX = tabRowX + tabColW + COL_GAP;
-        boolean recogOn = currentTab == Tab.RECOGNITION;
-        int unselX = recogOn ? rightX : leftX;
-
-        // The content edge, everywhere except under the selected tab.
-        g.fill(unselX, ruleY, unselX + tabColW, ruleY + 1, 0x70FFFFFF);
-        g.fill(tabRowX + tabColW, ruleY, rightX, ruleY + 1, 0x70FFFFFF);
-        // Push the unselected tab back.
-        g.fill(unselX, tabRowY, unselX + tabColW, ruleY, 0x55000000);
+        // A thin rule was too quiet to read at a glance - the two tabs still looked like two
+        // buttons. The unselected tabs are now pushed well back with a heavy dim and the
+        // selected one keeps a bright edge along its bottom that runs into the content, so the
+        // difference is visible without looking for it.
+        int ruleY = tabRowY + TAB_H;
+        for (Tab t : Tab.values()) {
+            int tx = tabRowX + t.ordinal() * (tabColW + COL_GAP);
+            if (t == currentTab) {
+                g.fill(tx, ruleY - 2, tx + tabColW, ruleY + 1, 0xFFFFFFFF);
+            } else {
+                g.fill(tx, tabRowY, tx + tabColW, ruleY, 0x99000000);
+                g.fill(tx, ruleY, tx + tabColW, ruleY + 1, 0x60FFFFFF);
+            }
+        }
 
         // No accent rule under the title and no divider under the tabs. Neither exists in any
         // vanilla screen: a container has its title sitting straight on the panel, and an
         // options screen has nothing but the title and the buttons. Both lines were decoration
         // holding the two halves of the screen apart, and removing them is what lets the panel
         // shrink to hug its content.
-
-        if (currentTab == Tab.RECOGNITION && workDebug) {
-            if (monitorFits) {
-                renderMonitor(g);
-            } else {
-                // Silently dropping it would read as a broken toggle, so state the reason.
-                // At gridBottom, not monitorY(): monitorY() is the top of a block that does not
-                // fit, which on a short window is under the buttons.
-                Theme.text(g, font, "Live Monitor needs a taller window",
-                    monitorX(), gridTop + gridRows() * GRID_ROW + 6, Theme.C_WARN);
-            }
-        }
     }
 
-    private void renderMonitor(GuiGraphics g) {
-        int mx = monitorX();
-        // Anchor the monitor right under the last row of the Recognition tab. We now have
-        // 5 rows there (added "Only owned spells"), so step down by ROW_H*5 plus the tab-bar
-        // and gap offsets.
-        int my = monitorY();
-        int mw = Math.min(GRID_W, panelW - 24);
-        // Height from the space init() actually set aside, measured from BELOW the header.
-        //
-        // This subtracted the header's 11px after computing mh rather than before, so the well
-        // ran 7px past its own limit and clipped the top of the button row. The limit derives
-        // from the button row, so honouring it exactly is the whole point.
-        final int HEADER_LINE = 11;
-        int mh = Math.max(0, monitorBottomLimit() - (my + HEADER_LINE) - 4);
 
-        // Live JVM heap stat — gives the user a sanity check on whether the recogniser is
-        // bloating memory (it shouldn't; Vosk is C++, but the bridging buffers + grammar grow
-        // with the spell index).
-        Runtime rt = Runtime.getRuntime();
-        long usedMb  = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
-        long totalMb = rt.totalMemory() / (1024 * 1024);
-        String heap = " · heap " + usedMb + "/" + totalMb + "MB";
-        g.drawString(font, Component.literal("LIVE MONITOR" + heap), mx, my, Theme.C_TEXT, !Theme.lightSurface());
-        int meterX = mx + font.width("LIVE MONITOR" + heap) + 10;
-        int meterW = mw - (meterX - mx);
-        drawWaveform(g, meterX, my, meterW, 8);
-        my += HEADER_LINE;
-        g.fill(mx, my, mx + mw, my + mh, Theme.C_INSET);
-        Theme.insetShadow(g, mx, my, mw);
-        Theme.roundedFrame(g, mx, my, mw, mh, Theme.C_DIVIDER);
-
-        List<VoiceController.RecognitionEvent> events = VoiceController.recentEvents();
-        if (events.isEmpty()) {
-            g.drawString(font, Component.literal("(say a spell — entries appear here)"),
-                mx + 4, my + 4, Theme.C_FAINT, !Theme.lightSurface());
-            return;
-        }
-        long now = System.nanoTime();
-        int rowY = my + 4;
-        int lineH = 11;
-        int maxRows = (mh - 8) / lineH;
-        for (int i = 0; i < events.size() && i < maxRows; i++) {
-            VoiceController.RecognitionEvent e = events.get(i);
-            long ageSec = TimeUnit.NANOSECONDS.toSeconds(now - e.nanoTime());
-            int color;
-            String outcome;
-            if (e.matched() == null) {
-                color = Theme.F_NOMATCH;
-                outcome = "— no match";
-            } else if (e.matched().endsWith("(deduped)")) {
-                color = Theme.F_DEDUP;
-                outcome = "↻ " + shortId(e.matched().replace(" (deduped)", "")) + " (dup)";
-            } else {
-                color = Theme.F_MATCH;
-                outcome = "→ " + shortId(e.matched());
-            }
-            String conf = String.format(Locale.ROOT, "c%.2f", e.confidence());
-            String tier = e.tier() == ' ' ? " " : String.valueOf(e.tier());
-            String line = String.format(Locale.ROOT, "%2ds %s [%s] \"%s\" %s",
-                ageSec, conf, tier, truncate(e.heard(), 16), outcome);
-            g.drawString(font, Component.literal(line), mx + 4, rowY, color, !Theme.lightSurface());
-            rowY += lineH;
-        }
-    }
-
-    /** Rolling waveform of recent audio levels — looks alive when you speak, flatlines when
-     *  quiet. Replaces the older single-bar meter for more diagnostic value. */
-    private static void drawWaveform(GuiGraphics g, int x, int y, int w, int h) {
-        if (w < 12) return;
-        g.fill(x, y, x + w, y + h, Theme.C_INSET);
-        Theme.roundedFrame(g, x, y, w, h, Theme.C_DIVIDER);
-        float[] data = VoiceController.waveformSnapshot();
-        int bars = data.length;
-        float barW = (float) (w - 4) / bars;
-        for (int i = 0; i < bars; i++) {
-            int barX = x + 2 + (int) (i * barW);
-            int barNextX = x + 2 + (int) ((i + 1) * barW);
-            int barH = Math.max(1, (int) (data[i] * (h - 4)));
-            int barY = y + h - 2 - barH;
-            // Newest bars get the brighter neon — the rightmost columns are the most recent
-            // ~1.5s, draw the recent ones brighter so the eye reads the trace direction.
-            int color = (i > bars * 3 / 4) ? 0xFFFFFFFF : 0xFFA0A0A0;
-            g.fill(barX, barY, Math.max(barX + 1, barNextX - 1), y + h - 2, color);
-        }
-    }
 
     private static String shortId(String id) {
         int colon = id.indexOf(':');

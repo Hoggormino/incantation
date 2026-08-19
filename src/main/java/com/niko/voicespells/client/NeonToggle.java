@@ -56,9 +56,19 @@ public final class NeonToggle extends Button {
         return new NeonToggle(x, y, w, h, name, initial, onChange);
     }
 
+    /**
+     * "Name: VALUE", with the value carrying the colour.
+     *
+     * <p>Every control being the same grey made the screen read as a wall of identical boxes with
+     * no way to skim it. Colouring only the VALUE - green for on, grey for off - means a glance
+     * tells you what is enabled without reading a word, and it costs no extra chrome: the styling
+     * rides on the Component, which vanilla's own button renderer already draws.
+     */
     private static Component label(String name, boolean v) {
-        String state = v ? "ON" : "OFF";
-        return Component.literal(name.isEmpty() ? state : name + ": " + state);
+        Component state = Component.literal(v ? "ON" : "OFF")
+            .withStyle(v ? net.minecraft.ChatFormatting.GREEN : net.minecraft.ChatFormatting.GRAY);
+        if (name.isEmpty()) return state;
+        return Component.literal(name + ": ").append(state);
     }
 
     public boolean value() { return value; }
