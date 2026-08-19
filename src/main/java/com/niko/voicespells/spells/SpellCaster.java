@@ -288,9 +288,17 @@ public final class SpellCaster {
                     spellId.getPath().replace('_', ' '));
             } else {
                 appendCastLog(player, spellId);
-                fireVoiceCastTrigger(player, spell, spellClass, totalCasts, streak);
                 broadcastNearby(player, spellId);
-                recordPlayerTotal(player.getUUID(), player.getName().getString(), totalCasts);
+                // Count on the SERVER first, then award from the server's number.
+                //
+                // totalCasts and streak arrive in the packet, i.e. from the client, and
+                // recordPlayerTotal was already hardened against them for the leaderboard. The
+                // advancement trigger was still being handed the raw client values, so a crafted
+                // packet could claim any milestone it liked. Using the value the server just
+                // recorded closes that without changing anything for an honest client.
+                int serverTotal = recordPlayerTotal(
+                    player.getUUID(), player.getName().getString(), totalCasts);
+                fireVoiceCastTrigger(player, spell, spellClass, serverTotal, streak);
             }
             return ok;
         } catch (ClassNotFoundException missing) {
@@ -835,7 +843,7 @@ public final class SpellCaster {
         new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.Map<java.util.UUID, String>  PLAYER_NAMES  =
         new java.util.concurrent.ConcurrentHashMap<>();
-    static void recordPlayerTotal(java.util.UUID uuid, String name, int clientTotal) {
+    static int recordPlayerTotal(java.util.UUID uuid, String name, int clientTotal) {
         // Count server-side rather than believing the number in the packet.
         //
         // This used to be merge(uuid, clientTotal, Math::max) on a value the client supplies,
@@ -844,8 +852,11 @@ public final class SpellCaster {
         // map is not persisted per-world but does live for the whole server run. Counting the
         // casts we actually authorised is both untrusted-input-free and a more honest answer
         // to "who has voice-cast the most on this server".
-        PLAYER_TOTALS.merge(uuid, 1, Integer::sum);
+        int serverTotal = PLAYER_TOTALS.merge(uuid, 1, Integer::sum);
         PLAYER_NAMES.put(uuid, name);
+        // Returned so the advancement trigger can award from the same trusted number rather
+        // than from the one in the packet.
+        return serverTotal;
     }
     public static java.util.List<java.util.Map.Entry<String, Integer>> topPlayers(int limit) {
         java.util.List<java.util.Map.Entry<java.util.UUID, Integer>> entries =

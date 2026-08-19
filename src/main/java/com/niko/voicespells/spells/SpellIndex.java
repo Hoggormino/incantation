@@ -67,7 +67,16 @@ public final class SpellIndex {
     /** Loadout name → ordered list of spell ids to try in that order. Populated from the
      *  {@code loadouts} config list at index time. Lookup is exact-name only to keep
      *  semantics predictable. */
-    private static final Map<String, List<ResourceLocation>> LOADOUTS = new LinkedHashMap<>();
+    /**
+     * Loadout categories, read from the CAPTURE thread and rebuilt on the main thread.
+     *
+     * <p>A LinkedHashMap that reindex clear()s and then repopulates is not safe to read
+     * concurrently: a lookup landing mid-rebuild can see an empty map (a loadout phrase silently
+     * doing nothing) or, on a resize, an inconsistent one. ConcurrentHashMap makes the reader's
+     * view always coherent — worst case it sees the old or the new entry, never a broken table.
+     * Insertion order is not relied on: lookups are by key.
+     */
+    private static final Map<String, List<ResourceLocation>> LOADOUTS = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** Soundex code (per-word, hyphen-joined) → spell ids that hash to that code. Computed once
      *  after the phrase index is built; powers {@link #phoneticLookup(String)} as the final
@@ -600,7 +609,16 @@ public final class SpellIndex {
                 if (override == null) {
                     List<String> extras = ALIASES.get(defaultPhrase);
                     if (extras != null) {
-                        for (String alias : extras) phraseToId.put(alias, id);
+                        for (String alias : extras) {
+                            // Same guard as the primary phrase: an alias that collides used to
+                            // overwrite whatever held the phrase, silently. Tagged so the player
+                            // knows the fix is to drop the colliding override, not rename a spell.
+                            ResourceLocation prevAlias = phraseToId.putIfAbsent(alias, id);
+                            if (prevAlias != null && !prevAlias.equals(id)) {
+                                phraseCollisions.add(alias + "  ->  " + prevAlias + "  /  "
+                                    + idString + "  (alias)");
+                            }
+                        }
                     }
                 }
             } catch (Throwable inner) {
@@ -624,8 +642,12 @@ public final class SpellIndex {
         applyPhraseList(phraseToId, clientList(c -> c.incantations.get()), "incantation");
         // Loadouts come after phrase overrides so loadout names land in the grammar; they're
         // resolved separately (LOADOUTS map) to pick the first castable spell at recognition time.
-        applyLoadouts(phraseToId);
+        // Blocklist FIRST. It used to run after loadouts, and it only removes phrases whose
+        // target is blocked — so a blocked spell still sat inside a loadout's id list and the
+        // runtime picker happily chose it. "Blocked" has to mean blocked everywhere, or the
+        // setting is a trap: the player believes a spell can no longer fire and it still does.
         applyBlocklist(phraseToId);
+        applyLoadouts(phraseToId);
 
         // Build the Soundex bucket map for the phonetic fallback. Done last so it sees the
         // final phrase set (including custom phrases, incantations, loadout names) and skips
@@ -690,6 +712,16 @@ public final class SpellIndex {
 /*                ids.add(parsed);
 *///?}
             }
+            // Drop blocked spells from the category, and drop the category if nothing survives.
+            // Without this a blocked spell stayed reachable by saying its loadout name.
+            if (!blockedIds.isEmpty()) {
+                int before = ids.size();
+                ids.removeIf(candidate -> blockedIds.contains(candidate.toString()));
+                if (ids.size() != before) {
+                    VoiceSpells.LOGGER.info("Loadout \"{}\": dropped {} blocked spell(s)",
+                        name, before - ids.size());
+                }
+            }
             if (ids.isEmpty()) continue;
             LOADOUTS.put(name, List.copyOf(ids));
             // Fallback target so the phrase reaches the grammar even if lookupLoadout isn't
@@ -704,7 +736,15 @@ public final class SpellIndex {
      *  or {@code null} if the phrase isn't a known loadout. */
     public static List<ResourceLocation> lookupLoadout(String phrase) {
         if (phrase == null) return null;
-        return LOADOUTS.get(normalize(phrase));
+        List<ResourceLocation> ids = LOADOUTS.get(normalize(phrase));
+        if (ids == null || blockedIds.isEmpty()) return ids;
+        // Second gate at the runtime path: the config can change between a reindex and a cast,
+        // and "blocked" is a promise that should not depend on which order two lists were parsed.
+        List<ResourceLocation> allowed = new ArrayList<>(ids.size());
+        for (ResourceLocation id : ids) {
+            if (!blockedIds.contains(id.toString())) allowed.add(id);
+        }
+        return allowed.isEmpty() ? null : allowed;
     }
 
     /**
@@ -713,7 +753,12 @@ public final class SpellIndex {
      * grammar, so Vosk won't even listen for them — the safest way to keep voice from
      * triggering an addon spell that crashes with the user's other mods.
      */
+    /** Ids the player has blocked, as of the last {@link #applyBlocklist} call. Read by
+     *  {@link #applyLoadouts} so a blocked spell cannot be reached through a category either. */
+    private static volatile java.util.Set<String> blockedIds = java.util.Set.of();
+
     private static void applyBlocklist(Map<String, ResourceLocation> phraseToId) {
+        blockedIds = java.util.Set.of();
         List<? extends String> entries;
         try {
             entries = com.niko.voicespells.VoiceSpellsConfig.CLIENT.blockedSpells.get();
@@ -726,6 +771,7 @@ public final class SpellIndex {
             if (e != null && !e.isBlank()) blocked.add(e.trim());
         }
         if (blocked.isEmpty()) return;
+        blockedIds = java.util.Set.copyOf(blocked);
         int before = phraseToId.size();
         phraseToId.values().removeIf(id -> blocked.contains(id.toString()));
         int removed = before - phraseToId.size();

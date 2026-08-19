@@ -490,7 +490,13 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         public void onClick(double mx, double my) {
             // Ignore clicks in the scrollbar gutter (rightmost ~8px).
             if (mx > getX() + getWidth() - 8) return;
-            int row = (int) ((my - getY()) / ROW_H) + clampScroll();
+            // Only rows that were actually DRAWN are clickable. The well is rarely an exact
+            // multiple of ROW_H, so a strip of empty list sits under the last row — clicking it
+            // computed a row one past the visible page and silently selected, and clipboard-
+            // copied, a spell the player could not see.
+            int visibleRow = (int) ((my - getY()) / ROW_H);
+            if (visibleRow < 0 || visibleRow >= rowsVisible) return;
+            int row = visibleRow + clampScroll();
             if (row >= 0 && row < filtered.size()) {
                 String id = filtered.get(row).id();
                 if (minecraft != null) minecraft.keyboardHandler.setClipboard(id);

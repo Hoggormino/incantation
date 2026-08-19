@@ -124,9 +124,8 @@ public final class ConfigMoreScreen extends Screen {
             b -> {
                 if (!VoiceController.isCalibrating()) {
                     VoiceController.startNoiseGateCalibration();
-                    // C_WARN means "in progress", which is what this is.
-                    // palette, so on the light container panel it is a pastel on pale grey. C_WARN
-                    // is palette-derived and means "in progress", which is what this is.
+                    // C_WARN, which means "in progress" - this used to use the theme accent,
+                    // back when there was one.
                     flashStatus("Calibrating — say a few spell names…", Theme.C_WARN);
                 }
             });
@@ -196,6 +195,11 @@ public final class ConfigMoreScreen extends Screen {
         VoiceSpellsConfig.Client c = VoiceSpellsConfig.CLIENT;
         StringBuilder sb = new StringBuilder();
         sb.append(PROFILE_HEADER).append('\n');
+        // gatingMode and restrictToOwned decide WHEN the mod listens and WHAT it will match -
+        // arguably the two most consequential settings there are - and a profile that omitted
+        // them silently handed the importer someone else's tuning on top of their own gating.
+        sb.append("gatingMode=").append(c.gatingMode.get().name()).append('\n');
+        sb.append("restrictToOwned=").append(c.restrictToOwned.get()).append('\n');
         sb.append("debugMonitor=").append(c.debugMonitor.get()).append('\n');
         sb.append("fuzzyMaxDistance=").append(c.fuzzyMaxDistance.get()).append('\n');
         sb.append("substringMatch=").append(c.substringMatch.get()).append('\n');
@@ -285,6 +289,11 @@ public final class ConfigMoreScreen extends Screen {
             case "triggerWord":       c.triggerWord.set(val); return true;
             case "showMisses":        c.showMisses.set(Boolean.parseBoolean(val)); return true;
             case "enableEchoSfx":     c.enableEchoSfx.set(Boolean.parseBoolean(val)); return true;
+            case "gatingMode":
+                c.gatingMode.set(VoiceSpellsConfig.GatingMode.valueOf(
+                    val.trim().toUpperCase(Locale.ROOT)));
+                return true;
+            case "restrictToOwned":   c.restrictToOwned.set(Boolean.parseBoolean(val)); return true;
             case "streamerMode":      c.streamerMode.set(Boolean.parseBoolean(val)); return true;
             case "sassMode":          c.sassMode.set(Boolean.parseBoolean(val)); return true;
             case "castQueueSize":     c.castQueueSize.set(Integer.parseInt(val.trim())); return true;

@@ -456,10 +456,10 @@ public final class ClientEvents {
             int chipH = 12;
             int x = (w - chipW) / 2;
             int y = h / 2 + 16; // just under the crosshair
-            // Background + frame. World HUD overlays read best on dark regardless of menu
-            // palette — light cream behind text on a bright sky becomes unreadable — so the
-            // chip background is intentionally fixed-dark. Only the accent border follows
-            // the current theme.
+            // Background + frame. A world HUD overlay reads best on dark whatever else is going
+            // on — light text-on-cream over a bright sky is unreadable — so the chip background
+            // is deliberately fixed dark and the border is plain white. There is no theme colour
+            // to follow any more, and this is drawn over scenery rather than over a panel.
             g.fill(x, y, x + chipW, y + chipH, 0xAA0A0A12);
             int border = 0xAAFFFFFF;
             g.fill(x, y, x + chipW, y + 1, border);
@@ -635,7 +635,7 @@ public final class ClientEvents {
          * <p>Three states, deliberately distinct at a glance:
          * <ul>
          *   <li><b>idle</b> (faint) — capture suspended or gate closed: not listening.</li>
-         *   <li><b>armed</b> (accent) — listening, nothing above the noise gate yet.</li>
+         *   <li><b>armed</b> (light grey) — listening, nothing above the noise gate yet.</li>
          *   <li><b>listening</b> (bright, pulsing) — audio is passing the gate and reaching Vosk.</li>
          * </ul>
          */
@@ -647,10 +647,18 @@ public final class ClientEvents {
             // Fixed greys for the non-accent states — C_FAINT/C_MUTED are PALETTE text tones
             // and the palette is now light by default, which made these invisible or wrong over
             // the world. Same rule as the meter track above: fixed colours only.
-            int dotColor = VoiceController.deviceSilent() ? 0xFFFF6166
-                         : !armed ? 0xFFA0A0A0
+            // Three states, three colours.
+            //
+            // Deleting the accent left "armed" and "idle" both on 0xFFA0A0A0, which collapsed the
+            // chip to two states — and this chip is the mod's ONLY listening indicator. With the
+            // default HOLD_ITEM gating, "mic closed" is the normal resting state, so a player
+            // holding their spellbook saw exactly the same grey dot as with it stowed and had no
+            // way to confirm the mic had opened short of talking and hoping. Idle is now clearly
+            // darker than armed.
+            int dotColor = VoiceController.deviceSilent() ? 0xFFFF6166   // red: open but silent
+                         : !armed ? 0xFF585858                          // dark grey: not listening
                          : hot    ? Theme.withPulsedAlpha(Theme.C_HL & 0x00FFFFFF, 0.75f, 1.0f)
-                                  : Theme.C_HL_DIM;
+                                  : Theme.C_HL_DIM;                     // light grey: armed
 
             boolean calibrating = VoiceController.isTranscribing();
             // A device that is open and delivering pure silence is the one failure the chip could

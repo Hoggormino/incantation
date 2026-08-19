@@ -97,9 +97,24 @@ public final class Phrasebook {
                 loadFailed = true;
                 return;
             }
-            JsonObject spells = root.getAsJsonObject().getAsJsonObject("spells");
+            JsonObject rootObj = root.getAsJsonObject();
+            JsonObject spells = rootObj.getAsJsonObject("spells");
             if (spells == null) {
-                // Valid JSON, just no "spells" object yet (e.g. user wiped the file to bootstrap fresh).
+                // An EMPTY root is a legitimate bootstrap ("{}" — the user wiped it to start
+                // over) and it is safe to rewrite. A root with content but no "spells" key is
+                // something else entirely: a file whose structure we do not understand, quite
+                // possibly a hand-edit in progress or a different tool's format. Treating that as
+                // "no overrides" and then rewriting it destroyed every override in it. When in
+                // doubt, refuse and keep the file.
+                boolean emptyRoot = rootObj.entrySet().stream()
+                    .allMatch(e -> e.getKey().startsWith("_"));   // "_help" is ours
+                if (!emptyRoot) {
+                    VoiceSpells.LOGGER.warn("phrasebook.json has no \"spells\" object but is not "
+                        + "empty — refusing to rewrite it. Fix or remove the file; your overrides "
+                        + "are untouched.");
+                    loadFailed = true;
+                    return;
+                }
                 overrides = new LinkedHashMap<>();
                 defaultsFromFile = new LinkedHashMap<>();
                 loadFailed = false;

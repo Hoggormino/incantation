@@ -72,13 +72,20 @@ public final class DiagnosticsScreen extends Screen {
         list = new DiagList(listX, listY, listW, listH);
         addRenderableWidget(list);
 
+        // Divide the row that exists between the three buttons. Fixed widths (90 / 108 / 80)
+        // need 332 logical pixels; below that "Copy report" overlapped "Back" and, being
+        // registered first, swallowed the click — so on a small window Back was unreachable and
+        // Escape was the only way out.
         int btnY = py + panelH - 28;
-        int btnW = 90;
-        addRenderableWidget(NeonButton.of(px + Theme.PAD, btnY, btnW, 20,
+        int gap  = 6;
+        int avail = panelW - Theme.PAD * 2;
+        int btnW = Math.min(96, (avail - gap * 2) / 3);
+        int x0 = px + Theme.PAD;
+        addRenderableWidget(NeonButton.of(x0, btnY, btnW, 20,
             Component.literal("Re-run"), b -> rerun()));
-        addRenderableWidget(NeonButton.of(px + Theme.PAD + btnW + 6, btnY, btnW + 18, 20,
+        addRenderableWidget(NeonButton.of(x0 + btnW + gap, btnY, btnW, 20,
             Component.literal("Copy report"), b -> copyReport()));
-        addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 80, btnY, 80, 20,
+        addRenderableWidget(NeonButton.of(x0 + (btnW + gap) * 2, btnY, btnW, 20,
             CommonComponents.GUI_BACK, b -> onClose()));
     }
 

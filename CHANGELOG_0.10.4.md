@@ -39,17 +39,25 @@ Three things changed:
 
 ## The UI looks like Minecraft now
 
-Every screen has been redone in the style of the game's own container screens — the
-understated look mods like Simple Voice Chat use. Light stone panels, vanilla buttons and
-sliders, tabs that press in like the creative inventory, dark unshadowed text, and the
-blurred-world backdrop behind menus. The neon-purple panels are gone.
+Every screen has been redone in the layout Minecraft uses for its own settings screens: no panel at all, the blurred world behind,
+white shadowed text, and the header and footer rules the game draws. Every control is now a real
+vanilla widget rather than a hand-drawn imitation, so buttons and sliders match the rest of the
+game exactly — and follow your resource pack if you use one.
 
 The HUD is quieter too: new installs show plain shadowed text over the world with no chip
 behind it, like the vanilla action bar. Existing configs keep whatever you had; set
 `background` in the `[colors]` section to taste.
 
-Your unlocked theme colours still exist and are still earned the same way — they are just
-used sparingly now instead of everywhere.
+**Removed: theme colours and menu palettes.** The ten accent presets (including the ones unlocked
+by cast milestones) and the four surface palettes are gone, and the `themePreset` and `uiPalette`
+keys are dropped from your config the first time 0.10.4 loads. Nothing else in your config is
+touched.
+
+There is one style now, and it is the game's own. Every screen having to stay legible against
+forty combinations of surface and accent was the direct cause of a long tail of unreadable-text
+bugs, and a settings screen tinted in a chosen colour reads as a mod skin rather than as part of
+Minecraft. The one place a personal colour still makes sense — the in-world HUD — keeps its
+highlight.
 
 ## Also fixed
 

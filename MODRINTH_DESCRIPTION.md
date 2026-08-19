@@ -64,8 +64,6 @@ beside it.
 - **HUD chip** — corner-anchored chips showing a live mic indicator and level meter, plus last
   cast, recent cast history, queued spells, miss toast, the last phrase heard, and "did you
   mean…?" alias suggestions.
-- **Themes** — accent presets (Arcane, Blossom, Ocean, Dusk, Mint, Gold, plus Phoenix / Frost /
-  Verdant / Necrotic unlocked by cast milestones) and base palettes (Dark, Midnight, Slate).
 - **Vanilla advancements** — voice-cast milestones (1, 10, 50, 200, 1000) and combo casts surface
   as standard advancement toasts.
 - **Spell List screen** — browse every spell the registry exposed with the exact phrase Vosk
@@ -123,7 +121,7 @@ Most settings are accessible in-game from **Mods → Iron's Spells: Incantation 
 
 - **Recognition tab** — gating mode, equipped-only restriction, fuzzy tolerance, substring match,
   dedup window, debug monitor.
-- **HUD tab** — corner, offset, opacity, base palette, accent theme.
+- **HUD tab** — corner, offset, opacity.
 - **More menu** — welcome wizard, Voice Codex, Diagnostics, Test Arena, reload grammar, profile
   export/import, auto-calibrate noise gate.
 

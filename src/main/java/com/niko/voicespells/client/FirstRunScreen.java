@@ -75,21 +75,33 @@ public final class FirstRunScreen extends Screen {
         addRenderableWidget(titleW);
 
         int btnY = py + panelH - 28;
-        int btnW = 96;
+        // Width from the row, not a fixed 96.
+        //
+        // Three 96px buttons plus padding need 336 logical pixels; Theme.fit clamps the panel to
+        // the window, so below that the fixed-width Back / Skip / Next OVERLAPPED — and because
+        // widgets are hit-tested in insertion order, Skip was registered before Next and
+        // swallowed the click. Pressing "Next" on a small window silently finished the wizard
+        // and marked first-run complete. Dividing the row that actually exists between three
+        // buttons means they shrink instead of colliding.
+        final int BTN_GAP = 6;
+        int btnW = Math.min(96, (panelW - Theme.PAD * 2 - BTN_GAP * 2) / 3);
+        int backX = px + Theme.PAD;
+        int midX  = px + Theme.PAD + btnW + BTN_GAP;
+        int nextX = px + Theme.PAD + (btnW + BTN_GAP) * 2;
 
         if (step > 0) {
-            addRenderableWidget(NeonButton.of(px + Theme.PAD, btnY, btnW, 20,
+            addRenderableWidget(NeonButton.of(backX, btnY, btnW, 20,
                 Component.literal("Back"), b -> { step--; rebuildWidgets(); }));
         }
         if (step < STEPS - 1) {
-            addRenderableWidget(NeonButton.of(px + panelW / 2 - btnW / 2, btnY, btnW, 20,
+            addRenderableWidget(NeonButton.of(midX, btnY, btnW, 20,
                 Component.literal("Skip"), b -> finish()));
         }
         // On step 2 (Try a spell), offer a direct shortcut into the spell list since it's
         // the natural next destination.
         if (step == 2) {
-            addRenderableWidget(NeonButton.of(px + panelW / 2 - btnW / 2, btnY, btnW, 20,
-                Component.literal("Open Spell List"),
+            addRenderableWidget(NeonButton.of(midX, btnY, btnW, 20,
+                Component.literal("Spell List"),
                 b -> {
                     if (minecraft != null) minecraft.setScreen(
                         new VoiceSpellsSpellListScreen(this));
@@ -113,7 +125,7 @@ public final class FirstRunScreen extends Screen {
                 b -> { if (minecraft != null) minecraft.setScreen(new AudioDevicesScreen(this)); }));
         }
         String nextLabel = (step == STEPS - 1) ? "Done" : "Next";
-        nextBtn = NeonButton.of(px + panelW - Theme.PAD - btnW, btnY, btnW, 20,
+        nextBtn = NeonButton.of(nextX, btnY, btnW, 20,
             Component.literal(nextLabel), b -> {
                 if (step == STEPS - 1) finish();
                 else { step++; rebuildWidgets(); }

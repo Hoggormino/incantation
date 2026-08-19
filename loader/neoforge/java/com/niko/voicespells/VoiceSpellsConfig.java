@@ -279,8 +279,7 @@ public final class VoiceSpellsConfig {
             b.comment("Sass mode - occasional snarky 'was that even a spell?' toast on miss.");
             sassMode = b.define("sassMode", false);
             b.comment("Cinematic accent bars top and bottom of the screen, plus corner",
-                      "glows, while you are casting a long spell.",
-                      "so it is purple on the default ARCANE.",
+                      "glows, while you are casting a long spell. Drawn in white.",
                       "Off by default: the code existed since early builds but never ran,",
                       "because the reflection behind it named a class that does not exist.",
                       "Fixing that name switched it on for the first time, so leaving it",

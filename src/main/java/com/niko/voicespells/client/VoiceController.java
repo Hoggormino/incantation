@@ -490,6 +490,15 @@ public final class VoiceController {
                 t.start();
             }
             lastFrameNanos = 0L;
+            audioLevel = 0f;
+            // Close the device on the edge. captureAllowedNow() now refuses while listening is
+            // off, but nothing would have acted on that until the next tick — and the point of
+            // this toggle is that the microphone light goes out when the player presses it.
+            stopCapture();
+        } else {
+            // And re-open on the way back, rather than waiting for a tick that only fires in a
+            // world; the toggle works from any screen.
+            syncCapture();
         }
         return listeningEnabled;
     }
@@ -718,6 +727,9 @@ public final class VoiceController {
     private static volatile long silentSinceNanos = 0L;
     /** True once an armed, open device has produced nothing but exact zeroes for 4s. */
     private static volatile boolean deviceSilent = false;
+    /** True once the currently-open device has produced a single non-zero sample. Reset with the
+     *  device, so it means "since this device was opened", not "ever". */
+    private static volatile boolean sawSignalSinceOpen = false;
 
     /**
      * True when the microphone is open and armed but delivering pure digital silence.
@@ -731,6 +743,7 @@ public final class VoiceController {
     public static void resetDeadDeviceWatch() {
         silentSinceNanos = 0L;
         deviceSilent = false;
+        sawSignalSinceOpen = false;
         warnedDeadDevice = false;
     }
 
@@ -741,9 +754,19 @@ public final class VoiceController {
             if (v != 0) {                 // any signal at all clears the run
                 silentSinceNanos = 0L;
                 deviceSilent = false;
+                sawSignalSinceOpen = true;
                 return;
             }
         }
+        // Only ever condemn a device that has produced NOTHING since it was opened.
+        //
+        // The 4-second all-zero window alone was too weak: some drivers gate their noise floor to
+        // exact zero, so with the default HOLD_ITEM gating a player holding a staff and simply not
+        // talking for four seconds got a red HUD dot, "no signal - pick another" on the meter, and
+        // a log line telling them their perfectly good microphone was a virtual audio driver. The
+        // advice was wrong and following it meant abandoning a mic that works. A device that has
+        // ever delivered one non-zero sample this session is not dead, whatever it does later.
+        if (sawSignalSinceOpen) return;
         if (silentSinceNanos == 0L) { silentSinceNanos = now; return; }
         if (deviceSilent || now - silentSinceNanos < DEAD_DEVICE_NANOS) return;
         deviceSilent = true;
@@ -1400,6 +1423,15 @@ public final class VoiceController {
     private static boolean captureAllowedNow() {
         Minecraft mc = Minecraft.getInstance();
         if (probing) return false;
+        // The master toggle releases the HARDWARE, not just the frames.
+        //
+        // "Voice casting: OFF" previously only dropped incoming frames in captureArmed(); the
+        // OpenAL device stayed open, so Windows kept showing the microphone-in-use indicator and
+        // other applications still saw the device as claimed. The one control that reads as
+        // "stop listening to me" was the only gate that did not actually stop. Placed above the
+        // diagnostic override deliberately: if the player has switched voice casting off, a
+        // mic-test screen should not quietly reopen the device behind that decision.
+        if (!listeningEnabled) return false;
         // The override deliberately precedes the in-world check: a mic test is the one case where
         // capturing outside a world is the whole point.
         if (diagnosticCaptureOverride) return true;
@@ -1452,6 +1484,10 @@ public final class VoiceController {
         resetDeadDeviceWatch();
         // Outside the monitor: the join below must not block anyone else.
         if (c != null) c.close();
+        // Zero the level with the device. It was only cleared in tickCaptureSuspension(), which
+        // does not run on every path that closes the mic — so a screen could keep reporting
+        // "hearing you (43%)" from the last frame of a device that is now shut.
+        audioLevel = 0f;
     }
 
     /** Capture status for the HUD / diagnostics, or null when OpenAL capture is not in use. */

@@ -60,8 +60,26 @@ public final class AudioDevicesScreen extends Screen {
      *  At 24px only four fit the clamped panel, so the active device was usually off-screen. */
     private static final int ROW = 18;
 
-    /** Identifies this screen's claim on the microphone. */
-    private static final String MIC_HOLD_OWNER = "device-picker";
+    /**
+     * This screen INSTANCE's claim on the microphone.
+     *
+     * <p>Instance-unique on purpose. With one shared key, a scan finishing in a screen the player
+     * had already closed released the hold belonging to a screen they had since re-opened — the
+     * live meter then froze on whatever it last read, still cheerfully reporting "hearing you
+     * (43%)" with the device shut. One screen must not be able to drop another's claim.
+     */
+    private final String micHoldOwner = "device-picker#" + System.identityHashCode(this);
+
+    /**
+     * Scanning is per-CLIENT, not per-screen.
+     *
+     * <p>The probing latch it drives is global, so two screens (or one re-opened mid-scan) could
+     * each start a scan and race for the same OpenAL handles — which makes working microphones
+     * report "unavailable" on the one screen a player opens precisely because their audio is
+     * already misbehaving. Static state means the second scan simply declines.
+     */
+    private static final java.util.concurrent.atomic.AtomicBoolean SCANNING =
+        new java.util.concurrent.atomic.AtomicBoolean(false);
 
     private final Screen parent;
 
@@ -74,6 +92,7 @@ public final class AudioDevicesScreen extends Screen {
 
     /** Scan results by raw device name: peak sample, or -1 for "would not open". */
     private final Map<String, Integer> peaks = new ConcurrentHashMap<>();
+    /** Mirrors {@link #SCANNING} for this screen's rendering. */
     private volatile boolean scanning = false;
     /** Set the moment the screen leaves, so a scan finishing afterwards cannot re-take the mic. */
     private volatile boolean closed = false;
@@ -101,7 +120,7 @@ public final class AudioDevicesScreen extends Screen {
 
         // Hold the mic open so the meter is live the moment the screen opens. Idempotent, so
         // rebuildWidgets() re-entering init() cannot stack claims.
-        VoiceController.setDiagnosticCapture(MIC_HOLD_OWNER, true);
+        VoiceController.setDiagnosticCapture(micHoldOwner, true);
 
         StringWidget titleW = new StringWidget(px, py + (Theme.HEADER_H - 9) / 2,
             panelW, 9, title, font);
@@ -182,7 +201,8 @@ public final class AudioDevicesScreen extends Screen {
      * screen is precisely for people whose drivers are already misbehaving.
      */
     private void startScan() {
-        if (scanning) return;
+        // compareAndSet, so a second screen cannot start a competing scan.
+        if (!SCANNING.compareAndSet(false, true)) return;
         scanning = true;
         peaks.clear();
         if (scanBtn != null) scanBtn.active = false;
@@ -196,7 +216,7 @@ public final class AudioDevicesScreen extends Screen {
                 // from this thread, which is the one thing here that is genuinely driver
                 // dependent. setProbing keeps captureAllowedNow() false for the whole scan.
                 VoiceController.setProbing(true);
-                VoiceController.setDiagnosticCapture(MIC_HOLD_OWNER, false);
+                VoiceController.setDiagnosticCapture(micHoldOwner, false);
                 VoiceController.stopCapture();
                 for (String dev : targets) {
                     scanningNow = MicCapture.prettyName(dev);
@@ -206,6 +226,7 @@ public final class AudioDevicesScreen extends Screen {
                 scanningNow = "";
                 scanning = false;
                 VoiceController.setProbing(false);
+                SCANNING.set(false);
                 // Back to the render thread to re-arm: setDiagnosticCapture reaches into
                 // capture lifecycle and the session, which the client thread owns.
                 //
@@ -220,12 +241,17 @@ public final class AudioDevicesScreen extends Screen {
                 Minecraft mc = Minecraft.getInstance();
                 mc.execute(() -> {
                     if (closed || mc.screen != AudioDevicesScreen.this) {
-                        VoiceController.setDiagnosticCapture(MIC_HOLD_OWNER, false);
+                        VoiceController.setDiagnosticCapture(micHoldOwner, false);
                         VoiceController.syncCapture();
                         return;
                     }
-                    VoiceController.setDiagnosticCapture(MIC_HOLD_OWNER, true);
+                    VoiceController.setDiagnosticCapture(micHoldOwner, true);
+                    // Re-enable everything the scan disabled. Only the scan button was restored
+                    // before, so the two tabs stayed greyed out for the life of the screen and
+                    // the player could not reach the output list again without reopening it.
                     if (scanBtn != null) scanBtn.active = !showingOutputs;
+                    if (micTab != null) micTab.active = showingOutputs;
+                    if (outTab != null) outTab.active = !showingOutputs;
                 });
             }
         }, "VoiceSpells-DeviceScan");
@@ -325,7 +351,7 @@ public final class AudioDevicesScreen extends Screen {
     @Override
     public void onClose() {
         closed = true;
-        VoiceController.setDiagnosticCapture(MIC_HOLD_OWNER, false);
+        VoiceController.setDiagnosticCapture(micHoldOwner, false);
         if (minecraft != null) minecraft.setScreen(parent);
     }
 
@@ -334,7 +360,7 @@ public final class AudioDevicesScreen extends Screen {
         // Both paths release: onClose covers Esc and the Back button, removed() covers every
         // other way a screen can be swapped out from under us.
         closed = true;
-        VoiceController.setDiagnosticCapture(MIC_HOLD_OWNER, false);
+        VoiceController.setDiagnosticCapture(micHoldOwner, false);
         super.removed();
     }
 

@@ -248,7 +248,7 @@ public final class VoskSession implements AutoCloseable {
         boolean first = true;
         for (String p : phrases) {
             if (p == null) continue;
-            String safe = p.replace("\"", "").trim();
+            String safe = sanitizeForGrammar(p);
             if (safe.isEmpty()) continue;
             if (!first) sb.append(',');
             sb.append('"').append(safe).append('"');
@@ -257,6 +257,35 @@ public final class VoskSession implements AutoCloseable {
         if (!first) sb.append(',');
         sb.append("\"[unk]\"]");
         return sb.toString();
+    }
+
+    /**
+     * Reduce a phrase to something that cannot break the hand-built grammar JSON.
+     *
+     * <p>Only the double quote was stripped before. A single backslash in a phrase produced an
+     * invalid grammar document, Vosk rejected it, and the failure surfaced to the player as "no
+     * model" - sending them off to reinstall a model that was never the problem. Phrases come out
+     * of a user-edited phrasebook, so a stray backslash is entirely plausible; control characters
+     * are stripped for the same reason. Done character by character rather than with a regex,
+     * because escaping a regex inside a Java string is exactly where a backslash level goes
+     * missing unnoticed.
+     */
+    private static String sanitizeForGrammar(String phrase) {
+        StringBuilder out = new StringBuilder(phrase.length());
+        boolean lastWasSpace = false;
+        for (int i = 0; i < phrase.length(); i++) {
+            char c = phrase.charAt(i);
+            boolean drop = c == '"' || c == 0x5C || c < 0x20 || c == 0x7F;
+            char ch = drop ? ' ' : c;
+            if (ch == ' ') {
+                if (!lastWasSpace && out.length() > 0) out.append(' ');
+                lastWasSpace = true;
+            } else {
+                out.append(ch);
+                lastWasSpace = false;
+            }
+        }
+        return out.toString().trim();
     }
 
     public static Path defaultModelPath() {

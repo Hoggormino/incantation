@@ -134,7 +134,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // captureAllowedNow() then closes the mic, leaving the monitor permanently blank on
         // exactly the setup most people tune on. Only while the monitor is actually visible -
         // the config screen has no business holding the mic open on its other tabs.
-        VoiceController.setDiagnosticCapture("livemonitor", showMonitor);
         // Geometry. In panelless mode the content is simply centred on the SCREEN, the way
         // vanilla options screens are; otherwise it is centred inside a panel sized to hug it.
         panelW = Theme.fit(PANEL_W_PREF, width);
@@ -156,9 +155,19 @@ public final class VoiceSpellsConfigScreen extends Screen {
             // a several-hundred-pixel void in the middle and the screen read as broken. Every
             // other screen in the mod is a centred block, so this one is too; the two rules give
             // it the header/footer framing without pretending there is a list to fill.
+            // The monitor is part of the block, not something that squeezes in afterwards.
+            //
+            // blockH never budgeted for it, so the buttons sat directly under the last option
+            // row and the clearance the gate measures — (row1Y - 6) - (gridBottom + 6) — was
+            // exactly 0 against a required 46. The Live Monitor could therefore NEVER draw: the
+            // toggle turned on, held the microphone open, and showed "needs a taller window" on
+            // a 4K display. Budgeting it here moves the buttons down and makes the gate mean
+            // what it says.
+            int monitorBlock = showMonitor ? MONITOR_H : 0;
             int blockH = 18                                  // title
                        + 6 + TAB_H                           // tab row
                        + Theme.GAP_MD + gridRows() * GRID_ROW
+                       + monitorBlock                        // live monitor, when shown
                        + 12 + GRID_ROW + 20;                 // the two button rows
             int blockTop = Math.max(8, (height - blockH) / 2);
 
@@ -166,7 +175,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             headerY  = blockTop + 14;                        // rule under the title
             tabsY    = headerY + 8;
             contentY = tabsY + TAB_H + Theme.GAP_MD;
-            row1Y    = contentY + gridRows() * GRID_ROW + 12;
+            row1Y    = contentY + gridRows() * GRID_ROW + monitorBlock + 12;
             row2Y    = row1Y + GRID_ROW;
             footerY  = row1Y - 8;                            // rule above the buttons
         } else {
@@ -205,6 +214,11 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // limit renderMonitor() will use. The old check compared free space to a bare 60 while
         // the monitor drew a fixed 140, so it passed in exactly the cases that then overlapped.
         monitorFits = !showMonitor || (row1Y - 6) - (gridBottom + 6) >= 46;
+        // The hold goes HERE, after monitorFits is known — asking for it earlier read the value
+        // left over from the previous init(). Only hold the microphone open when the monitor can
+        // actually be seen: holding it for a block that refuses to draw is the worst of both,
+        // the device open and nothing shown.
+        VoiceController.setDiagnosticCapture("livemonitor", showMonitor && monitorFits);
 
         switch (currentTab) {
             case RECOGNITION -> buildRecognitionTab(gridX, colW, contentY);
@@ -477,8 +491,10 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 renderMonitor(g);
             } else {
                 // Silently dropping it would read as a broken toggle, so state the reason.
+                // At gridBottom, not monitorY(): monitorY() is the top of a block that does not
+                // fit, which on a short window is under the buttons.
                 Theme.text(g, font, "Live Monitor needs a taller window",
-                    monitorX(), monitorY(), Theme.C_WARN);
+                    monitorX(), gridTop + gridRows() * GRID_ROW + 6, Theme.C_WARN);
             }
         }
     }

@@ -114,7 +114,14 @@ public final class ModelDownloader {
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
-            HttpRequest req = HttpRequest.newBuilder(URI.create(MODEL_URL)).GET().build();
+            // A READ timeout, not just a connect one. connectTimeout only covers the handshake;
+            // a server that accepts the connection and then stalls mid-body left this blocked in
+            // read() forever, on the Vosk loader thread — so the recogniser never came up for the
+            // rest of the session and nothing in the UI could explain why. 10 minutes is generous
+            // for a 1.8GB model on a slow line while still being finite.
+            HttpRequest req = HttpRequest.newBuilder(URI.create(MODEL_URL))
+                .timeout(Duration.ofMinutes(10))
+                .GET().build();
             HttpResponse<InputStream> resp =
                 client.send(req, HttpResponse.BodyHandlers.ofInputStream());
             if (resp.statusCode() != 200) {

@@ -57,9 +57,6 @@ custom phrases (see Configuration).
   and cooldowns behave exactly like a manual cast.
 - **HUD chip** showing model status, mic state, last heard phrase, and a live audio meter.
   Configurable corner, offset, opacity. Toggle with **B**.
-- **Themes + palettes.** Cycle the accent color (Arcane, Blossom, Ocean, Mint, Gold, …) and
-  switch the base palette between Dark, Midnight, and Slate. Some themes unlock as you
-  voice-cast more.
 - **Vanilla advancements.** Voice-cast milestones (1, 10, 50, 200, 1000) and combo casts surface
   as standard Minecraft advancements.
 - **Spell List screen.** Browse every spell the registry exposed, with the exact phrase Vosk is
@@ -95,7 +92,7 @@ Highlights:
 
 - **Recognition** — fuzzy tolerance, substring match, dedup window, echo lockout, min
   confidence, per-spell confidence overrides.
-- **HUD** — corner, offset, opacity, base palette, accent theme.
+- **HUD** — corner, offset, opacity.
 - **Modes** — trigger words, combat-only, pause-when-AFK, streamer mode, hands-free confirm.
 - **Aliases** — extra phrases bound to spell ids.
 
