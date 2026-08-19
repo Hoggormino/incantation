@@ -601,21 +601,18 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
         super.render(g, mouseX, mouseY, partial);
 
-        // Tab selection, made obvious rather than subtle.
+        // Selection is shown by pushing the OTHER tabs back, not by marking the current one.
         //
-        // A thin rule was too quiet to read at a glance - the two tabs still looked like two
-        // buttons. The unselected tabs are now pushed well back with a heavy dim and the
-        // selected one keeps a bright edge along its bottom that runs into the content, so the
-        // difference is visible without looking for it.
+        // Every attempt at marking the selected tab looked like something stuck onto it - an
+        // underline, then a thick bright edge - because a decoration on a vanilla button is
+        // exactly what it is. Dimming the tabs you are not on needs no decoration at all: the
+        // bright one is the one you are reading, which is how the eye works anyway.
         int ruleY = tabRowY + TAB_H;
         for (Tab t : Tab.values()) {
+            if (t == currentTab) continue;      // the selected tab is simply the bright one
             int tx = tabRowX + t.ordinal() * (tabColW + COL_GAP);
-            if (t == currentTab) {
-                g.fill(tx, ruleY - 2, tx + tabColW, ruleY + 1, 0xFFFFFFFF);
-            } else {
-                g.fill(tx, tabRowY, tx + tabColW, ruleY, 0x99000000);
-                g.fill(tx, ruleY, tx + tabColW, ruleY + 1, 0x60FFFFFF);
-            }
+            g.fill(tx, tabRowY, tx + tabColW, ruleY, 0x99000000);
+            g.fill(tx, ruleY, tx + tabColW, ruleY + 1, 0x60FFFFFF);
         }
 
         // No accent rule under the title and no divider under the tabs. Neither exists in any
