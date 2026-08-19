@@ -52,7 +52,10 @@ public final class VoiceSpellsConfigScreen extends Screen {
      *  entry. A single most-recent recognition plus a live meter is genuinely useful — refusing
      *  to draw anything at 854x480, an ordinary window at GUI scale 2, was not. */
     private static final int MONITOR_MIN   = 34;
-    private static final int TAB_H         = 18;
+    /** Tab height. The SAME as every other control on the screen: the tab row is a row like any
+     *  other, and making it 2px shorter than the options meant its gaps could never line up with
+     *  theirs no matter what padding was chosen. */
+    private static final int TAB_H         = 20;
     /** Space above the title inside the panel, and below it before the tabs. */
     private static final int TITLE_TOP     = 8;
     private static final int TITLE_H       = 18;
@@ -157,9 +160,12 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // a 4K display. Budgeting it here moves the buttons down and makes the gate mean
         // what it says.
         // The block without the monitor. This part always has to fit.
-        int baseH = 18                                   // title
-                  + 6 + TAB_H                            // tab row
-                  + Theme.GAP_MD + gridRows() * GRID_ROW
+        // One rhythm for the whole screen: every row is a 20px control on a 25px pitch, so every
+        // gap between rows is 5px - including the one under the tab bar, which used GAP_MD and
+        // was therefore double the size of the gaps between the options underneath it.
+        int baseH = 22                                   // title + the rule under it
+                  + GRID_ROW                             // tab row, on the same pitch
+                  + gridRows() * GRID_ROW
                   + 12 + GRID_ROW + 20;                  // the two button rows
         // ...and the monitor takes whatever room is left over, rather than demanding all of it.
         //
@@ -184,7 +190,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         titleY   = blockTop;
         headerY  = blockTop + 14;                        // rule under the title
         tabsY    = headerY + 8;
-        contentY = tabsY + TAB_H + Theme.GAP_MD;
+        contentY = tabsY + GRID_ROW;                     // 20px tab + the same 5px gap as the rows
         monitorReserved = monitorBlock > 0;
         row1Y    = contentY + gridRows() * GRID_ROW + monitorBlock + 12;
         row2Y    = row1Y + GRID_ROW;
