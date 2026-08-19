@@ -212,6 +212,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // the buttons under it. Nothing was broken and it looked wrong, which on a screen this
         // sparse is the same thing: with only eight controls on screen, a five-pixel disagreement
         // is the most visible feature of the layout. One metric, one alignment.
+        tabRowY = tabsY; tabRowX = gridX; tabRowW = gridW; tabColW = colW;
         addRenderableWidget(new TabButton(gridX, tabsY, colW, TAB_H,
             "Recognition", Tab.RECOGNITION));
         addRenderableWidget(new TabButton(gridX + colW + COL_GAP, tabsY, colW, TAB_H,
@@ -318,6 +319,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
     /** Y the option grid was actually laid out at; the monitor hangs off it. */
     private int gridTop;
+    /** Tab row geometry, kept so render() can draw the selection rule under it. */
+    private int tabRowY, tabRowX, tabRowW, tabColW;
 
     /** Place a control at grid slot {@code i}, left column for even, right for odd.
      *
@@ -500,6 +503,27 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
         super.render(g, mouseX, mouseY, partial);
 
+        // Tabs, drawn the way tabs have always been drawn: the selected one is joined to the
+        // content, the other one sits behind a rule.
+        //
+        // Two earlier attempts read wrong. Setting the current tab inactive used vanilla's
+        // DISABLED sprite, so it looked broken rather than selected; making both plain buttons
+        // then made the row indistinguishable from the options below it, and a bright underline
+        // on its own just looked like a stray line. What actually says "tab" is the CONTENT
+        // EDGE: a rule runs under the row, and it BREAKS under the tab you are on, so that tab
+        // and the panel below it are visibly one surface. The other tab is dimmed to sit behind.
+        int ruleY  = tabRowY + TAB_H;
+        int leftX  = tabRowX;
+        int rightX = tabRowX + tabColW + COL_GAP;
+        boolean recogOn = currentTab == Tab.RECOGNITION;
+        int unselX = recogOn ? rightX : leftX;
+
+        // The content edge, everywhere except under the selected tab.
+        g.fill(unselX, ruleY, unselX + tabColW, ruleY + 1, 0x70FFFFFF);
+        g.fill(tabRowX + tabColW, ruleY, rightX, ruleY + 1, 0x70FFFFFF);
+        // Push the unselected tab back.
+        g.fill(unselX, tabRowY, unselX + tabColW, ruleY, 0x55000000);
+
         // No accent rule under the title and no divider under the tabs. Neither exists in any
         // vanilla screen: a container has its title sitting straight on the panel, and an
         // options screen has nothing but the title and the buttons. Both lines were decoration
@@ -637,8 +661,15 @@ public final class VoiceSpellsConfigScreen extends Screen {
         TabButton(int x, int y, int w, int h, String label, Tab tab) {
             super(x, y, w, h, Component.literal(label), b -> {}, Button.DEFAULT_NARRATION);
             this.tab = tab;
-            // Not clickable while it IS the current tab, which is also what draws it pressed.
-            this.active = currentTab != tab;
+            // Both tabs stay ACTIVE.
+            //
+            // The current tab used to be set inactive, which draws it with vanilla's DISABLED
+            // sprite: darker, with grey text. That is the game's way of saying "you cannot use
+            // this", not "you are here" — so the tab bar read as one broken button beside one
+            // working one, rather than as a switch between two pages. Selection is shown by the
+            // marker in renderWidget instead, and pressing the tab you are already on is simply
+            // a no-op.
+            this.active = true;
         }
 
         @Override
