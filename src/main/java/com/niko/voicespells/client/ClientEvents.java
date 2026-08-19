@@ -167,11 +167,9 @@ public final class ClientEvents {
             VoiceController.onConfigChanged();
             VoiceController.syncCapture();
         };
-        com.niko.voicespells.VoiceSpellsConfig.themeApplier = () -> {
-            com.niko.voicespells.VoiceSpellsConfig.Client c = com.niko.voicespells.VoiceSpellsConfig.CLIENT;
-            Theme.applyPalette(c.uiPalette.get());
-            Theme.applyPreset(c.themePreset.get());
-        };
+        // One palette, no accent, so there is nothing config-driven left to re-apply. The hook
+        // stays wired because the config class calls it on load and reload and expects a target.
+        com.niko.voicespells.VoiceSpellsConfig.themeApplier = Theme::applyPalette;
         Runtime.getRuntime().addShutdownHook(new Thread(VoiceController::shutdown,
             "VoiceSpells-Shutdown"));
     }
@@ -463,13 +461,13 @@ public final class ClientEvents {
             // chip background is intentionally fixed-dark. Only the accent border follows
             // the current theme.
             g.fill(x, y, x + chipW, y + chipH, 0xAA0A0A12);
-            int border = (Theme.C_ACCENT & 0x00FFFFFF) | 0xAA000000;
+            int border = 0xAAFFFFFF;
             g.fill(x, y, x + chipW, y + 1, border);
             g.fill(x, y + chipH - 1, x + chipW, y + chipH, border);
             // tiny progress bar at the bottom: from full → empty as cooldown elapses
             int barW = (int) (chipW * (1f - percent));
             if (barW > 0) {
-                g.fill(x, y + chipH - 1, x + barW, y + chipH, Theme.C_ACCENT_BRIGHT);
+                g.fill(x, y + chipH - 1, x + barW, y + chipH, Theme.C_HL);
             }
             // Fixed light text — the chip background is fixed-dark above, so we can't use
             // Theme.C_TEXT (which goes dark in light mode and would vanish into the dark chip).
@@ -567,7 +565,7 @@ public final class ClientEvents {
             float p = Theme.pulse(1800f); // 1.8s breath
             int alphaCore = (int) (45 + 35 * p);
             int alphaSoft = (int) (12 + 18 * p);
-            int rgb = Theme.C_ACCENT & 0x00FFFFFF;
+            int rgb = Theme.C_HL & 0x00FFFFFF;
             int core = (Math.min(255, alphaCore) << 24) | rgb;
             int soft = (Math.min(255, alphaSoft) << 24) | rgb;
             // Top and bottom 1px crisp accent bars.
@@ -648,12 +646,11 @@ public final class ClientEvents {
 
             // Fixed greys for the non-accent states — C_FAINT/C_MUTED are PALETTE text tones
             // and the palette is now light by default, which made these invisible or wrong over
-            // the world. The accent states stay: the accent comes from the ThemePreset, not the
-            // palette, so it is already world-safe. Same rule as the meter track above.
+            // the world. Same rule as the meter track above: fixed colours only.
             int dotColor = VoiceController.deviceSilent() ? 0xFFFF6166
                          : !armed ? 0xFFA0A0A0
-                         : hot    ? Theme.withPulsedAlpha(Theme.C_ACCENT_BRIGHT & 0x00FFFFFF, 0.75f, 1.0f)
-                                  : Theme.C_ACCENT_SOFT;
+                         : hot    ? Theme.withPulsedAlpha(Theme.C_HL & 0x00FFFFFF, 0.75f, 1.0f)
+                                  : Theme.C_HL_DIM;
 
             boolean calibrating = VoiceController.isTranscribing();
             // A device that is open and delivering pure silence is the one failure the chip could
@@ -954,7 +951,7 @@ public final class ClientEvents {
             int x = alignX(anchorX, toastW);
             drawChip(g, x, anchorY, toastW, CHIP_H, alpha);
             // Bright accent text — this is actionable, treat it differently from a miss toast.
-            int color = withAlpha(Theme.C_ACCENT, alpha);
+            int color = withAlpha(Theme.C_HL, alpha);
             int textY = anchorY + (CHIP_H - 8) / 2;
             g.drawString(font, Component.literal(text), x + PAD_X, textY, color, true);
         }

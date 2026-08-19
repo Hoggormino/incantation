@@ -161,7 +161,7 @@ public final class HelpScreen extends Screen {
 
         super.render(g, mouseX, mouseY, partial);
 
-        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
+        Theme.headerRule(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
 
         // "Page 1 of 5", which is what Minecraft itself writes at the top of a written book.
         //

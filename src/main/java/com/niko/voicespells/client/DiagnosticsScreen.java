@@ -133,7 +133,7 @@ public final class DiagnosticsScreen extends Screen {
         Theme.panel(g, px, py, panelW, panelH);
         Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
         super.render(g, mouseX, mouseY, partial);
-        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
+        Theme.headerRule(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
     }
 
     /** Scrollable list of diagnostic rows. Each row: status pill + name + detail line. */

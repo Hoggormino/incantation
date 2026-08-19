@@ -16,9 +16,6 @@ import net.minecraft.client.gui.GuiGraphics;
  * web dashboard. The palettes have been moved onto vanilla's neutral grey axis, the chrome
  * helpers now draw vanilla bevels, and text goes through helpers that always shadow.
  *
- * <p>The accent colour survives — it is the player's unlocked {@code ThemePreset} and carries
- * the mod's identity — but it is now used the way vanilla uses colour: sparingly, for state
- * and for a single seated rule, never as a glow.
  *
  * <p>Screens are expected to call {@link #background} first, {@link #panel} for their surface,
  * and {@link #text} / {@link #title} for copy. The older helpers kept their names and
@@ -56,7 +53,7 @@ public final class Theme {
         return Math.min(preferred, max);
     }
 
-    // ---- Surfaces (driven by UiPalette — defaults to DARK) ----------------
+    // ---- Surfaces -----------------------------------------------------------
     public static int C_SCRIM;
     public static int C_PANEL;
     public static int C_HEADER_T;
@@ -64,220 +61,62 @@ public final class Theme {
     public static int C_INSET;
     public static int C_INSET_2;
 
-    // ---- Lines (also palette-driven) --------------------------------------
+    // ---- Lines --------------------------------------------------------------
     public static int C_BORDER;
     public static int C_DIVIDER;
     public static int C_SHADOW;
 
-    /** The hero neon — driven by the current {@link com.niko.voicespells.VoiceSpellsConfig.ThemePreset}.
-     *  Not final so the user can swap the whole palette without restarting. */
-    public static int C_ACCENT;
-    public static int C_ACCENT_BRIGHT;
-    public static int C_ACCENT_SOFT;
-    public static int C_ACCENT_FAINT;
-    public static int C_ACCENT_GHOST;
-
-    // ---- Text (palette-driven) --------------------------------------------
-    /** Section headings: darker than body on light panels, white on dark ones. The headings
-     *  used to be accent purple, which was the last routine use of the accent outside the
-     *  Codex progression screen. */
+    // ---- Text ---------------------------------------------------------------
+    // Four tiers, loudest to quietest. All are read against the same surface (the blurred world)
+    // now that there is one style, which is what lets them be picked once and trusted everywhere.
     public static int C_HEADING;
     public static int C_TEXT;
     public static int C_MUTED;
     public static int C_FAINT;
 
-    /** Tracks the current palette so {@link #applyPreset} can pick accent variants that read
-     *  on the background (purple on white needs darkening; the alpha-blend layers used for
-     *  glow on dark just fade to invisible on light). */
-    private static com.niko.voicespells.VoiceSpellsConfig.UiPalette currentPalette =
-        com.niko.voicespells.VoiceSpellsConfig.UiPalette.DARK;
-    /** Tracks the current accent preset so {@link #applyPalette} can re-derive accent layers
-     *  immediately on a palette flip (otherwise the accent would only refresh on the next
-     *  preset change). */
-    private static com.niko.voicespells.VoiceSpellsConfig.ThemePreset currentPreset =
-        com.niko.voicespells.VoiceSpellsConfig.ThemePreset.ARCANE;
+    // ---- Highlight -----------------------------------------------------------
+    //
+    // What used to be five theme-derived accent variants driven by ten unlockable colour presets.
+    // They are gone: a settings screen tinted in the player's chosen colour reads as a mod skin
+    // rather than as part of the game, and ten presets meant every screen had to be legible
+    // against all of them, which is why contrast bugs kept surfacing. One fixed pair, used only
+    // by the in-world HUD, cannot clash with anything.
+    public static final int C_HL     = 0xFFFFFFFF;   // active / speaking
+    public static final int C_HL_DIM = 0xFFA0A0A0;   // idle / armed
 
-    static {
-        applyPalette(com.niko.voicespells.VoiceSpellsConfig.UiPalette.DARK);
-        applyPreset(com.niko.voicespells.VoiceSpellsConfig.ThemePreset.ARCANE);
-    }
+    /** There is one style and it is the panelless one. Kept as a field because a few
+     *  drawing helpers branch on it; it never changes. */
+    public static final boolean panelless = true;
 
-    /** Switch the base surface + text palette. Independent of {@link #applyPreset}, which
-     *  only changes the accent color. */
     /**
-     * Whether screens draw as vanilla OPTIONS screens (no panel, content on the blurred world)
-     * rather than as container windows.
+     * The palette. There is exactly one.
      *
-     * <p>Minecraft has exactly two screen archetypes and mixing them is what makes a modded UI
-     * feel foreign. A container screen is a textured panel with dark text; an options screen has
-     * no panel at all — Video Settings, Controls, Sound, every settings screen in the game. This
-     * mod's screens ARE settings screens, so they follow the options archetype.
+     * <p>There used to be four surfaces (a light container, near-black, stone grey, and no panel
+     * at all) crossed with ten accent presets. Every screen therefore had to stay legible against
+     * forty combinations, which is the actual reason contrast bugs kept appearing — a tone chosen
+     * to read on one surface disappeared on another, and the sweeps kept finding text nobody
+     * could see. One surface is not a limitation here, it is the whole point: the mod's screens
+     * are settings screens, Minecraft draws settings screens one way, and matching it exactly is
+     * what makes them look like part of the game rather than like a skin.
      *
-     * <p>It lives here rather than in each screen because the choice has to be global: a
-     * panelless config screen that opens a panelled sub-menu is worse than either style applied
-     * consistently. Every screen already routes its surface through {@link #panel} and its text
-     * through the palette, so this one field moves all of them.
      */
-    public static boolean panelless = true;   // set from the palette on every applyPalette
-
-    public static void applyPalette(com.niko.voicespells.VoiceSpellsConfig.UiPalette p) {
-        // The style IS the palette choice, so a player can go back to a container window without
-        // editing a file. OPTIONS keeps the panel tones below unused; everything visible comes
-        // from the panelless block further down.
-        panelless = p == com.niko.voicespells.VoiceSpellsConfig.UiPalette.OPTIONS;
-        boolean changed = currentPalette != p;
-        currentPalette = p;
-        switch (p) {
-            case MIDNIGHT -> {
-                // Near-black, but no longer pure 0x000000: a true-black panel makes the
-                // vanilla bevel invisible, since the bevel is derived from the panel tone and
-                // the outline is black. 0x141414 keeps it as dark as a streamer wants while
-                // leaving the edges readable.
-                C_SCRIM    = 0xE0000000;
-                C_PANEL    = 0xFF141414;
-                C_HEADER_T = 0xFF1E1E1E;
-                C_HEADER_B = 0xFF0A0A0A;
-                C_INSET    = 0xFF0A0A0A;
-                C_INSET_2  = 0xFF1A1A1A;
-                C_BORDER   = 0xFF000000;
-                C_DIVIDER  = 0xFF3A3A3A;
-                C_SHADOW   = 0xFF000000;
-                C_TEXT     = 0xFFFFFFFF;
-                C_MUTED    = 0xFFA0A0A0;
-                C_FAINT    = 0xFF6A6A6A;
-                C_HEADING  = 0xFFFFFFFF;
-            }
-            case OPTIONS -> {
-                // Overridden wholesale by the panelless block below; these are only the values
-                // any stray panel-mode helper would fall back on.
-                C_SCRIM    = 0x00000000;
-                C_PANEL    = 0xFF303030;
-                C_HEADER_T = 0xFF303030;
-                C_HEADER_B = 0xFF303030;
-                C_INSET    = 0x90101010;
-                C_INSET_2  = 0x18FFFFFF;
-                C_BORDER   = 0xFF000000;
-                C_DIVIDER  = 0x40FFFFFF;
-                C_SHADOW   = 0xFF000000;
-                C_TEXT     = 0xFFFFFFFF;
-                C_MUTED    = 0xFFA0A0A0;
-                C_FAINT    = 0xFF808080;
-                C_HEADING  = 0xFFFFFFFF;
-            }
-            case SLATE -> {
-                // Vanilla's actual stone-grey widget tone — this is the closest of the three
-                // to a real Minecraft inventory panel.
-                C_SCRIM    = 0xC0202020;
-                C_PANEL    = 0xFF8B8B8B;
-                C_HEADER_T = 0xFF9E9E9E;
-                C_HEADER_B = 0xFF7A7A7A;
-                C_INSET    = 0xFF5B5B5B;
-                C_INSET_2  = 0xFF969696;
-                C_BORDER   = 0xFF000000;
-                C_DIVIDER  = 0xFF373737;
-                C_SHADOW   = 0xFF373737;
-                // Dark text, not white. SLATE's panel is 0x8B8B8B, whose luminance is 139, so
-                // lightSurface() classes it as a LIGHT surface and every screen therefore draws
-                // its text unshadowed. White unshadowed text on mid grey is about 2:1 contrast —
-                // the one combination vanilla never uses, and it was made worse by C_MUTED being
-                // 0x3F3F3F: the "muted" tone had BETTER contrast than the primary one, so the
-                // hierarchy ran backwards. Going dark settles both, and matches this palette's
-                // own stated aim of looking like a real inventory panel, which has dark text.
-                C_TEXT     = 0xFF2A2A2A;
-                C_MUTED    = 0xFF484848;
-                C_FAINT    = 0xFF646464;
-                C_HEADING  = 0xFF141414;
-            }
-            case DARK -> {
-                // The default, retuned to read as Minecraft rather than as a neon web app.
-                //
-                // Vanilla's GUI palette is desaturated stone grey — the inventory is 0xC6C6C6
-                // with 0x8B8B8B and 0x373737 bevels, and the modern dark menus sit near
-                // 0x2B2B2B. The old values here were a saturated lavender midnight (panel
-                // 0x101020, text 0xEAE6FA) which never appears anywhere in the game. These are
-                // the same tonal RELATIONSHIPS, moved onto vanilla's neutral grey axis, so the
-                // panels sit next to a vanilla inventory without clashing. Text is plain white
-                // and vanilla's own GRAY (0xA0A0A0), which is what Minecraft uses for secondary
-                // labels everywhere.
-                // The vanilla container-GUI palette, i.e. what a chest or a furnace looks
-                // like, which is also exactly what Simple Voice Chat uses: a light stone
-                // panel with dark grey text. Its VoiceChatScreenBase.FONT_COLOR is 4210752 =
-                // 0x404040, and its panels are plain light PNGs with no accent anywhere.
-                // That understatement is the whole point — a modded screen that looks like
-                // an inventory reads as part of the game, and one with a dark neon panel
-                // reads as an overlay.
-                C_SCRIM    = 0x00000000;   // no scrim; vanilla's own backdrop is enough
-                C_PANEL    = 0xFFC6C6C6;
-                C_HEADER_T = 0xFFC6C6C6;   // container GUIs have no header band at all
-                C_HEADER_B = 0xFFC6C6C6;
-                // The inset well has to stay close enough to the panel that text tuned for the
-                // panel is still readable inside it. At 0x8B8B8B it was 55 levels darker, and
-                // C_MUTED detail lines (0x6A6A6A) sat on it at about 1.35:1 — the diagnostics
-                // screen's reasons, the one thing that screen exists to convey, were washed out
-                // to the edge of legibility. A gentler step still reads as recessed once the
-                // sunken bevel is drawn around it, which is what actually communicates depth.
-                C_INSET    = 0xFFB2B2B2;
-                C_INSET_2  = 0xFFDBDBDB;
-                C_BORDER   = 0xFF000000;
-                C_DIVIDER  = 0xFF8B8B8B;
-                C_SHADOW   = 0xFF555555;
-                C_TEXT     = 0xFF404040;   // vanilla's container text colour
-                C_MUTED    = 0xFF5C5C5C;   // secondary text; must clear the inset well too
-                // 0x8B8B8B against the 0xC6C6C6 panel is under 2:1, which is fine for a divider
-                // and not fine for words. C_FAINT does carry real text — the spell-of-the-day
-                // hint, the wizard's secondary lines — so it has to stay legible while still
-                // reading as the quietest tier.
-                C_FAINT    = 0xFF757575;
-                C_HEADING  = 0xFF1E1E1E;
-            }
-        }
-        // Panelless screens sit on the blurred world, which is dark and BUSY, so they need
-        // vanilla's menu text treatment — white with a shadow — regardless of which palette the
-        // player picked for the panel tones. Applied after the switch so it wins, and before the
-        // status colours so they derive from the right surface.
-        if (panelless) {
-            C_SCRIM    = 0x00000000;   // vanilla's own backdrop is the whole point
-            C_PANEL    = 0xFF303030;   // only used by insets/fallbacks now
-            C_INSET    = 0x90101010;   // wells are translucent dark over the world
-            // Zebra striping and hover wash. 0x60 white was loud enough that the list read as
-            // stripes first and text second; a list should be quiet until you point at it.
-            C_INSET_2  = 0x18FFFFFF;
-            C_DIVIDER  = 0x40FFFFFF;
-            C_SHADOW   = 0xFF000000;
-            C_BORDER   = 0xFF000000;
-            C_TEXT     = 0xFFFFFFFF;
-            C_MUTED    = 0xFFA0A0A0;
-            C_FAINT    = 0xFF808080;
-            C_HEADING  = 0xFFFFFFFF;
-        }
-        // Status colours key off panel lightness, so they must be re-derived here — after
-        // C_PANEL has been assigned for this palette and regardless of `changed`, since the
-        // first call has to initialise them from zero.
+    public static void applyPalette() {
+        C_SCRIM    = 0x00000000;   // vanilla's own backdrop is the whole point
+        C_PANEL    = 0xFF303030;   // only reached by the small-rect fallback in panel()
+        C_HEADER_T = 0xFF303030;
+        C_HEADER_B = 0xFF303030;
+        C_INSET    = 0x90101010;   // wells are translucent dark over the world
+        C_INSET_2  = 0x18FFFFFF;   // zebra striping / hover wash
+        C_BORDER   = 0xFF000000;
+        C_DIVIDER  = 0x40FFFFFF;
+        C_SHADOW   = 0xFF000000;
+        C_TEXT     = 0xFFFFFFFF;
+        C_MUTED    = 0xFFA0A0A0;
+        C_FAINT    = 0xFF808080;
+        C_HEADING  = 0xFFFFFFFF;
         applyStatusColors();
-        // Re-derive accent layers immediately if the palette flipped (SLATE needs different
-        // accent variants than MIDNIGHT). Skipped on first call (before applyPreset has been
-        // invoked at all) — the static initializer drives that path.
-        if (changed) applyPreset(currentPreset);
     }
 
-    /**
-     * Re-derive the accent variants from the given preset.
-     *
-     * <p>The old javadoc claimed "all remaining palettes are dark surfaces, so we always use
-     * alpha-faded copies", which stopped being true the moment the default palette became a
-     * light container — and the method never consulted the palette anyway. It does not need to
-     * any more: the accent is used only by the in-world HUD, which draws over the world rather
-     * than over any panel, so a single set of variants is correct for every palette.
-     */
-    public static void applyPreset(com.niko.voicespells.VoiceSpellsConfig.ThemePreset p) {
-        currentPreset = p;
-        int rgb = p.accent & 0x00FFFFFF;
-        C_ACCENT        = 0xFF000000 | rgb;
-        C_ACCENT_BRIGHT = brighten(p.accent, 1.15f);
-        C_ACCENT_SOFT   = 0x66000000 | rgb;
-        C_ACCENT_FAINT  = 0x33000000 | rgb;
-        C_ACCENT_GHOST  = 0x11000000 | rgb;
-    }
 
     private static int brighten(int argb, float scale) {
         int r = Math.min(255, Math.max(0, (int) (((argb >> 16) & 0xFF) * scale)));
@@ -311,23 +150,14 @@ public final class Theme {
     public static int C_WARN;     // caution, in-progress
 
     /** Re-derive the status colours for the current panel lightness. */
+    /** Status tones for text over the world. One surface, so one set. */
     private static void applyStatusColors() {
-        if (lightSurface()) {
-            // Saturated and dark, the way vanilla colours text on a light container.
-            F_MATCH   = 0xFF176B3A;
-            F_DEDUP   = 0xFF7A5300;
-            F_NOMATCH = 0xFF5A5A6B;
-            C_DANGER  = 0xFFA01B1B;
-            C_SUCCESS = 0xFF176B3A;
-            C_WARN    = 0xFF7A5300;
-        } else {
-            F_MATCH   = 0xFF6BFFB0;
-            F_DEDUP   = 0xFFFFD060;
-            F_NOMATCH = 0xFF9892B8;
-            C_DANGER  = 0xFFFF6166;
-            C_SUCCESS = 0xFF6BFFB0;
-            C_WARN    = 0xFFFFB347;
-        }
+        F_MATCH   = 0xFF6BFFB0;
+        F_DEDUP   = 0xFFFFD060;
+        F_NOMATCH = 0xFF9892B8;
+        C_DANGER  = 0xFFFF6166;
+        C_SUCCESS = 0xFF6BFFB0;
+        C_WARN    = 0xFFFFB347;
     }
 
     // -----------------------------------------------------------------------
@@ -600,11 +430,9 @@ public final class Theme {
      * to separate the header from the body of a container screen. The accent still carries the
      * player's chosen theme, so the personality survives without the neon.
      */
-    public static void accentGlow(GuiGraphics g, int x, int y, int w) {
-        // A single hairline separator in the panel's own shadow tone. Simple Voice Chat has no
-        // accent rule at all; this is the least that still separates a title from its body.
-        // It was a seven-layer pulsing neon halo two revisions ago.
-        g.fill(x, y, x + w, y + 1, C_SHADOW);
+    /** Section rule under a header. Neutral now — there is no accent to carry. */
+    public static void headerRule(GuiGraphics g, int x, int y, int w) {
+        g.fill(x, y, x + w, y + 1, C_DIVIDER);
     }
 
     /**

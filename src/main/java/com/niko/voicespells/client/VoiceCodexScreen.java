@@ -82,7 +82,7 @@ public final class VoiceCodexScreen extends Screen {
 
         super.render(g, mouseX, mouseY, partial);
 
-        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
+        Theme.headerRule(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
 
         renderSummary(g);
     }

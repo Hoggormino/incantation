@@ -77,8 +77,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private int workOffsetX;
     private int workOffsetY;
     private int workOpacityPct; // 0..100 in UI, 0..1 in config
-    private VoiceSpellsConfig.ThemePreset workTheme;
-    private VoiceSpellsConfig.UiPalette   workPalette;
 
     private boolean initializedOnce = false;
     private Tab currentTab = Tab.RECOGNITION;
@@ -102,8 +100,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
      *  previewed look still applied while the config on disk said something else — the whole
      *  UI stayed the wrong colour until something happened to reload the config. Restoring
      *  these in {@link #onClose()} makes Cancel mean cancel. */
-    private VoiceSpellsConfig.ThemePreset origTheme;
-    private VoiceSpellsConfig.UiPalette origPalette;
     private boolean saved = false;
 
     public VoiceSpellsConfigScreen(Screen parent) {
@@ -124,11 +120,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             workOffsetX    = c.hudOffsetX.get();
             workOffsetY    = c.hudOffsetY.get();
             workOpacityPct = (int) Math.round(c.globalOpacity.get() * 100);
-            workTheme      = c.themePreset.get();
-            workPalette    = c.uiPalette.get();
             // Remembered so Cancel can undo the live theme preview — see onClose().
-            origTheme      = workTheme;
-            origPalette    = workPalette;
             initializedOnce = true;
         }
 
@@ -163,7 +155,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             // it the header/footer framing without pretending there is a list to fill.
             int blockH = 18                                  // title
                        + 6 + TAB_H                           // tab row
-                       + Theme.GAP_MD + 3 * GRID_ROW         // option grid
+                       + Theme.GAP_MD + gridRows() * GRID_ROW
                        + 12 + 24 + 20;                       // the two button rows
             int blockTop = Math.max(8, (height - blockH) / 2);
 
@@ -171,7 +163,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             headerY  = blockTop + 14;                        // rule under the title
             tabsY    = headerY + 8;
             contentY = tabsY + TAB_H + Theme.GAP_MD;
-            row1Y    = contentY + 3 * GRID_ROW + 12;
+            row1Y    = contentY + gridRows() * GRID_ROW + 12;
             row2Y    = row1Y + 24;
             footerY  = row1Y - 8;                            // rule above the buttons
         } else {
@@ -202,7 +194,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // metric. The old label-plus-control layout needed five and six rows, which is why it
         // had to compress rows on short windows and still collided with the buttons; halving the
         // row count made the whole compression mechanism unnecessary.
-        int gridRows = 3;
+        int gridRows = gridRows();
         gridTop = contentY;
         buttonsTopY = row1Y;
         int gridBottom = contentY + gridRows * GRID_ROW;
@@ -265,8 +257,19 @@ public final class VoiceSpellsConfigScreen extends Screen {
         return PANELLESS ? (width - gridW) / 2 : panelX + (panelW - gridW) / 2;
     }
 
-    /** Top of the monitor block: directly under the three grid rows, in either layout. */
-    private int monitorY() { return gridTop + 3 * GRID_ROW + 6; }
+    /** Rows the current tab's options occupy, two per row.
+     *
+     *  Counted, not hardcoded. It was fixed at 3 for both tabs, which was right only while the
+     *  HUD tab had six options; removing the menu-style and accent cycles left it with four, and
+     *  a hardcoded 3 would have reserved a phantom row and reopened the empty-space problem the
+     *  layout was just fixed for. */
+    private int gridRows() {
+        int options = currentTab == Tab.HUD ? 4 : 5;
+        return (options + 1) / 2;
+    }
+
+    /** Top of the monitor block: directly under the grid rows, in either layout. */
+    private int monitorY() { return gridTop + gridRows() * GRID_ROW + 6; }
 
     /** The first thing below the monitor that it must not touch: the secondary button row. */
     private int monitorBottomLimit() { return buttonsTopY - 6; }
@@ -349,49 +352,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 v -> "Opacity: " + v + "%", v -> workOpacityPct = v), i++, gridX, colW, y),
             "How solid the HUD is over the world.");
 
-        help(slot(NeonCycle.named(0, 0, colW, 20, "Menu style", VoiceSpellsConfig.UiPalette.values(),
-                workPalette, VoiceSpellsConfigScreen::prettyPalette,
-                val -> {
-                    workPalette = val;
-                    Theme.applyPalette(val);
-                    // StringWidget caches its colour at construction, so existing widgets keep
-                    // the old palette until the screen is rebuilt.
-                    rebuildWidgets();
-                }), i++, gridX, colW, y),
-            "Options draws no panel at all, like Minecraft's own settings screens. Vanilla, "
-            + "Midnight and Slate draw a container window in light, near-black or stone grey.");
-
-        help(slot(NeonCycle.namedWithLocks(0, 0, colW, 20, "Accent",
-                VoiceSpellsConfig.ThemePreset.values(), workTheme,
-                p -> {
-                    String name = p.name().charAt(0) + p.name().substring(1).toLowerCase();
-                    // Locked themes show their required cast count so the player knows the goal.
-                    return VoiceStats.totalCasts() >= p.requiredCasts
-                        ? name
-                        : name + " [" + p.requiredCasts + "]";
-                },
-                p -> VoiceStats.totalCasts() < p.requiredCasts,
-                val -> {
-                    // Locked? Don't commit and don't apply. The label still shows the locked
-                    // theme with its goal, but nothing visual or persisted changes.
-                    if (VoiceStats.totalCasts() < val.requiredCasts) return;
-                    workTheme = val;
-                    Theme.applyPreset(val);
-                    rebuildWidgets();
-                }), i++, gridX, colW, y),
-            "Accent colour for the in-world HUD. Menus deliberately stay neutral. Locked "
-            + "themes show the number of voice casts needed to unlock them.");
-    }
-
-    private static String prettyPalette(VoiceSpellsConfig.UiPalette p) {
-        // DARK is the light vanilla-container palette; the constant name is kept for config
-        // compatibility, so the LABEL has to say what the player actually gets.
-        return switch (p) {
-            case OPTIONS  -> "Options";
-            case DARK     -> "Vanilla";
-            case MIDNIGHT -> "Midnight";
-            case SLATE    -> "Slate";
-        };
     }
 
     private static String prettyCorner(VoiceSpellsConfig.Corner c) {
@@ -435,10 +395,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 workOffsetX   = 5;
                 workOffsetY   = 28;
                 workOpacityPct = 100;
-                workPalette   = VoiceSpellsConfig.UiPalette.DARK;
-                workTheme     = VoiceSpellsConfig.ThemePreset.ARCANE;
-                Theme.applyPalette(workPalette);
-                Theme.applyPreset(workTheme);
             }
         }
         rebuildWidgets();
@@ -455,13 +411,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
         c.hudOffsetX.set(workOffsetX);
         c.hudOffsetY.set(workOffsetY);
         c.globalOpacity.set(workOpacityPct / 100.0);
-        // Belt-and-braces: don't persist a theme the player hasn't actually unlocked.
-        if (VoiceStats.totalCasts() < workTheme.requiredCasts) {
-            workTheme = VoiceSpellsConfig.ThemePreset.ARCANE;
-            Theme.applyPreset(workTheme);
-        }
-        c.themePreset.set(workTheme);
-        c.uiPalette.set(workPalette);
         // set() alone does not reach the disk on NeoForge - see VoiceSpellsConfig.saveToDisk().
         VoiceSpellsConfig.saveToDisk();
         // set() persists but the reload event is debounced — refresh cache now so the mic
@@ -485,11 +434,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
     @Override
     public void onClose() {
         try { VoiceController.setDiagnosticCapture("livemonitor", false); } catch (Throwable ignored) {}
-        // Cancel / Escape: drop the live theme preview back to what is actually persisted.
-        if (!saved) {
-            if (origPalette != null) Theme.applyPalette(origPalette);
-            if (origTheme != null) Theme.applyPreset(origTheme);
-        }
+        // Nothing to undo on cancel any more: there is no live theme preview to roll back,
+        // because there is no theme. Every remaining option is committed only by Done.
         if (minecraft != null) minecraft.setScreen(parent);
     }
 
@@ -615,7 +561,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             int barH = Math.max(1, (int) (data[i] * (h - 4)));
             int barY = y + h - 2 - barH;
             // Newest bars get the brighter neon — the rightmost columns are the most recent
-            // ~1.5s, draw them with C_ACCENT_BRIGHT so the eye reads the trace direction.
+            // ~1.5s, draw the recent ones brighter so the eye reads the trace direction.
             int color = (i > bars * 3 / 4) ? 0xFFFFFFFF : 0xFFA0A0A0;
             g.fill(barX, barY, Math.max(barX + 1, barNextX - 1), y + h - 2, color);
         }

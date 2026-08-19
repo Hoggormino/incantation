@@ -124,7 +124,7 @@ public final class ConfigMoreScreen extends Screen {
             b -> {
                 if (!VoiceController.isCalibrating()) {
                     VoiceController.startNoiseGateCalibration();
-                    // C_WARN, not the accent: the accent comes from the ThemePreset rather than the
+                    // C_WARN means "in progress", which is what this is.
                     // palette, so on the light container panel it is a pastel on pale grey. C_WARN
                     // is palette-derived and means "in progress", which is what this is.
                     flashStatus("Calibrating — say a few spell names…", Theme.C_WARN);
@@ -215,8 +215,6 @@ public final class ConfigMoreScreen extends Screen {
         sb.append("hudOffsetY=").append(c.hudOffsetY.get()).append('\n');
         sb.append("globalOpacity=").append(c.globalOpacity.get()).append('\n');
         // Visual / palette
-        sb.append("themePreset=").append(c.themePreset.get().name()).append('\n');
-        sb.append("uiPalette=").append(c.uiPalette.get().name()).append('\n');
         // Recognition tuning + modes added in newer builds
         sb.append("noiseGateRms=").append(c.noiseGateRms.get()).append('\n');
         sb.append("handsFreeConfirm=").append(c.handsFreeConfirm.get()).append('\n');
@@ -295,8 +293,10 @@ public final class ConfigMoreScreen extends Screen {
             case "hudOffsetX":        c.hudOffsetX.set(Integer.parseInt(val.trim())); return true;
             case "hudOffsetY":        c.hudOffsetY.set(Integer.parseInt(val.trim())); return true;
             case "globalOpacity":     c.globalOpacity.set(Double.parseDouble(val.trim())); return true;
-            case "themePreset":       c.themePreset.set(VoiceSpellsConfig.ThemePreset.valueOf(val.trim().toUpperCase(Locale.ROOT))); return true;
-            case "uiPalette":         c.uiPalette.set(VoiceSpellsConfig.UiPalette.valueOf(val.trim().toUpperCase(Locale.ROOT))); return true;
+            // Accepted and ignored: profiles exported by 0.10.3 and earlier carry these, and
+            // the settings they named no longer exist. Silently skipping them keeps an old
+            // profile importable instead of failing on its first line.
+            case "themePreset", "uiPalette": return true;
             case "noiseGateRms":      c.noiseGateRms.set(Double.parseDouble(val.trim())); return true;
             case "handsFreeConfirm":  c.handsFreeConfirm.set(Boolean.parseBoolean(val)); return true;
             case "alwaysShowHeard":   c.alwaysShowHeard.set(Boolean.parseBoolean(val)); return true;
@@ -393,6 +393,6 @@ public final class ConfigMoreScreen extends Screen {
         Theme.panel(g, px, py, panelW, panelH);
         Theme.headerBand(g, px, py, panelW, Theme.HEADER_H);
         super.render(g, mouseX, mouseY, partial);
-        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
+        Theme.headerRule(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
     }
 }

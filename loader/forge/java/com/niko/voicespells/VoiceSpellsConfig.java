@@ -20,51 +20,6 @@ import java.util.List;
 public final class VoiceSpellsConfig {
     public enum Corner { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
 
-    /** Theme accent presets. Lives here (not in client/Theme) so it can be referenced by the
-     *  config spec builder, which is loaded on both client and dedicated server. The actual
-     *  rendering side reads the {@code accent} RGB and derives variants.
-     *
-     *  Most presets are free; a few are gated behind cast-count milestones, turning theming
-     *  into a low-key cosmetic reward for using the mod. The free pool gives variety from day
-     *  one and the locked ones celebrate progress.
-     */
-    public enum ThemePreset {
-        // --- Free (always available) ---
-        ARCANE  (0xFFC49AFF, 0),     // default — electric lavender purple
-        BLOSSOM (0xFFFF9EC7, 0),     // pink — soft floral
-        OCEAN   (0xFF5BA0FF, 0),     // deep cobalt blue
-        DUSK    (0xFFFFB07A, 0),     // warm peach / sunset coral
-        MINT    (0xFF8FE5C8, 0),     // pale cool mint
-        GOLD    (0xFFFFD75A, 0),     // amber starlight
-        // --- Locked by cast milestones ---
-        PHOENIX (0xFFFF7A55, 10),    // Apprentice tier — fiery orange-red
-        FROST   (0xFF6FE0FF, 50),    // Adept tier — cyan ice
-        VERDANT (0xFF8BE08F, 200),   // Magus tier — forest green
-        NECROTIC(0xFFA855F7, 1000);  // Archmage tier — deep amethyst
-        public final int accent;
-        public final int requiredCasts;
-        ThemePreset(int a, int r) { this.accent = a; this.requiredCasts = r; }
-    }
-
-    /** Base surface palette. The {@link ThemePreset} above only swaps the accent (purple →
-     *  pink → blue …); this swaps the underlying surfaces and text colours so the screens can
-     *  be flipped between dark, extra-dark and neutral-grey without recompiling.
-     *  <p>Like ThemePreset, this lives in the config class so it can be referenced by the
-     *  config spec without dragging in the client-only Theme renderer. */
-    public enum UiPalette {
-        // The constant NAMES are part of the saved config and cannot change without breaking
-        // everyone's voicespells-client.toml, so they stay — but what they render has changed
-        // and the comments say what is actually drawn now, not what the name implies.
-        DARK,       // vanilla container panel: light stone with dark 0x404040 text, i.e. what a
-                    // chest GUI looks like. Named DARK for config compatibility.
-        MIDNIGHT,   // near-black surfaces, white text — low glare, good for streamers
-        SLATE,      // vanilla stone grey, white text — midway between the two
-        // Added after the other three, which is why it sits at the end: an existing toml naming
-        // any of them still parses. No panel at all — the layout Minecraft uses for its OWN
-        // settings screens, with the blurred world behind and white shadowed text. Default,
-        // because these are settings screens.
-        OPTIONS
-    }
 
     public static final ForgeConfigSpec CLIENT_SPEC;
     public static final Client CLIENT;
@@ -118,9 +73,9 @@ public final class VoiceSpellsConfig {
      *  config class never link-references the client-only controller. */
     public static volatile Runnable reloadCallback;
 
-    /** Set by client init to a runnable that re-applies the active {@link ThemePreset} and
-     *  {@link UiPalette} to the client-only {@code Theme} class. Stays {@code null} on a
-     *  dedicated server so {@code cacheColors()} can run there without triggering Theme load. */
+    /** Set by client init to {@code Theme::applyPalette}. There is one palette and no accent
+     *  now, so this only exists to initialise the colour table; it stays {@code null} on a
+     *  dedicated server so {@code cacheColors()} can run without triggering Theme load. */
     public static volatile Runnable themeApplier;
 
     public static void onConfigReload(ModConfigEvent.Reloading e) {
@@ -202,8 +157,6 @@ public final class VoiceSpellsConfig {
         public final ForgeConfigSpec.BooleanValue pauseWhenAfk;
         public final ForgeConfigSpec.IntValue     afkSeconds;
         public final ForgeConfigSpec.BooleanValue alwaysShowHeard;
-        public final ForgeConfigSpec.EnumValue<ThemePreset> themePreset;
-        public final ForgeConfigSpec.EnumValue<UiPalette> uiPalette;
         public final ForgeConfigSpec.BooleanValue handsFreeConfirm;
         public final ForgeConfigSpec.DoubleValue  noiseGateRms;
         /** When the mic is allowed to feed the recognizer. */
@@ -326,7 +279,7 @@ public final class VoiceSpellsConfig {
             b.comment("Sass mode - occasional snarky 'was that even a spell?' toast on miss.");
             sassMode = b.define("sassMode", false);
             b.comment("Cinematic accent bars top and bottom of the screen, plus corner",
-                      "glows, while you are casting a long spell. Tinted by themePreset,",
+                      "glows, while you are casting a long spell.",
                       "so it is purple on the default ARCANE.",
                       "Off by default: the code existed since early builds but never ran,",
                       "because the reflection behind it named a class that does not exist.",
@@ -343,19 +296,6 @@ public final class VoiceSpellsConfig {
             b.comment("Persistently show the last heard phrase on the HUD (separate from the",
                       "miss toast). Useful while tuning recognition. Off by default.");
             alwaysShowHeard = b.define("alwaysShowHeard", false);
-            b.comment("Theme accent preset. Swaps the neon palette for every screen and chip.",
-                      "Free: ARCANE, BLOSSOM, OCEAN, DUSK, MINT, GOLD.",
-                      "Unlocked by milestone: PHOENIX (10 casts), FROST (50), VERDANT (200),",
-                      "NECROTIC (1000).");
-            themePreset = b.defineEnum("themePreset", ThemePreset.ARCANE);
-            b.comment("Menu style. Independent of themePreset (which is the accent colour).",
-                      "OPTIONS  — default. No panel: the layout Minecraft uses for its own",
-                      "           settings screens, blurred world behind, white text",
-                      "DARK     — vanilla container look: light stone panel, dark text",
-                      "           (the name is kept for config compatibility; it is the light one)",
-                      "MIDNIGHT — near-black panel, white text. Low glare for streamers",
-                      "SLATE    — vanilla stone grey panel, white text");
-            uiPalette = b.defineEnum("uiPalette", UiPalette.OPTIONS);
             b.comment("Hands-free queue confirmation: when on, say 'no' to clear the cast",
                       "queue, or 'yes' to acknowledge. Injects those two words into the Vosk",
                       "grammar so they're listened for.");

@@ -261,7 +261,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         super.render(g, mouseX, mouseY, partial);
 
         // Soft rounded frame + glowing neon rule under the header.
-        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H,
+        Theme.headerRule(g, px + Theme.PAD, py + Theme.HEADER_H,
             panelW - Theme.PAD * 2);
 
         // Tooltip last, and raised in Z so its background lands above the rows' text rather

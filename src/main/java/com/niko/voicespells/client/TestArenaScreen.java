@@ -100,7 +100,7 @@ public final class TestArenaScreen extends Screen {
 
         super.render(g, mouseX, mouseY, partial);
 
-        Theme.accentGlow(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
+        Theme.headerRule(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
 
         int x = px + Theme.PAD;
         int y = py + Theme.HEADER_H + Theme.GAP_MD;
