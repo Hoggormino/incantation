@@ -36,18 +36,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
     // that filled most of the screen at GUI-scale auto. Bottom buttons moved to two rows to
     // make the narrower width workable and to remove the dead vertical gap the single
     // overcrowded row used to leave above itself.
-    /**
-     * Which of Minecraft's two screen archetypes this uses.
-     *
-     * <p>The game has exactly two, and mixing them is what makes a modded screen feel off. A
-     * CONTAINER screen (chest, furnace) is a textured panel with dark text and no buttons. An
-     * OPTIONS screen (Video Settings, Controls) has no panel at all — just the blurred world, a
-     * white centred title and a grid of buttons. This screen is a settings screen wearing a
-     * container's clothes, so both readings are defensible and it is worth being able to see
-     * each one running rather than arguing about it.
-     */
-    private static final boolean PANELLESS = true;
-
     // Vanilla's own option-button metrics: 150 wide, 20 tall, 4 apart, which is what every
     // two-column options screen in the game uses.
     private static final int COL_W         = 150;
@@ -94,6 +82,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
     /** Whether the Live Monitor has room to draw without colliding with the option rows.
      *  Computed in init() from the grid geometry; read by render(). */
     private boolean monitorFits = true;
+    /** Whether this layout actually set space aside for the monitor block. */
+    private boolean monitorReserved = false;
 
     /** Theme and palette as they were when the screen opened, plus whether Save ran.
      *
@@ -143,62 +133,70 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
         int gridW = Math.min(GRID_W, panelW - 24);
         int colW  = (gridW - COL_GAP) / 2;
-        int gridX = PANELLESS ? (width - gridW) / 2 : panelX + (panelW - gridW) / 2;
+        int gridX = (width - gridW) / 2;
 
         int titleY, tabsY, contentY, row1Y, row2Y;
-        if (PANELLESS) {
-            // One centred block: title, tabs, options, buttons, with a rule above and below it.
-            //
-            // The buttons used to be pinned to the bottom of the SCREEN while the options sat at
-            // the top, which is what vanilla does — but vanilla fills the space between with a
-            // scrolling list, and this screen has five fixed options. On a tall window that left
-            // a several-hundred-pixel void in the middle and the screen read as broken. Every
-            // other screen in the mod is a centred block, so this one is too; the two rules give
-            // it the header/footer framing without pretending there is a list to fill.
-            // The monitor is part of the block, not something that squeezes in afterwards.
-            //
-            // blockH never budgeted for it, so the buttons sat directly under the last option
-            // row and the clearance the gate measures — (row1Y - 6) - (gridBottom + 6) — was
-            // exactly 0 against a required 46. The Live Monitor could therefore NEVER draw: the
-            // toggle turned on, held the microphone open, and showed "needs a taller window" on
-            // a 4K display. Budgeting it here moves the buttons down and makes the gate mean
-            // what it says.
-            int monitorBlock = showMonitor ? MONITOR_H : 0;
-            int blockH = 18                                  // title
-                       + 6 + TAB_H                           // tab row
-                       + Theme.GAP_MD + gridRows() * GRID_ROW
-                       + monitorBlock                        // live monitor, when shown
-                       + 12 + GRID_ROW + 20;                 // the two button rows
-            int blockTop = Math.max(8, (height - blockH) / 2);
+        // One centred block: title, tabs, options, buttons, with a rule above and below it.
+        //
+        // The buttons used to be pinned to the bottom of the SCREEN while the options sat at
+        // the top, which is what vanilla does — but vanilla fills the space between with a
+        // scrolling list, and this screen has five fixed options. On a tall window that left
+        // a several-hundred-pixel void in the middle and the screen read as broken. Every
+        // other screen in the mod is a centred block, so this one is too; the two rules give
+        // it the header/footer framing without pretending there is a list to fill.
+        // The monitor is part of the block, not something that squeezes in afterwards.
+        //
+        // blockH never budgeted for it, so the buttons sat directly under the last option
+        // row and the clearance the gate measures — (row1Y - 6) - (gridBottom + 6) — was
+        // exactly 0 against a required 46. The Live Monitor could therefore NEVER draw: the
+        // toggle turned on, held the microphone open, and showed "needs a taller window" on
+        // a 4K display. Budgeting it here moves the buttons down and makes the gate mean
+        // what it says.
+        // The block without the monitor. This part always has to fit.
+        int baseH = 18                                   // title
+                  + 6 + TAB_H                            // tab row
+                  + Theme.GAP_MD + gridRows() * GRID_ROW
+                  + 12 + GRID_ROW + 20;                  // the two button rows
+        // ...and the monitor only joins it if the WINDOW can hold both.
+        //
+        // Budgeting the monitor's height fixed a gate that could never pass, but on its own
+        // it just moved the failure: the block grew past the window and pushed Cancel / Done
+        // off the bottom of the screen, which is strictly worse than not drawing a debug
+        // panel. The monitor is the optional part, so the monitor is what gets dropped.
+        int monitorBlock = showMonitor ? MONITOR_H : 0;
+        if (monitorBlock > 0 && baseH + monitorBlock > height - 16) monitorBlock = 0;
+        int blockH = baseH + monitorBlock;
+        int blockTop = Math.max(8, (height - blockH) / 2);
 
-            titleY   = blockTop;
-            headerY  = blockTop + 14;                        // rule under the title
-            tabsY    = headerY + 8;
-            contentY = tabsY + TAB_H + Theme.GAP_MD;
-            row1Y    = contentY + gridRows() * GRID_ROW + monitorBlock + 12;
-            row2Y    = row1Y + GRID_ROW;
-            footerY  = row1Y - 8;                            // rule above the buttons
-        } else {
-            titleY   = panelY + TITLE_TOP;
-            tabsY    = panelY + TITLE_TOP + TITLE_H;
-            contentY = tabsY + TAB_H + Theme.GAP_MD;
-            row2Y    = panelY + panelH - 26;
-            row1Y    = row2Y - 24;
-        }
+        titleY   = blockTop;
+        headerY  = blockTop + 14;                        // rule under the title
+        tabsY    = headerY + 8;
+        contentY = tabsY + TAB_H + Theme.GAP_MD;
+        monitorReserved = monitorBlock > 0;
+        row1Y    = contentY + gridRows() * GRID_ROW + monitorBlock + 12;
+        row2Y    = row1Y + GRID_ROW;
+        footerY  = row1Y - 8;                            // rule above the buttons
 
         // --- Title ---
-        StringWidget titleW = new StringWidget(PANELLESS ? 0 : panelX, titleY,
-            PANELLESS ? width : panelW, 9, title, font);
+        StringWidget titleW = new StringWidget(0, titleY, width, 9, title, font);
         titleW.alignCenter();
         // On a panelless screen the backdrop is the blurred world, so the title has to be white
         // and shadowed like vanilla's; on a container panel it is the panel's dark text tone.
-        titleW.setColor(PANELLESS ? 0xFFFFFF : Theme.C_TEXT);
+        titleW.setColor(0xFFFFFF);   // white over the blurred world, like vanilla's
         addRenderableWidget(titleW);
 
         // --- Tab bar ---
-        int tabW = gridW / 2;
-        addRenderableWidget(new TabButton(gridX,        tabsY, tabW, TAB_H, "Recognition", Tab.RECOGNITION));
-        addRenderableWidget(new TabButton(gridX + tabW, tabsY, tabW, TAB_H, "HUD",         Tab.HUD));
+        // Tabs sit on the SAME column metric as the options below them.
+        //
+        // They used to split gridW in half with no gutter, so the seam between the two tabs fell
+        // 5px left of the gap between the two option columns and neither tab edge lined up with
+        // the buttons under it. Nothing was broken and it looked wrong, which on a screen this
+        // sparse is the same thing: with only eight controls on screen, a five-pixel disagreement
+        // is the most visible feature of the layout. One metric, one alignment.
+        addRenderableWidget(new TabButton(gridX, tabsY, colW, TAB_H,
+            "Recognition", Tab.RECOGNITION));
+        addRenderableWidget(new TabButton(gridX + colW + COL_GAP, tabsY, colW, TAB_H,
+            "HUD", Tab.HUD));
 
         // --- Tab content: a two-column option grid ---
         //
@@ -213,7 +211,11 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // Enough room for the header line plus a couple of rows, measured against the same
         // limit renderMonitor() will use. The old check compared free space to a bare 60 while
         // the monitor drew a fixed 140, so it passed in exactly the cases that then overlapped.
-        monitorFits = !showMonitor || (row1Y - 6) - (gridBottom + 6) >= 46;
+        // "Fits" means the space was actually reserved for it above AND the reservation is big
+        // enough to be useful. Both halves matter: the first stops it drawing over the buttons,
+        // the second stops a useless 20px sliver.
+        monitorFits = !showMonitor
+                   || (monitorReserved && (row1Y - 6) - (gridBottom + 6) >= 46);
         // The hold goes HERE, after monitorFits is known — asking for it earlier read the value
         // left over from the previous init(). Only hold the microphone open when the monitor can
         // actually be seen: holding it for a block that refuses to draw is the worst of both,
@@ -273,7 +275,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
     /** Left edge of the monitor block: the grid's own left edge under either layout. */
     private int monitorX() {
         int gridW = Math.min(GRID_W, panelW - 24);
-        return PANELLESS ? (width - gridW) / 2 : panelX + (panelW - gridW) / 2;
+        return (width - gridW) / 2;
     }
 
     /** Rows the current tab's options occupy, two per row.
@@ -465,18 +467,13 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // the panel still reads. Painting only a flat scrim, as this did before, opted out
         // of all of that and was a large part of why the screens felt foreign.
         Theme.background(this, g, mouseX, mouseY, partial);
-        if (PANELLESS) {
-            // The two separator lines vanilla puts under its header and above its footer. They
-            // are what stop an options screen from being controls floating on scenery: the eye
-            // reads a header band, a content band and a footer band instead of one soup. Drawn
-            // rather than blitted because the sprites for them only exist from 1.20.5 on, and
-            // this has to look the same on 1.20.1.
-            separator(g, headerY);
-            separator(g, footerY);
-        } else {
-            g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-            Theme.panel(g, panelX, panelY, panelW, panelH);
-        }
+        // The two separator lines vanilla puts under its header and above its footer. They
+        // are what stop an options screen from being controls floating on scenery: the eye
+        // reads a header band, a content band and a footer band instead of one soup. Drawn
+        // rather than blitted because the sprites for them only exist from 1.20.5 on, and
+        // this has to look the same on 1.20.1.
+        separator(g, headerY);
+        separator(g, footerY);
 
         super.render(g, mouseX, mouseY, partial);
 
