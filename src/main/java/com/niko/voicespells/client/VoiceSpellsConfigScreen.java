@@ -48,6 +48,10 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private static final int PANEL_W_PREF  = GRID_W + 24;   // grid + a 12px margin each side
     private static final int PANEL_BASE_H  = 190;   // title + tabs + 3 grid rows + 2 button rows
     private static final int MONITOR_H     = 156;   // extra height when the monitor is shown
+    /** Smallest monitor worth drawing: the header line, the level meter beside it, and one
+     *  entry. A single most-recent recognition plus a live meter is genuinely useful — refusing
+     *  to draw anything at 854x480, an ordinary window at GUI scale 2, was not. */
+    private static final int MONITOR_MIN   = 34;
     private static final int TAB_H         = 18;
     /** Space above the title inside the panel, and below it before the tabs. */
     private static final int TITLE_TOP     = 8;
@@ -157,14 +161,23 @@ public final class VoiceSpellsConfigScreen extends Screen {
                   + 6 + TAB_H                            // tab row
                   + Theme.GAP_MD + gridRows() * GRID_ROW
                   + 12 + GRID_ROW + 20;                  // the two button rows
-        // ...and the monitor only joins it if the WINDOW can hold both.
+        // ...and the monitor takes whatever room is left over, rather than demanding all of it.
         //
-        // Budgeting the monitor's height fixed a gate that could never pass, but on its own
-        // it just moved the failure: the block grew past the window and pushed Cancel / Done
-        // off the bottom of the screen, which is strictly worse than not drawing a debug
-        // panel. The monitor is the optional part, so the monitor is what gets dropped.
-        int monitorBlock = showMonitor ? MONITOR_H : 0;
-        if (monitorBlock > 0 && baseH + monitorBlock > height - 16) monitorBlock = 0;
+        // Three versions of this were wrong in three different ways. It first drew a fixed 156px
+        // with no reservation, straight over the buttons. Reserving the 156 fixed that but let
+        // the block outgrow the window and push Cancel / Done off the bottom. Dropping it
+        // whenever 156 did not fit then meant a 427x240 window — an ordinary 854x480 at GUI
+        // scale 2 — refused to show the monitor at all and just said "needs a taller window",
+        // which is a strange thing for a screen to say about a panel it could perfectly well
+        // have drawn smaller.
+        //
+        // So it scales. It uses up to MONITOR_H, never more than the space that actually exists,
+        // and only declines when what is left cannot even hold a header and a couple of rows.
+        int monitorRoom  = (height - 16) - baseH;
+        int monitorBlock = 0;
+        if (showMonitor && monitorRoom >= MONITOR_MIN) {
+            monitorBlock = Math.min(MONITOR_H, monitorRoom);
+        }
         int blockH = baseH + monitorBlock;
         int blockTop = Math.max(8, (height - blockH) / 2);
 
@@ -211,11 +224,10 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // Enough room for the header line plus a couple of rows, measured against the same
         // limit renderMonitor() will use. The old check compared free space to a bare 60 while
         // the monitor drew a fixed 140, so it passed in exactly the cases that then overlapped.
-        // "Fits" means the space was actually reserved for it above AND the reservation is big
-        // enough to be useful. Both halves matter: the first stops it drawing over the buttons,
-        // the second stops a useless 20px sliver.
-        monitorFits = !showMonitor
-                   || (monitorReserved && (row1Y - 6) - (gridBottom + 6) >= 46);
+        // One source of truth: the monitor draws exactly when space was reserved for it. The
+        // sizing above already refused anything under MONITOR_MIN, so re-deriving a second
+        // opinion here from row positions is how the two halves disagreed before.
+        monitorFits = !showMonitor || monitorReserved;
         // The hold goes HERE, after monitorFits is known — asking for it earlier read the value
         // left over from the previous init(). Only hold the microphone open when the monitor can
         // actually be seen: holding it for a block that refuses to draw is the worst of both,
@@ -301,10 +313,15 @@ public final class VoiceSpellsConfigScreen extends Screen {
     /** Y the option grid was actually laid out at; the monitor hangs off it. */
     private int gridTop;
 
-    /** Place a control at grid slot {@code i}, left column for even, right for odd. */
+    /** Place a control at grid slot {@code i}, left column for even, right for odd.
+     *
+     *  <p>COL_GAP, not a hardcoded 4. This was the last place still using its own gutter: the
+     *  tabs and both button rows moved onto the shared 10px metric, so the right-hand OPTION
+     *  column ended up 6px left of the tab above it and of the buttons below it. One constant,
+     *  or the columns drift again the next time one of them is touched. */
     private <T extends net.minecraft.client.gui.components.AbstractWidget> T slot(
             T w, int i, int gridX, int colW, int y) {
-        w.setX(gridX + (i % 2) * (colW + 4));
+        w.setX(gridX + (i % 2) * (colW + COL_GAP));
         w.setY(y + (i / 2) * GRID_ROW);
         return addRenderableWidget(w);
     }
@@ -503,16 +520,13 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // and gap offsets.
         int my = monitorY();
         int mw = Math.min(GRID_W, panelW - 24);
-        // Height from the space that EXISTS, not from the constant. MONITOR_H - 16 is 140px and
-        // was drawn unconditionally, while the gate that decides whether to draw at all asked
-        // only for 60px of clearance — so at common GUI scales the monitor drew straight over
-        // the Reset / Spell List / More and Cancel / Done rows, and past the panel's bottom edge.
-        // Deriving it means the well shrinks to fit instead of overlapping, and the gate below
-        // refuses only when there is not even enough room to be useful.
-        // Bounded at both ends: it must not overdraw the buttons (the limit) and it should not
-        // balloon either — on a 1600x1000 window the derived height was 500px of mostly empty
-        // log. MONITOR_H is what the block was designed to show, so it stays the ceiling.
-        int mh = Math.max(0, Math.min(MONITOR_H - 16, monitorBottomLimit() - my - 4));
+        // Height from the space init() actually set aside, measured from BELOW the header.
+        //
+        // This subtracted the header's 11px after computing mh rather than before, so the well
+        // ran 7px past its own limit and clipped the top of the button row. The limit derives
+        // from the button row, so honouring it exactly is the whole point.
+        final int HEADER_LINE = 11;
+        int mh = Math.max(0, monitorBottomLimit() - (my + HEADER_LINE) - 4);
 
         // Live JVM heap stat — gives the user a sanity check on whether the recogniser is
         // bloating memory (it shouldn't; Vosk is C++, but the bridging buffers + grammar grow
@@ -525,7 +539,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         int meterX = mx + font.width("LIVE MONITOR" + heap) + 10;
         int meterW = mw - (meterX - mx);
         drawWaveform(g, meterX, my, meterW, 8);
-        my += 11;
+        my += HEADER_LINE;
         g.fill(mx, my, mx + mw, my + mh, Theme.C_INSET);
         Theme.insetShadow(g, mx, my, mw);
         Theme.roundedFrame(g, mx, my, mw, mh, Theme.C_DIVIDER);
