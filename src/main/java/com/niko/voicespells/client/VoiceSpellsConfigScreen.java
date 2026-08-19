@@ -123,6 +123,16 @@ public final class VoiceSpellsConfigScreen extends Screen {
     @Override
     protected void init() {
         VoiceSpellsConfig.Client c = VoiceSpellsConfig.CLIENT;
+        // Reload from the config whenever the values on disk have moved on without us.
+        //
+        // initializedOnce exists so that switching tabs (which re-runs init) does not throw away
+        // edits in progress. But it also meant that importing a profile from More... - which
+        // writes the config directly - left this screen holding the values from before the
+        // import, and pressing Done then wrote those stale values straight back over it. The
+        // import appeared to work and silently undid itself. Comparing a cheap fingerprint of the
+        // config catches any outside change without disturbing in-progress edits.
+        long stamp = configStamp(c);
+        if (initializedOnce && stamp != lastConfigStamp) initializedOnce = false;
         if (!initializedOnce) {
             workDebug      = c.debugMonitor.get();
             workFuzzy      = c.fuzzyMaxDistance.get();
@@ -150,6 +160,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             workHotbarSelect    = c.voiceHotbarSelect.get();
             // Remembered so Cancel can undo the live theme preview — see onClose().
             initializedOnce = true;
+            lastConfigStamp = configStamp(c);
         }
         panelW = Theme.fit(PANEL_W_PREF, width);
         panelH = Theme.fit(PANEL_BASE_H, height);
@@ -219,11 +230,21 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // had to compress rows on short windows and still collided with the buttons; halving the
         // row count made the whole compression mechanism unnecessary.
         gridTop = contentY;
+        rowPitch = gridPitch(contentY, footerY);
+        placed = 0;
 
         switch (currentTab) {
             case RECOGNITION -> buildRecognitionTab(gridX, colW, contentY);
             case HUD         -> buildHudTab(gridX, colW, contentY);
             case BEHAVIOUR   -> buildBehaviourTab(gridX, colW, contentY);
+        }
+        // The layout is sized from optionCount(); if a tab quietly grows past it, say so in the
+        // log instead of drawing the extra row through the buttons. This is the check that was
+        // missing when Recognition went to nine.
+        if (placed != optionCount()) {
+            com.niko.voicespells.VoiceSpells.LOGGER.warn(
+                "Config tab {} placed {} controls but the layout budgeted {} - the grid may "
+                + "overflow. Update optionCount().", currentTab, placed, optionCount());
         }
 
         // --- Bottom buttons, two rows (always present, span both tabs) ---
@@ -285,12 +306,50 @@ public final class VoiceSpellsConfigScreen extends Screen {
     /** How many controls the current tab builds. Kept beside the builders so adding one to a
      *  tab and forgetting this cannot silently clip the last row. */
     private int optionCount() {
+        // These must match what the build*Tab methods actually add. They did not: Recognition
+        // built nine controls against an asserted eight, so the fifth row was drawn below the
+        // footer rule and, at 720p on GUI scale 3, straight through the button bar. The
+        // assertion is checked at runtime now (see init) rather than trusted.
         return switch (currentTab) {
             case RECOGNITION -> 8;
             case HUD         -> 8;
             case BEHAVIOUR   -> 8;
         };
     }
+
+    /** Row pitch for the option grid: GRID_ROW when it fits, compressed when the window is too
+     *  short for it. A fixed pitch is what let a grid run through the footer. */
+    private int gridPitch(int contentTop, int footerTop) {
+        int rows = gridRows();
+        int room = footerTop - 6 - contentTop;
+        if (rows <= 0 || room >= rows * GRID_ROW) return GRID_ROW;
+        return Math.max(21, room / rows);
+    }
+
+    /** Fingerprint of the config as this screen last loaded it, so an outside write (a profile
+     *  import, an external toml edit) is noticed rather than silently overwritten on Done. */
+    private long lastConfigStamp;
+
+    /** Cheap order-sensitive hash of every value this screen owns. */
+    private static long configStamp(VoiceSpellsConfig.Client c) {
+        long h = 17;
+        Object[] vals = {
+            c.debugMonitor.get(), c.fuzzyMaxDistance.get(), c.substringMatch.get(),
+            c.dedupMillis.get(), c.restrictToOwned.get(), c.hudCorner.get(),
+            c.hudOffsetX.get(), c.hudOffsetY.get(), c.globalOpacity.get(),
+            c.gatingMode.get(), c.minConfidence.get(), c.requireSneak.get(),
+            c.echoLockoutMillis.get(), c.showMisses.get(), c.alwaysShowHeard.get(),
+            c.castVignette.get(), c.streamerMode.get(), c.combatOnly.get(),
+            c.pauseWhenAfk.get(), c.afkSeconds.get(), c.handsFreeConfirm.get(),
+            c.castQueueSize.get(), c.suspendWhenUnfocused.get(), c.voiceHotbarSelect.get(),
+        };
+        for (Object v : vals) h = h * 31 + (v == null ? 0 : v.hashCode());
+        return h;
+    }
+
+    /** Pitch in use this init(), and how many controls the tab actually placed. */
+    private int rowPitch = GRID_ROW;
+    private int placed;
 
     /** Y the option grid was actually laid out at; the monitor hangs off it. */
     private int gridTop;
@@ -306,7 +365,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private <T extends net.minecraft.client.gui.components.AbstractWidget> T slot(
             T w, int i, int gridX, int colW, int y) {
         w.setX(gridX + (i % 2) * (colW + COL_GAP));
-        w.setY(y + (i / 2) * GRID_ROW);
+        w.setY(y + (i / 2) * rowPitch);
+        placed = Math.max(placed, i + 1);   // what the tab REALLY built, for the runtime check
         return addRenderableWidget(w);
     }
 
@@ -352,11 +412,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 v -> "Confidence: " + v + "%", v -> workMinConfPct = v), i++, gridX, colW, y),
             "How sure the recogniser has to be before a phrase counts. Higher means fewer wrong "
             + "casts and more phrases ignored.");
-
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Sneak to cast", workRequireSneak,
-                v -> workRequireSneak = v), i++, gridX, colW, y),
-            "Require holding sneak while speaking. A strong filter if you talk on voice chat "
-            + "while playing.");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workEchoLockout, 0, 10000,
                 v -> "Echo guard: " + v + " ms", v -> workEchoLockout = v), i++, gridX, colW, y),
@@ -455,10 +510,10 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 v -> workHotbarSelect = v), i++, gridX, colW, y),
             "Let \"slot one\" through \"slot nine\" change your held item.");
 
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Owned only", workRestrictToOwned,
-                v -> workRestrictToOwned = v), i++, gridX, colW, y),
-            "Duplicate of the Recognition tab's setting, kept here because it decides what the "
-            + "mod will act on as much as what it will hear.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Sneak to cast", workRequireSneak,
+                v -> workRequireSneak = v), i++, gridX, colW, y),
+            "Require holding sneak while speaking. A strong filter if you talk on voice chat "
+            + "while playing.");
 
     }
 
@@ -507,7 +562,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 workOffsetX   = 5;
                 workOffsetY   = 28;
                 workOpacityPct = 100;
-                workShowMisses      = true;
+                workShowMisses      = false;   // matches the shipped default
                 workAlwaysShowHeard = false;
                 workCastVignette    = false;
                 workStreamer        = false;

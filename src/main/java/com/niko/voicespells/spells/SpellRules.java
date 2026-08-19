@@ -36,40 +36,70 @@ public final class SpellRules {
 
     private SpellRules() {}
 
-    /** How long a voice-cast stamp stays valid. Generous for a lagging server, far short of the
-     *  gap between two deliberate casts. */
-    private static final long STAMP_TTL_NANOS = 3_000_000_000L;
+    /**
+     * How long a pending voice cast stays claimable.
+     *
+     * <p>Long, and deliberately so. The first version cleared the mark the instant
+     * {@code attemptInitiateCast} returned, which is far too early: initiation only STARTS a cast,
+     * and Iron's Spells applies the cooldown when the cast RESOLVES - immediately for an instant
+     * spell, but seconds later for anything with a cast time. The cooldown event therefore fired
+     * with no mark set and the feature did nothing at all. Ten seconds comfortably covers the
+     * longest cast while still expiring long before a player could line up an unrelated cast to
+     * steal the discount, and the entry is consumed the moment it is used.
+     */
+    private static final long PENDING_TTL_NANOS = 10_000_000_000L;
 
-    /** Players currently inside a voice-initiated cast, by the nanotime it started. */
-    private static final Map<UUID, Long> castingByVoice = new ConcurrentHashMap<>();
+    /** A voice cast waiting for its cooldown to be applied. */
+    private record Pending(String spellId, long atNanos) {}
 
-    /** Which spells each player has ever voice-cast, for FIRST_CAST. */
+    /** Most recent voice cast per player, until its cooldown is applied or it expires. */
+    private static final Map<UUID, Pending> pending = new ConcurrentHashMap<>();
+
+    /**
+     * Which spells each player has ever voice-cast, for FIRST_CAST.
+     *
+     * <p>Persisted to {@code config/voicespells/learned.txt} on the server, because losing it is
+     * not a cosmetic reset: FIRST_CAST means a spell you have already unlocked by speaking it goes
+     * back to being unclickable, so a server restart silently takes progress away from every
+     * player who had earned it. Written on change (debounced) and on shutdown, read at startup.
+     */
     private static final Map<UUID, Set<String>> learned = new ConcurrentHashMap<>();
 
-    /** Mark the start of a voice-initiated cast. Paired with {@link #endVoiceCast}. */
+    /** Where the learned set lives. Null until a server tells us its config directory. */
+    private static volatile java.nio.file.Path storeFile;
+    private static volatile boolean dirty = false;
+
+    /**
+     * Record a voice-initiated cast. Not paired with a clear: the entry is consumed when the
+     * cooldown hook uses it, and expires on its own otherwise.
+     */
     public static void beginVoiceCast(UUID player, String spellId) {
-        if (player == null) return;
-        castingByVoice.put(player, System.nanoTime());
-        if (spellId != null) {
-            learned.computeIfAbsent(player, k -> ConcurrentHashMap.newKeySet()).add(spellId);
+        if (player == null || spellId == null) return;
+        pending.put(player, new Pending(spellId, System.nanoTime()));
+        if (learned.computeIfAbsent(player, k -> ConcurrentHashMap.newKeySet()).add(spellId)) {
+            dirty = true;      // a spell was learned for the first time; it must survive a restart
         }
     }
 
-    /** Clear the mark. Safe to call when none was set. */
+    /** Drop any pending entry - used on the failure path and on disconnect. */
     public static void endVoiceCast(UUID player) {
-        if (player != null) castingByVoice.remove(player);
+        if (player != null) pending.remove(player);
     }
 
-    /** True while this player is inside a cast the mod itself started. */
-    public static boolean isVoiceCasting(UUID player) {
-        if (player == null) return false;
-        Long at = castingByVoice.get(player);
-        if (at == null) return false;
-        if (System.nanoTime() - at > STAMP_TTL_NANOS) {   // stale: treat as not ours
-            castingByVoice.remove(player);
+    /** True if this player has a live, unconsumed voice cast. */
+    private static boolean hasPending(UUID player) {
+        Pending p = pending.get(player);
+        if (p == null) return false;
+        if (System.nanoTime() - p.atNanos() > PENDING_TTL_NANOS) {
+            pending.remove(player);
             return false;
         }
         return true;
+    }
+
+    /** True while this player has a voice cast in flight. */
+    public static boolean isVoiceCasting(UUID player) {
+        return player != null && hasPending(player);
     }
 
     /** Whether this player has ever voice-cast this spell, for the FIRST_CAST rule. */
@@ -80,15 +110,63 @@ public final class SpellRules {
 
     /** Forget a player's state when they disconnect, so the maps do not grow forever. */
     public static void forget(UUID player) {
-        castingByVoice.remove(player);
+        pending.remove(player);
         learned.remove(player);
+    }
+
+    /**
+     * Point the learned-spell store at a server's config directory and load what is there.
+     * Called on server start; a client that never opens a world simply never has a store.
+     */
+    public static void openStore(java.nio.file.Path configDir) {
+        try {
+            storeFile = configDir.resolve("learned.txt");
+            learned.clear();
+            if (!java.nio.file.Files.exists(storeFile)) return;
+            for (String line : java.nio.file.Files.readAllLines(storeFile)) {
+                int sp = line.indexOf(' ');
+                if (sp <= 0) continue;
+                UUID id;
+                try { id = UUID.fromString(line.substring(0, sp)); } catch (Throwable bad) { continue; }
+                Set<String> set = learned.computeIfAbsent(id, k -> ConcurrentHashMap.newKeySet());
+                for (String s : line.substring(sp + 1).split(",")) {
+                    if (!s.isBlank()) set.add(s.trim());
+                }
+            }
+            VoiceSpells.LOGGER.info("Loaded learned incantations for {} player(s)", learned.size());
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.warn("Could not read learned.txt: {}", t.toString());
+        }
+    }
+
+    /** Write the learned set if anything changed. Cheap enough to call on a timer or at stop. */
+    public static void saveStore() {
+        java.nio.file.Path f = storeFile;
+        if (f == null || !dirty) return;
+        try {
+            StringBuilder sb = new StringBuilder();
+            learned.forEach((id, set) -> {
+                if (set.isEmpty()) return;
+                sb.append(id).append(' ').append(String.join(",", set)).append(System.lineSeparator());
+            });
+            java.nio.file.Files.createDirectories(f.getParent());
+            java.nio.file.Path tmp = f.resolveSibling("learned.txt.tmp");
+            java.nio.file.Files.writeString(tmp, sb.toString());
+            java.nio.file.Files.move(tmp, f,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            dirty = false;
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.warn("Could not write learned.txt: {}", t.toString());
+        }
     }
 
     /** Release everything at server stop. These are statics, so on a client they outlive a
      *  world: without this, spells learned in one save would count as learned in the next. */
     public static void forgetAll() {
-        castingByVoice.clear();
+        saveStore();          // do not drop learned spells on the floor at shutdown
+        pending.clear();
         learned.clear();
+        storeFile = null;
     }
 
     // ---- the three rules, called from the loader-specific event wiring ------------------------
@@ -99,7 +177,10 @@ public final class SpellRules {
      * @param base the cooldown Iron's Spells was about to apply, in ticks
      */
     public static int voiceCooldown(Player player, int base) {
-        if (player == null || !isVoiceCasting(player.getUUID())) return -1;
+        if (player == null || !hasPending(player.getUUID())) return -1;
+        // Consumed here: one cast, one cooldown. Leaving it would let the next clicked cast of
+        // any spell inside the TTL take the discount too.
+        pending.remove(player.getUUID());
         int pct;
         try {
             pct = VoiceSpellsServerConfig.SERVER.voiceCooldownPercent.get();
@@ -110,9 +191,15 @@ public final class SpellRules {
         return Math.max(0, (int) Math.round(base * (pct / 100.0)));
     }
 
-    /** Extra spell levels for a voice cast, or 0 for none. */
-    public static int voiceLevelBonus(Player player) {
-        if (player == null || !isVoiceCasting(player.getUUID())) return 0;
+    /**
+     * Extra spell levels configured for a voice cast, or 0.
+     *
+     * <p>Read by {@code SpellCaster} BEFORE it casts, not by an event hook. The first attempt used
+     * {@code ModifySpellLevelEvent}, which never fires on this path - the level is already fixed
+     * by the time {@code attemptInitiateCast} is called, so the bonus silently did nothing.
+     * SpellCaster owns the number it is about to cast with, so that is where the bonus belongs.
+     */
+    public static int configuredLevelBonus() {
         try {
             return VoiceSpellsServerConfig.SERVER.voiceLevelBonus.get();
         } catch (Throwable t) {
@@ -134,11 +221,26 @@ public final class SpellRules {
         } catch (Throwable t) {
             return false;
         }
+        // Never lock out someone who physically cannot comply.
+        if (!canSpeak(player.getUUID())) return false;
         return switch (rule) {
             case OFF        -> false;
             case ALWAYS     -> true;
             case FIRST_CAST -> !hasLearned(player.getUUID(), spellId);
         };
+    }
+
+    /**
+     * Whether this player can voice-cast at all, i.e. whether the incantation rule is fair to them.
+     *
+     * <p>A player without the mod client-side can never speak a spell, so under ALWAYS they would
+     * be permanently unable to cast anything, with no way to find out why beyond a message that
+     * their client may not even have the translation for. The mod knows who has it: the client
+     * announces itself, and {@code SpellCaster} records those players. Anyone unknown is exempt
+     * from the rule rather than locked out of the game.
+     */
+    public static boolean canSpeak(java.util.UUID player) {
+        return player != null && com.niko.voicespells.spells.SpellCaster.hasVoiceClient(player);
     }
 
     /** Told to the player when a cast is refused, so the rule is never silent. */

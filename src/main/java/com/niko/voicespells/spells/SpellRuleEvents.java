@@ -48,7 +48,6 @@ public final class SpellRuleEvents {
         }
         int hooked = 0;
         hooked += addListener(bus, PKG + "SpellCooldownAddedEvent$Pre", SpellRuleEvents::onCooldown) ? 1 : 0;
-        hooked += addListener(bus, PKG + "ModifySpellLevelEvent",       SpellRuleEvents::onModifyLevel) ? 1 : 0;
         hooked += addListener(bus, PKG + "SpellPreCastEvent",           SpellRuleEvents::onPreCast) ? 1 : 0;
         if (hooked > 0) {
             VoiceSpells.LOGGER.info("Voice-advantage rules active ({} Iron's Spells hook(s))", hooked);
@@ -85,7 +84,11 @@ public final class SpellRuleEvents {
 
     private static void onCooldown(Object e) {
         try {
-            Player p = (Player) call(e, "getPlayer");
+            // getEntity(), not getPlayer(). SpellCoolddownAddedEvent has no getPlayer, so the
+            // first version threw NoSuchMethodException on every cast, caught it, logged at
+            // DEBUG and did nothing - the option looked implemented and was dead. Verified
+            // against both jars with javap rather than assumed a second time.
+            Player p = (Player) call(e, "getEntity");
             if (p == null) return;
             int base = (int) call(e, "getEffectiveCooldown");
             int scaled = SpellRules.voiceCooldown(p, base);
@@ -93,20 +96,16 @@ public final class SpellRuleEvents {
                 e.getClass().getMethod("setEffectiveCooldown", int.class).invoke(e, scaled);
             }
         } catch (Throwable t) {
-            VoiceSpells.LOGGER.debug("Voice cooldown hook failed: {}", t.toString());
+            warnOnce("cooldown", t);
         }
     }
 
-    private static void onModifyLevel(Object e) {
-        try {
-            Object caster = call(e, "getEntity");
-            if (!(caster instanceof Player p)) return;
-            int bonus = SpellRules.voiceLevelBonus(p);
-            if (bonus > 0) e.getClass().getMethod("addLevels", int.class).invoke(e, bonus);
-        } catch (Throwable t) {
-            VoiceSpells.LOGGER.debug("Voice level hook failed: {}", t.toString());
-        }
-    }
+    // No ModifySpellLevelEvent hook.
+    //
+    // It was registered here and never fired on the voice-cast path: by the time
+    // attemptInitiateCast runs, the level is already decided, so the bonus silently did nothing.
+    // SpellCaster applies it directly to the level it is about to cast with, which is the value
+    // Iron's Spells actually uses.
 
     private static void onPreCast(Object e) {
         try {
@@ -118,7 +117,18 @@ public final class SpellRuleEvents {
             e.getClass().getMethod("setCanceled", boolean.class).invoke(e, true);
             SpellRules.explainBlocked(p, spellId);
         } catch (Throwable t) {
-            VoiceSpells.LOGGER.debug("Incantation rule hook failed: {}", t.toString());
+            warnOnce("incantation", t);
+        }
+    }
+
+    /** Latched so a broken reflective contract is reported once, loudly, instead of per cast at
+     *  DEBUG - which is exactly how a dead feature went unnoticed. */
+    private static final java.util.Set<String> WARNED = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    private static void warnOnce(String hook, Throwable t) {
+        if (WARNED.add(hook)) {
+            VoiceSpells.LOGGER.warn("Voice-advantage {} hook is not working against this build of "
+                + "Iron's Spells and has been disabled for this session: {}", hook, t.toString());
         }
     }
 

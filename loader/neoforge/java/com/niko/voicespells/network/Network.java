@@ -25,6 +25,9 @@ public final class Network {
         PayloadRegistrar r = event.registrar("1").optional();
         r.playToServer(CastSpellPayload.TYPE, CastSpellPayload.CODEC, (payload, ctx) -> {
             if (ctx.player() instanceof ServerPlayer sp) {
+                // Receiving this at all proves the client has the mod: the payload is optional,
+                // so a client without it never negotiates the channel.
+                SpellCaster.noteVoiceClient(sp.getUUID());
                 ctx.enqueueWork(() -> SpellCaster.cast(sp,
                     payload.spellId(),
                     payload.volumeScale(),

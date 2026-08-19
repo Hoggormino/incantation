@@ -62,6 +62,9 @@ public final class Network {
                 // setPacketHandled(true) for us.
                 ServerPlayer sp = ctx.get().getSender();
                 if (sp != null) {
+                    // Receiving this at all proves the client has the mod: the channel is
+                    // optional, so a client without it never negotiates it.
+                    SpellCaster.noteVoiceClient(sp.getUUID());
                     SpellCaster.cast(sp,
                         payload.spellId(),
                         payload.volumeScale(),

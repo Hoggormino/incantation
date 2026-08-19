@@ -6,10 +6,12 @@ import com.niko.voicespells.spells.SpellCaster;
 /*import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
+import net.minecraftforge.event.server.ServerStartedEvent;
 *///?} else {
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
 //?}
 
 /**
@@ -37,9 +39,11 @@ public final class ServerLifecycle {
 //? if forge {
 /*        MinecraftForge.EVENT_BUS.addListener(ServerLifecycle::onPlayerLoggedOut);
         MinecraftForge.EVENT_BUS.addListener(ServerLifecycle::onServerStopped);
+        MinecraftForge.EVENT_BUS.addListener(ServerLifecycle::onServerStarted);
 *///?} else {
         NeoForge.EVENT_BUS.addListener(ServerLifecycle::onPlayerLoggedOut);
         NeoForge.EVENT_BUS.addListener(ServerLifecycle::onServerStopped);
+        NeoForge.EVENT_BUS.addListener(ServerLifecycle::onServerStarted);
 //?}
     }
 
@@ -50,6 +54,24 @@ public final class ServerLifecycle {
         } catch (Throwable t) {
             // Cleanup must never take the server down with it.
             VoiceSpells.LOGGER.debug("Logout cleanup failed: {}", t.toString());
+        }
+    }
+
+    /**
+     * Load the learned-incantation store for this server.
+     *
+     * <p>Only meaningful under the FIRST_CAST incantation rule, but loaded unconditionally: the
+     * rule can be switched on mid-life, and a store that only starts recording once someone flips
+     * the setting would hand every player a clean slate at exactly the wrong moment.
+     */
+    private static void onServerStarted(ServerStartedEvent event) {
+        try {
+            com.niko.voicespells.spells.SpellRules.openStore(
+                event.getServer()
+                     .getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
+                     .resolve("voicespells"));
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.debug("Could not open the learned-incantation store: {}", t.toString());
         }
     }
 

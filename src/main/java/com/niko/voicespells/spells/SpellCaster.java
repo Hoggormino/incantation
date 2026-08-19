@@ -266,6 +266,18 @@ public final class SpellCaster {
                 }
                 castSource      = src;
                 triggerCooldown = true;
+
+                // Voice level bonus, applied HERE because this is the number Iron's Spells will
+                // actually cast with. The first implementation tried ModifySpellLevelEvent, which
+                // never fires on this path - the level is already fixed by the time
+                // attemptInitiateCast is called - so the option silently did nothing.
+                //
+                // Allowed to exceed the spellbook's inscribed level on purpose: Iron's Spells
+                // itself lets getLevelFor exceed it through Curios, and a server that turns this
+                // on is asking for spoken casts to be stronger than clicked ones. Clamped only
+                // against absurd values.
+                int levelBonus = SpellRules.configuredLevelBonus();
+                if (levelBonus > 0) castLevel = Math.min(castLevel + levelBonus, 10);
             }
 
             // Pre-flight: in spellbook modes the cast costs mana and triggers a cooldown.
@@ -293,9 +305,16 @@ public final class SpellCaster {
                 ok = (boolean) cast.invoke(
                     spell, castStack, castLevel, player.level(), player,
                     castSource, triggerCooldown, castSlot);
-            } finally {
+            } catch (Throwable castFailed) {
+                // Only the FAILURE path clears the mark. Clearing it on success - which is what
+                // the first version did in a finally - killed the feature outright: initiation
+                // only starts a cast, and Iron's Spells applies the cooldown when the cast
+                // RESOLVES, which for anything with a cast time is seconds later. The mark is
+                // consumed by the cooldown hook, or expires on its own.
                 SpellRules.endVoiceCast(player.getUUID());
+                throw castFailed;
             }
+            if (!ok) SpellRules.endVoiceCast(player.getUUID());
             if (!ok) {
                 feedback(player, "voicespells.cast.failed",
                     spellId.getPath().replace('_', ' '));
@@ -836,6 +855,7 @@ public final class SpellCaster {
         RECENT_CASTS.clear();
         SUBSCRIBERS.clear();
         PLAYER_TOTALS.clear();
+        VOICE_CLIENTS.clear();
         PLAYER_NAMES.clear();
         synchronized (RECENT_LOG) { RECENT_LOG.clear(); }
     }
@@ -859,6 +879,33 @@ public final class SpellCaster {
     /** Highest total-cast count we've seen reported per player, used by /voicespells top. The
      *  count is sent by the client in {@link com.niko.voicespells.network.CastSpellPayload}
      *  and reflects the player's lifetime stats from their local {@code VoiceStats}. */
+    /**
+     * Players the server has actually heard from over the mod's channel.
+     *
+     * <p>Ground truth for "this player has Incantation installed": the payload is registered as
+     * OPTIONAL, so a client without the mod simply never negotiates the channel and can never
+     * send one. It matters for the incantation rule - locking spells behind speech would
+     * otherwise permanently brick anyone playing without the mod, who has no way to comply and
+     * may not even have the translation string to be told why.
+     *
+     * <p>Populated on receipt rather than by a handshake because the mod has no handshake, and
+     * adding one to a released network protocol is a compatibility break for a check that this
+     * answers exactly. The consequence is honest and documented in the config: the ALWAYS rule
+     * only constrains players the server has heard speak at least once.
+     */
+    private static final java.util.Set<java.util.UUID> VOICE_CLIENTS =
+        java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** Called when a cast packet arrives, before anything else is validated. */
+    public static void noteVoiceClient(java.util.UUID uuid) {
+        if (uuid != null) VOICE_CLIENTS.add(uuid);
+    }
+
+    /** Whether this player has ever spoken to the server over the mod's channel. */
+    public static boolean hasVoiceClient(java.util.UUID uuid) {
+        return uuid != null && VOICE_CLIENTS.contains(uuid);
+    }
+
     private static final java.util.Map<java.util.UUID, Integer> PLAYER_TOTALS =
         new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.Map<java.util.UUID, String>  PLAYER_NAMES  =
