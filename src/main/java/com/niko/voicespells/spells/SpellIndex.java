@@ -133,6 +133,16 @@ public final class SpellIndex {
             int uniqueSpells = Set.copyOf(built.phraseToId.values()).size();
             VoiceSpells.LOGGER.info("Indexed {} spells ({} grammar phrases incl. aliases)",
                 uniqueSpells, built.phraseToId.size());
+            // Say it out loud. A phrase claimed twice costs the player a spell, and until now it
+            // did so in complete silence — the map simply overwrote the earlier entry.
+            java.util.List<String> clashes = phraseCollisions();
+            if (!clashes.isEmpty()) {
+                VoiceSpells.LOGGER.warn("{} phrase(s) are claimed by more than one spell. The "
+                    + "first spell listed keeps the phrase; the second CANNOT be voice-cast "
+                    + "until you give it a different one in config/voicespells/phrasebook.json:",
+                    clashes.size());
+                for (String c : clashes) VoiceSpells.LOGGER.warn("  {}", c);
+            }
             if (verbose) {
                 // Per-namespace breakdown — addons show up as separate rows here, which doubles
                 // as a sanity check that the user's Iron's Spells addon is contributing.
@@ -533,6 +543,7 @@ public final class SpellIndex {
         Phrasebook.load();
 
         Map<String, ResourceLocation> phraseToId = new LinkedHashMap<>();
+        phraseCollisions.clear();   // this build's clashes only; the index is rebuilt wholesale
         // Capture the English-default phrase for every spell as we go, so we can rewrite
         // phrasebook.json with the current installed-spell set at the end of indexing.
         Map<String, String> defaultsForPhrasebook = new LinkedHashMap<>();
@@ -562,7 +573,21 @@ public final class SpellIndex {
                 String phrase = (override != null) ? normalize(override) : defaultPhrase;
                 if (phrase.isEmpty()) continue;
 
-                phraseToId.put(phrase, id);
+                // First writer wins, and a clash is REPORTED rather than swallowed.
+                //
+                // This was a plain put(), so two spells resolving to the same phrase meant the
+                // second silently replaced the first and that spell became uncastable with
+                // nothing logged anywhere. It is not hypothetical: a translated phrasebook
+                // reaches this easily, because two mods' spells often mean the same thing in
+                // another language — a real Spanish phrasebook mapped both
+                // gtbcs_geomancy_plus:solar_beam and irons_spellbooks:sunbeam to "rayo solar",
+                // which quietly cost the player one of them. Whichever spell was indexed first
+                // keeps the phrase, and the collision is recorded so the player can be told
+                // exactly which two ids to disambiguate.
+                ResourceLocation clash = phraseToId.putIfAbsent(phrase, id);
+                if (clash != null && !clash.equals(id)) {
+                    phraseCollisions.add(phrase + "  ->  " + clash + "  /  " + idString);
+                }
 
                 // Hardcoded aliases for the vanilla Iron's Spells compound names. (Auto-split
                 // variant generation was removed — it polluted the grammar with non-words like
@@ -878,6 +903,20 @@ public final class SpellIndex {
 
     private static String normalize(String text) {
         return text.toLowerCase(java.util.Locale.ROOT).trim().replaceAll("\\s+", " ");
+    }
+
+    /**
+     * Phrases claimed by more than one spell in the last index build.
+     *
+     * <p>Surfaced by diagnostics and logged once per rebuild. Kept as formatted strings because
+     * the only consumer is a human deciding which of the two to rename.
+     */
+    private static final java.util.List<String> phraseCollisions =
+        java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
+    /** Collisions from the most recent index build; empty when every phrase is unique. */
+    public static java.util.List<String> phraseCollisions() {
+        synchronized (phraseCollisions) { return java.util.List.copyOf(phraseCollisions); }
     }
 
     private record State(Map<String, ResourceLocation> phraseToId) {

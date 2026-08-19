@@ -45,6 +45,7 @@ public final class Diagnostics {
         // --- Recognition stack ---
         out.add(checkVoskModel());
         out.add(checkSpellIndex());
+        out.add(checkPhraseCollisions());
         out.add(checkRecognitionActivity());
         // --- Cast pipeline ---
         out.add(checkClientMagicData());
@@ -124,6 +125,23 @@ public final class Diagnostics {
                 status + " — run /voicespells devices to see what is connected");
         }
         return new Result("Microphone", Status.WARN, status);
+    }
+
+    /**
+     * Phrases claimed by two spells. Silent until now: the index map simply overwrote the first
+     * entry, so one of the two spells stopped working with nothing said anywhere. A translated
+     * phrasebook hits this easily, because two mods' spells often share a word in another
+     * language.
+     */
+    private static Result checkPhraseCollisions() {
+        java.util.List<String> clashes = com.niko.voicespells.spells.SpellIndex.phraseCollisions();
+        if (clashes.isEmpty()) {
+            return new Result("Phrase conflicts", Status.OK, "Every phrase maps to one spell");
+        }
+        String first = clashes.get(0);
+        return new Result("Phrase conflicts", Status.WARN,
+            clashes.size() + " phrase(s) claimed twice — one spell each is unreachable. e.g. "
+            + first + " (see the log, or phrasebook.json)");
     }
 
     /** Which route casts actually take. The client path needs no server-side component; the

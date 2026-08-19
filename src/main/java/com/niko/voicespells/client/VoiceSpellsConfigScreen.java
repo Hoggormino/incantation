@@ -51,7 +51,10 @@ public final class VoiceSpellsConfigScreen extends Screen {
     // Vanilla's own option-button metrics: 150 wide, 20 tall, 4 apart, which is what every
     // two-column options screen in the game uses.
     private static final int COL_W         = 150;
-    private static final int COL_GAP       = 4;
+    // 10, which is what vanilla uses. Its options list puts two 150-wide buttons at centre-155
+    // and centre+5, so the gutter between them is exactly 10px; at 4 the pair read as one wide
+    // control split by a hairline rather than as two separate options.
+    private static final int COL_GAP       = 10;
     private static final int GRID_W        = COL_W * 2 + COL_GAP;
 
     private static final int PANEL_W_PREF  = GRID_W + 24;   // grid + a 12px margin each side
@@ -156,7 +159,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             int blockH = 18                                  // title
                        + 6 + TAB_H                           // tab row
                        + Theme.GAP_MD + gridRows() * GRID_ROW
-                       + 12 + 24 + 20;                       // the two button rows
+                       + 12 + GRID_ROW + 20;                 // the two button rows
             int blockTop = Math.max(8, (height - blockH) / 2);
 
             titleY   = blockTop;
@@ -164,7 +167,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             tabsY    = headerY + 8;
             contentY = tabsY + TAB_H + Theme.GAP_MD;
             row1Y    = contentY + gridRows() * GRID_ROW + 12;
-            row2Y    = row1Y + 24;
+            row2Y    = row1Y + GRID_ROW;
             footerY  = row1Y - 8;                            // rule above the buttons
         } else {
             titleY   = panelY + TITLE_TOP;
@@ -243,8 +246,10 @@ public final class VoiceSpellsConfigScreen extends Screen {
     // options do, because "Substring Match: ON" tells a new player nothing on its own.
     // ---------------------------------------------------------------------------------
 
-    /** Pitch of one grid row: a 20px control plus a 4px gutter. */
-    private static final int GRID_ROW = 24;
+    /** Pitch of one grid row: a 20px control plus vanilla's 5px gap. Vanilla's own options rows
+     *  are 25px apart, and matching it is the difference between rows that breathe and rows that
+     *  look stuck together. */
+    private static final int GRID_ROW = 25;
 
     /** Header / footer rule. Delegates so every screen draws the identical line. */
     private void separator(GuiGraphics g, int y) {
