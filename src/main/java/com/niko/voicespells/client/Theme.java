@@ -101,7 +101,16 @@ public final class Theme {
      *
      */
     public static void applyPalette() {
-        C_SCRIM    = 0x00000000;   // vanilla's own backdrop is the whole point
+        // A dim over vanilla's backdrop, not instead of it.
+        //
+        // This was fully transparent on the reasoning that the game's own blurred backdrop was
+        // enough. It is not: on the title screen the panorama is bright and busy, and in a world
+        // the blur keeps plenty of colour, so grey buttons and white text sat on top of moving
+        // scenery with nothing to separate them. That is what made the screens look cheap — not
+        // the controls, which are vanilla's own, but the lack of any ground beneath them.
+        // Vanilla's renderTransparentBackground uses ~0xC0101010; this is a little lighter so
+        // the world still reads through it.
+        C_SCRIM    = 0x99101010;
         C_PANEL    = 0xFF303030;   // only reached by the small-rect fallback in panel()
         C_HEADER_T = 0xFF303030;
         C_HEADER_B = 0xFF303030;
