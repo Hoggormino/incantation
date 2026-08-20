@@ -86,10 +86,6 @@ public final class SpellRules {
      * Record a voice-initiated cast. Not paired with a clear: the entry is consumed when the
      * cooldown hook uses it, and expires on its own otherwise.
      */
-    public static void beginVoiceCast(UUID player, String spellId) {
-        beginVoiceCast(player, spellId, 0);
-    }
-
     public static void beginVoiceCast(UUID player, String spellId, int manaDiscount) {
         if (player == null || spellId == null) return;
         pending.put(player, new Pending(spellId, System.nanoTime(), false, Math.max(0, manaDiscount)));
