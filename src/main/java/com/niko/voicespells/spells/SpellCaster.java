@@ -285,7 +285,10 @@ public final class SpellCaster {
                 try {
                     if (com.niko.voicespells.VoiceSpellsServerConfig.SERVER.voiceVolumeScaling.get()
                             && match.level > 1) {
-                        float clamped = Math.max(0f, Math.min(1f, volumeScale));
+                        // abs: the SIGN of volumeScale carries "was this spoken", so the
+                        // magnitude is the actual level. Without this a quick-recast would
+                        // always scale to 1 rather than to how loudly it was originally said.
+                        float clamped = Math.max(0f, Math.min(1f, Math.abs(volumeScale)));
                         int scaled = Math.max(1, Math.round(match.level * clamped));
                         castLevel = scaled;
                     }

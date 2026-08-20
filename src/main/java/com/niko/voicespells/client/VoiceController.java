@@ -1190,12 +1190,16 @@ public final class VoiceController {
     private static void sendCastPayload(ResourceLocation spellId, float volume,
                                         int totalForTrigger, int streakForTrigger,
                                         boolean spoken) {
+        // The SIGN carries "was this spoken". Negative means the quick-recast key repeated a
+        // spell the player is not saying again. Encoded here rather than as a new payload field
+        // so the wire format is unchanged - see CastSpellPayload.spoken() for why that matters.
+        float wire = spoken ? Math.abs(volume) : -Math.max(0.001f, Math.abs(volume));
 //? if forge {
 /*        Network.sendToServer(
-            new CastSpellPayload(spellId, volume, totalForTrigger, streakForTrigger, spoken));
+            new CastSpellPayload(spellId, wire, totalForTrigger, streakForTrigger));
 *///?} else {
         PacketDistributor.sendToServer(
-            new CastSpellPayload(spellId, volume, totalForTrigger, streakForTrigger, spoken));
+            new CastSpellPayload(spellId, wire, totalForTrigger, streakForTrigger));
 //?}
     }
 

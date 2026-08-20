@@ -14,8 +14,9 @@ import net.minecraft.resources.ResourceLocation;
  *   - {@code volumeScale} : client's current audio RMS (0..1). Optional spellbook-level scaling.
  *   - {@code totalCasts}  : client's lifetime voice-cast count (from VoiceStats)
  *   - {@code streak}      : current consecutive-cast streak (resets after inactivity)
- *   - {@code spoken}      : true when the player actually said the spell; false when this is a
- *                           quick-recast of the previous one from the keybind
+ *
+ * <p>{@code volumeScale} carries a second meaning in its SIGN: negative means the cast came from
+ * the quick-recast keybind rather than from speech. See {@link #spoken()}.
  *
  * The two count fields exist so the server can fire the {@link com.niko.voicespells.advancements.VoiceCastTrigger}
  * with accurate per-player numbers without maintaining its own persistent counter — the client
@@ -23,55 +24,49 @@ import net.minecraft.resources.ResourceLocation;
  * acceptable here: a malicious client can already trigger any spell it wants.
  */
 public record CastSpellPayload(ResourceLocation spellId, float volumeScale,
-                                int totalCasts, int streak, boolean spoken)
-        implements CustomPacketPayload {
+                                int totalCasts, int streak) implements CustomPacketPayload {
+
+    /**
+     * Whether the player actually SAID this spell, as opposed to repeating it with the
+     * quick-recast key. The server needs to know, because {@code incantationOnly = ALWAYS} means
+     * every cast must be spoken and a repeat is not.
+     *
+     * <p>Encoded in the sign of {@code volumeScale} rather than as a fifth field, and that is
+     * deliberate. A fifth field changes the wire format, and this channel is registered
+     * {@code optional()} with {@code displayTest = IGNORE_ALL_VERSION} - so clients and servers on
+     * different builds do connect to each other. A newer client sending five fields to an older
+     * server leaves a trailing byte its fixed-arity codec rejects, on the netty decode thread,
+     * which DISCONNECTS the player on their first cast. There is no way to fix that from the new
+     * side once the format has changed.
+     *
+     * <p>The sign costs nothing and degrades correctly in both directions. An older server reads a
+     * negative volume and clamps it to zero, which it already does; the only consequence is that a
+     * repeat casts at level 1 while {@code voiceVolumeScaling} is on, a non-default option. An
+     * older client never sends a negative, so it reads as spoken, which is what it always was.
+     */
+    public boolean spoken() {
+        return volumeScale >= 0f;
+    }
     public static final Type<CastSpellPayload> TYPE = new Type<>(
         ResourceLocation.fromNamespaceAndPath(VoiceSpells.MOD_ID, "cast_spell"));
 
-    /**
-     * Written by hand rather than with {@code StreamCodec.composite}, because composite has a
-     * fixed arity and cannot read a field conditionally.
-     *
-     * <p>That matters: {@code spoken} was added after release, and the channel is registered
-     * {@code optional()} with {@code displayTest = IGNORE_ALL_VERSION}, so a client on an older
-     * build can connect to a newer server. Its payload is four fields long. A composite codec
-     * would throw on the netty decode thread trying to read a fifth, which disconnects the
-     * sender with an "Internal Exception" - the exact failure mode the tryParse note below
-     * describes. Reading the flag only when bytes remain lets an old client degrade to the old
-     * behaviour instead.
-     *
-     * <p>Absent means {@code spoken = true}: every cast an old client can send came from speech,
-     * because the version that could send anything else is the version that writes the flag.
-     */
-    public static final StreamCodec<RegistryFriendlyByteBuf, CastSpellPayload> CODEC =
-        new StreamCodec<>() {
-            @Override
-            public void encode(RegistryFriendlyByteBuf buf, CastSpellPayload p) {
-                buf.writeUtf(p.spellId.toString());
-                buf.writeFloat(p.volumeScale);
-                buf.writeVarInt(p.totalCasts);
-                buf.writeVarInt(p.streak);
-                buf.writeBoolean(p.spoken);
-            }
-
-            @Override
-            public CastSpellPayload decode(RegistryFriendlyByteBuf buf) {
-                // tryParse, not parse: this string arrives from the client and a modified one can
-                // send anything. parse() throws on an illegal id, on the netty decode thread,
-                // which disconnects the sender with a stack trace in the server log per attempt.
-                // An unresolvable id is harmless because SpellCaster already answers an unknown
-                // spell with voicespells.cast.unknown.
-                String raw = buf.readUtf();
-                ResourceLocation id = ResourceLocation.tryParse(raw);
-                float volume = buf.readFloat();
-                int total = buf.readVarInt();
-                int streak = buf.readVarInt();
-                boolean spoken = buf.readableBytes() > 0 ? buf.readBoolean() : true;
-                return new CastSpellPayload(
-                    id != null ? id : ResourceLocation.withDefaultNamespace("empty"),
-                    volume, total, streak, spoken);
-            }
-        };
+    public static final StreamCodec<RegistryFriendlyByteBuf, CastSpellPayload> CODEC = StreamCodec.composite(
+        net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8, p -> p.spellId.toString(),
+        net.minecraft.network.codec.ByteBufCodecs.FLOAT,       CastSpellPayload::volumeScale,
+        net.minecraft.network.codec.ByteBufCodecs.VAR_INT,     CastSpellPayload::totalCasts,
+        net.minecraft.network.codec.ByteBufCodecs.VAR_INT,     CastSpellPayload::streak,
+        // tryParse, not parse: this string arrives from the client and a modified one can send
+        // anything. parse() throws on an illegal id, on the netty decode thread, which
+        // disconnects the sender with a stack trace in the server log per attempt. An
+        // unresolvable id is harmless because SpellCaster answers an unknown spell with
+        // voicespells.cast.unknown.
+        (str, v, total, streak) -> {
+            ResourceLocation id = ResourceLocation.tryParse(str);
+            return new CastSpellPayload(
+                id != null ? id : ResourceLocation.withDefaultNamespace("empty"),
+                v, total, streak);
+        }
+    );
 
     @Override
     public Type<? extends CustomPacketPayload> type() {
