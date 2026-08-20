@@ -424,6 +424,22 @@ public final class Theme {
     }
 
     /**
+     * A selected list row, exactly as {@code AbstractSelectionList.renderSelection} draws one:
+     * an opaque outline over an opaque black interior. Byte-identical on both versions.
+     *
+     * <p>Two fills, not six. Vanilla's selected row is DARKER than its neighbours; the mod did
+     * the opposite with a translucent white wash, which faded precisely when the backdrop was
+     * busiest. Opaque means it computes the same over a bright sky and a cave.
+     *
+     * <p>{@code focused} picks vanilla's own two colours - white when the list has keyboard
+     * focus, grey when it does not.
+     */
+    public static void rowSelection(GuiGraphics g, int x, int y, int w, int h, boolean focused) {
+        g.fill(x, y, x + w, y + h, focused ? 0xFFFFFFFF : 0xFF808080);
+        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, 0xFF000000);
+    }
+
+    /**
      * A tab, drawn with Minecraft's own tab art.
      *
      * <p>The config screen painted a black rectangle plus a 1px rule OVER a real vanilla Button

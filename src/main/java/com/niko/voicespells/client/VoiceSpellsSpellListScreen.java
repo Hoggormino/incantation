@@ -339,17 +339,15 @@ public final class VoiceSpellsSpellListScreen extends Screen {
                 // repeated on five screens. AbstractSelectionList.renderSelection does exactly
                 // this - white when the list has focus, dark grey when it does not.
                 if (sel) {
-                    int edge = hov ? 0xFFFFFFFF : 0xFF808080;
-                    g.fill(x + 1, ry - 1, contentRight, ry + ROW_H + 1, 0xFF000000);
-                    g.fill(x + 2, ry,     contentRight - 1, ry + ROW_H, 0xFF000000);
-                    g.fill(x + 1, ry - 1, contentRight, ry,             edge);
-                    g.fill(x + 1, ry + ROW_H, contentRight, ry + ROW_H + 1, edge);
-                    g.fill(x + 1, ry, x + 2, ry + ROW_H, edge);
-                    g.fill(contentRight - 1, ry, contentRight, ry + ROW_H, edge);
-                } else if (hov) {
-                    g.fill(x + 1, ry, contentRight, ry + ROW_H, 0x40FFFFFF);
+                    Theme.rowSelection(g, x + 1, ry, contentRight - (x + 1), ROW_H, isFocused());
                 }
-                if (hov) hoveredRow = i;
+                // Hover composites ON TOP of selection rather than replacing it. Drawn with an
+                // else-if, hovering a selected row erased the very indicator that says it is
+                // selected; vanilla draws the two independently.
+                if (hov) {
+                    g.fill(x + 1, ry, contentRight, ry + ROW_H, 0x40FFFFFF);
+                    hoveredRow = i;
+                }
                 String id = r.id();
                 int idW = font.width(id);
                 int textColor = (hov || sel) ? 0xFFFFFFFF : Theme.C_TEXT;

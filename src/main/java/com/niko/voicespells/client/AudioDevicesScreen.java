@@ -405,9 +405,17 @@ public final class AudioDevicesScreen extends Screen {
 
             // Selection needs to survive on a light panel, where an 0x11-alpha accent ghost is
             // invisible. A solid accent-soft band plus the marker below is unambiguous.
-            // Vanilla highlights a selected list row with a plain translucent white wash.
-            if (selected) g.fill(listX + 1, ry, listX + listW - 1, ry + ROW, 0x40FFFFFF);
-            else if (hovered) g.fill(listX + 1, ry, listX + listW - 1, ry + ROW, 0x30FFFFFF);
+            // Vanilla's own selection: an opaque outline over an opaque black interior, not a
+            // translucent wash - a wash fades exactly when the backdrop is busiest. Passed
+            // focused=false because Screen has no isFocused() on either loader, and grey is
+            // vanilla's own unfocused colour.
+            //
+            // Hover is a separate if, not an else: drawn as an else-if, hovering the selected
+            // device erased the mark that says it is selected.
+            if (selected) {
+                Theme.rowSelection(g, listX + 1, ry, listW - 9, ROW, false);
+            }
+            if (hovered) g.fill(listX + 1, ry, listX + listW - 9, ry + ROW, 0x30FFFFFF);
 
             // Verdict chip on the right, so the name can use the full remaining width.
             String verdict = isDefaultRow ? verdictFor(defaultRaw()) : verdictFor(raw);
