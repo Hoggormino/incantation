@@ -423,22 +423,71 @@ public final class Theme {
         g.drawCenteredString(font, s, cx, y, color);
     }
 
-    /** Thin neon scrollbar — track + thumb. The thumb gets the soft accent so the eye finds it. */
-    public static void scrollbar(GuiGraphics g, int x, int y, int w, int h,
-                                  int total, int visible, int scroll) {
-        if (total <= visible) return; // no overflow, no bar
-        // Vanilla list scrollbar: dark track, plain grey thumb with a light top edge —
-        // the construction every vanilla selection list uses. No accent; this was the last
-        // place the neon survived.
-        // Track keyed to the surface, not hard-coded black. A black groove is right on a dark
-        // options screen and reads as a hole cut in a light container panel, which is where the
-        // default palette now lives.
-        g.fill(x, y, x + w, y + h, lightSurface() ? 0xFF6E6E6E : 0xFF000000);
-        int thumbH = Math.max(12, h * visible / total);
+    /**
+     * A tab, drawn with Minecraft's own tab art.
+     *
+     * <p>The config screen painted a black rectangle plus a 1px rule OVER a real vanilla Button
+     * to say "not selected" - the most literal case in this codebase of hand-drawing chrome the
+     * game already ships. Vanilla has all four states on both versions.
+     *
+     * <p>The sprites are translucent, which is why they work here at all: an unselected tab is
+     * about 86% opaque and reads as recessed behind the content, while the selected one is
+     * mostly transparent so it merges into the panel beneath it. That merge is the whole idiom -
+     * their nine-slice border is {@code bottom: 0} precisely so the bottom edge is open.
+     */
+    public static void tab(GuiGraphics g, int x, int y, int w, int h,
+                           boolean selected, boolean hovered) {
+//? if forge {
+/*        // TabButton.getTextureY(): 0 selected, 1 selected+hovered, 2 plain, 3 hovered.
+        int row = selected ? (hovered ? 1 : 0) : (hovered ? 3 : 2);
+        g.blitNineSliced(new net.minecraft.resources.ResourceLocation("textures/gui/tab_button.png"),
+            x, y, w, h, 2, 2, 2, 0, 130, 24, 0, row * 24);
+*///?} else {
+        com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+        g.blitSprite(net.minecraft.resources.ResourceLocation.withDefaultNamespace(
+            selected ? (hovered ? "widget/tab_selected_highlighted" : "widget/tab_selected")
+                     : (hovered ? "widget/tab_highlighted"          : "widget/tab")),
+            x, y, w, h);
+        com.mojang.blaze3d.systems.RenderSystem.disableBlend();
+//?}
+    }
+
+    /**
+     * Vanilla's list scrollbar, at vanilla's width.
+     *
+     * <p>Six pixels on both versions - a literal 6 in 1.21.1's AbstractSelectionList and
+     * {@code int j = i + 6} in 1.20.1's. The mod drew a 2-3px stub with a thumb lit from ABOVE
+     * (a light top row over mid grey over dark); the real sprite is a light body with its dark
+     * edges on the RIGHT and BOTTOM. Three shades off and lit from the wrong side, which is
+     * exactly the "slightly the wrong edges" that took the hand-drawn widgets out of this mod.
+     *
+     * <p>1.20.1 has no scroller sprite, but its own list draws the identical art with three
+     * fills, so the split costs nothing in fidelity - only a resource pack can tell them apart,
+     * which is the reason the blit is there at all.
+     *
+     * <p>Fully opaque, so this is the most blur-proof element in the mod - and it was the
+     * flimsiest. It appears only when the list overflows, matching vanilla's scrollbarVisible().
+     */
+    public static void listScrollbar(GuiGraphics g, int x, int y, int h,
+                                     int total, int visible, int scroll) {
+        if (total <= visible) return;
+        int thumbH = Math.max(8, Math.min(h, h * visible / total));
+        // Vanilla clamps the thumb to 32..h-8. Guarded on h, because a list can be one row tall
+        // here and that clamp would then invert.
+        if (h >= 40) thumbH = net.minecraft.util.Mth.clamp(thumbH, 32, h - 8);
         int maxScroll = total - visible;
         int thumbY = y + (h - thumbH) * Math.min(scroll, maxScroll) / Math.max(1, maxScroll);
-        g.fill(x, thumbY, x + w, thumbY + thumbH, 0xFF8B8B8B);
-        g.fill(x, thumbY, x + w, thumbY + 1, 0xFFC6C6C6);
-        g.fill(x, thumbY + thumbH - 1, x + w, thumbY + thumbH, 0xFF555555);
+//? if forge {
+/*        g.fill(x, y,      x + 6, y + h,                0xFF000000);
+        g.fill(x, thumbY, x + 6, thumbY + thumbH,     0xFF808080);
+        g.fill(x, thumbY, x + 5, thumbY + thumbH - 1, 0xFFC0C0C0);
+*///?} else {
+        com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+        g.blitSprite(net.minecraft.resources.ResourceLocation.withDefaultNamespace(
+            "widget/scroller_background"), x, y, 6, h);
+        g.blitSprite(net.minecraft.resources.ResourceLocation.withDefaultNamespace(
+            "widget/scroller"), x, thumbY, 6, thumbH);
+        com.mojang.blaze3d.systems.RenderSystem.disableBlend();
+//?}
     }
 }

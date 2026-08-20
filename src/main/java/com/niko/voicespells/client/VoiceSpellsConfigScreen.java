@@ -195,12 +195,15 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // the footer. Three equal thirds of 310 leave 2px over, so the right edge of "Behaviour"
         // stopped 2px short of the grid it is supposed to span - visible as a notch against the
         // option column below it, on a screen where the alignment IS the design.
-        tabColW = (gridW - COL_GAP * 2) / 3;
-        int lastTabX = gridX + (tabColW + COL_GAP) * 2;
+        // Flush, no gutter. Vanilla packs its tabs edge to edge, and the sprite's nine-slice
+        // border is bottom:0 so the row merges into the content below it. A 10px gap between
+        // open-bottomed tabs reads as three torn strips rather than one bar.
+        tabColW = gridW / 3;
+        int lastTabX = gridX + tabColW * 2;
         int lastTabW = gridX + gridW - lastTabX;
         addRenderableWidget(new TabButton(gridX, tabsY, tabColW, TAB_H,
             "Recognition", Tab.RECOGNITION));
-        addRenderableWidget(new TabButton(gridX + tabColW + COL_GAP, tabsY, tabColW, TAB_H,
+        addRenderableWidget(new TabButton(gridX + tabColW, tabsY, tabColW, TAB_H,
             "HUD", Tab.HUD));
         addRenderableWidget(new TabButton(lastTabX, tabsY, lastTabW, TAB_H,
             "Behaviour", Tab.BEHAVIOUR));
@@ -628,23 +631,9 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
         super.render(g, mouseX, mouseY, partial);
 
-        // Selection is shown by pushing the OTHER tabs back, not by marking the current one.
-        //
-        // Every attempt at marking the selected tab looked like something stuck onto it - an
-        // underline, then a thick bright edge - because a decoration on a vanilla button is
-        // exactly what it is. Dimming the tabs you are not on needs no decoration at all: the
-        // bright one is the one you are reading, which is how the eye works anyway.
-        int ruleY = tabRowY + TAB_H;
-        for (Tab t : Tab.values()) {
-            if (t == currentTab) continue;      // the selected tab is simply the bright one
-            int tx = tabRowX + t.ordinal() * (tabColW + COL_GAP);
-            // The last tab is wider than the other two - it absorbs the division remainder so
-            // the row ends flush with the grid - so the dim has to end where the ROW ends, not
-            // one tabColW along, or the notch reappears as an undimmed sliver.
-            int tw = t.ordinal() == Tab.values().length - 1 ? tabRowX + tabRowW - tx : tabColW;
-            g.fill(tx, tabRowY, tx + tw, ruleY, 0x99000000);
-            g.fill(tx, ruleY, tx + tw, ruleY + 1, 0x60FFFFFF);
-        }
+        // Nothing drawn over the tabs. They paint their own state from Minecraft's tab art -
+        // see TabButton.renderWidget. This used to fill a black rectangle plus a 1px rule over
+        // each unselected tab, i.e. hand-drawn chrome on top of a real vanilla Button.
 
         // No accent rule under the title and no divider under the tabs. Neither exists in any
         // vanilla screen: a container has its title sitting straight on the panel, and an
@@ -697,6 +686,21 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 currentTab = tab;
                 rebuildWidgets();
             }
+        }
+
+        /**
+         * Minecraft's tab art, not a Button with something painted over it.
+         *
+         * <p>The label sits 3px lower on an unselected tab, which is vanilla's own offset in
+         * TabButton.renderString - it is what makes an unselected tab read as pushed back.
+         */
+        @Override
+        public void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+            boolean sel = currentTab == tab;
+            Theme.tab(g, getX(), getY(), width, height, sel, isHoveredOrFocused());
+            int ty = getY() + (height - 8) / 2 + (sel ? 0 : 3) - 1;
+            g.drawCenteredString(net.minecraft.client.Minecraft.getInstance().font, getMessage(),
+                getX() + width / 2, ty, sel ? 0xFFFFFFFF : 0xFFA0A0A0);
         }
     }
 

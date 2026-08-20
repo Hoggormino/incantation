@@ -428,7 +428,7 @@ public final class AudioDevicesScreen extends Screen {
 
         }
 
-        Theme.scrollbar(g, listX + listW - 4, listY + 1, 3, listH - 2, total, rowsVisible, scroll);
+        Theme.listScrollbar(g, listX + listW - 7, listY, listH, total, rowsVisible, scroll);
 
         // Live meter for the mic tab only — there is nothing to measure on the output side.
         if (!showingOutputs) renderMeter(g, listY + listH + 5, light);

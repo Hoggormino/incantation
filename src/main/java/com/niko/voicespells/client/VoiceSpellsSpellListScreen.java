@@ -360,9 +360,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
                         x + idW + 12, ry + 2, Theme.C_MUTED, !Theme.lightSurface());
                 }
             }
-            // Neon scrollbar on the right gutter.
-            Theme.scrollbar(g, x + w - 4, y + 2, 2, h - 4,
-                filtered.size(), rowsVisible, clampScroll());
+            Theme.listScrollbar(g, x + w - 7, y, h, filtered.size(), rowsVisible, clampScroll());
 
             // Record the hover instead of drawing it here.
             //

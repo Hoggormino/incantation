@@ -165,11 +165,13 @@ public final class DiagnosticsScreen extends Screen {
             int ry = y + 4;
             for (int i = start; i < end; i++) {
                 Diagnostics.Result r = results.get(i);
-                drawRow(g, x + 4, ry, w - 8, r);
+                // w - 14, not w - 8: the scrollbar is 6px wide now and the row's name is drawn
+                // unclipped, so it ran underneath the bar.
+                drawRow(g, x + 4, ry, w - 14, r);
                 ry += ROW_H;
             }
-            Theme.scrollbar(g, x + w - 4, y + 2, 2, h - 4,
-                results.size(), rowsVisible, start);
+            // Full list height, not y+2/h-4: vanilla's track runs the whole well.
+            Theme.listScrollbar(g, x + w - 7, y, h, results.size(), rowsVisible, start);
         }
 
         private void drawRow(GuiGraphics g, int x, int y, int w, Diagnostics.Result r) {
