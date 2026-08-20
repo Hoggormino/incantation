@@ -359,9 +359,15 @@ public final class SpellRules {
      */
     public static int discountedManaCost(Player player, String spellId, int base) {
         if (player == null || spellId == null) return -1;
-        Pending p = pending.get(player.getUUID());
+        UUID id = player.getUUID();
+        Pending p = pending.get(id);
         if (p == null || !spellId.equals(p.spellId()) || p.manaDiscount() <= 0) return -1;
         if (System.nanoTime() - p.atNanos() > PENDING_TTL_NANOS) return -1;
+        // Consumed, exactly like the pre-cast authorisation. The stamp lives for ten seconds so
+        // the cooldown hook can find it, and without this a CLICKED cast of the same spell inside
+        // that window would collect a discount it never earned - the discount exists to offset a
+        // level bonus that only a spoken cast receives. One stamp, one cast, one discount.
+        pending.put(id, new Pending(p.spellId(), p.atNanos(), p.precastUsed(), 0));
         return Math.max(0, base - p.manaDiscount());
     }
 
