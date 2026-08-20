@@ -131,6 +131,14 @@ public final class LiveMonitorScreen extends Screen {
             String line = String.format(Locale.ROOT, "%2ds  c%.2f  [%s]  \"%s\"  %s",
                 ageSec, e.confidence(), e.tier() == ' ' ? " " : String.valueOf(e.tier()),
                 truncate(e.heard(), 24), outcome);
+            // Fitted to the well by WIDTH, not by character count. truncate() above bounds only
+            // the heard phrase at 24 chars; the outcome appended after it carries a spell's
+            // display name, which is now localised and can be far longer than the English one -
+            // so the assembled row ran off the well and off the screen with nothing clipping it.
+            int room = listW - 12;
+            if (font.width(line) > room) {
+                line = font.plainSubstrByWidth(line, room - font.width("...")) + "...";
+            }
             g.drawString(font, Component.literal(line), listX + 6, rowY, color, true);
             rowY += LINE_H;
         }

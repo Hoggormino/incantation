@@ -666,8 +666,16 @@ public final class ClientEvents {
                       + (tail.isEmpty() ? 0 : 4 + font.width(tail)) + PAD_X;
             int x = alignX(anchorX, chipW);
 
-            // Sits opposite the toast so the two never overlap as history stacks up.
+            // Sits opposite the toast so the two never overlap as history stacks up - and is
+            // then clamped onto the screen.
+            //
+            // On a TOP corner this sits 17px ABOVE the anchor, while hud.offsetY allows 0. So any
+            // offset under 17 drew the chip off the top edge and it vanished entirely - taking
+            // the mod's only listening indicator with it, on the corner where a player is most
+            // likely to want the HUD tucked right up against the edge.
+            int screenH = Minecraft.getInstance().getWindow().getGuiScaledHeight();
             int chipY = y + (isBottom ? CHIP_H + 3 : -(CHIP_H + 3));
+            chipY = Math.max(0, Math.min(screenH - CHIP_H, chipY));
             float a = Math.max(0f, Math.min(1f, VoiceSpellsConfig.cOpacity));
 
             int dotX = x + PAD_X;
