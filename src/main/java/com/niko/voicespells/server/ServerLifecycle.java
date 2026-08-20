@@ -47,10 +47,19 @@ public final class ServerLifecycle {
 //?}
     }
 
-    /** Drops only the rate-limit window; see {@link SpellCaster#forgetPlayer}. */
+    /**
+     * Drops only the rate-limit window; see {@link SpellCaster#forgetPlayer}.
+     *
+     * <p>Also flushes the learned-incantation store. It is written at server stop, which covers a
+     * clean shutdown and nothing else - a crash or a killed process would take back every
+     * incantation learned since the server came up, and under FIRST_CAST that is progress the
+     * player earned. The write is guarded by a dirty flag, so on the overwhelmingly common logout
+     * where nobody learned anything it does no I/O at all.
+     */
     private static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         try {
             if (event.getEntity() != null) SpellCaster.forgetPlayer(event.getEntity().getUUID());
+            com.niko.voicespells.spells.SpellRules.saveStore();
         } catch (Throwable t) {
             // Cleanup must never take the server down with it.
             VoiceSpells.LOGGER.debug("Logout cleanup failed: {}", t.toString());

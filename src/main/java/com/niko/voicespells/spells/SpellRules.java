@@ -17,10 +17,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * than a second way to press a button; another asked whether spells could be locked behind their
  * incantation, either the first time or permanently.
  *
- * <p>Iron's Spells exposes exactly the three hooks this needs — {@code SpellCooldownAddedEvent.Pre}
- * (cancellable, with {@code setEffectiveCooldown}), {@code ModifySpellLevelEvent} ({@code
- * addLevels}), and {@code SpellPreCastEvent} (cancellable) — and all three exist with identical
- * signatures on 1.20.1 and 1.21.1, so only the bus registration is version-split.
+ * <p>Iron's Spells exposes two usable hooks — {@code SpellCooldownAddedEvent.Pre} (cancellable,
+ * with {@code setEffectiveCooldown}) and {@code SpellPreCastEvent} (cancellable) — both with
+ * identical signatures on 1.20.1 and 1.21.1, so only the bus registration is version-split. The
+ * level bonus does not go through an event at all: {@code ModifySpellLevelEvent} never fires on
+ * this path, so {@link SpellCaster} applies it where it already owns the cast level.
  *
  * <p><b>How a cast is known to be ours.</b> The events fire deep inside Iron's Spells and carry no
  * indication of who started the cast, so {@link SpellCaster} stamps the player immediately before
@@ -58,10 +59,11 @@ public final class SpellRules {
     /**
      * Which spells each player has ever voice-cast, for FIRST_CAST.
      *
-     * <p>Persisted to {@code config/voicespells/learned.txt} on the server, because losing it is
-     * not a cosmetic reset: FIRST_CAST means a spell you have already unlocked by speaking it goes
-     * back to being unclickable, so a server restart silently takes progress away from every
-     * player who had earned it. Written on change (debounced) and on shutdown, read at startup.
+     * <p>Persisted to {@code <world>/voicespells/learned.txt}, because losing it is not a
+     * cosmetic reset: FIRST_CAST means a spell you have already unlocked by speaking it goes back
+     * to being unclickable, so a server restart silently takes progress away from every player who
+     * had earned it. Read at server start, written at server stop and at every logout that follows
+     * a change - a dirty flag makes the common logout free.
      */
     private static final Map<UUID, Set<String>> learned = new ConcurrentHashMap<>();
 
@@ -106,12 +108,6 @@ public final class SpellRules {
     public static boolean hasLearned(UUID player, String spellId) {
         Set<String> s = learned.get(player);
         return s != null && s.contains(spellId);
-    }
-
-    /** Forget a player's state when they disconnect, so the maps do not grow forever. */
-    public static void forget(UUID player) {
-        pending.remove(player);
-        learned.remove(player);
     }
 
     /**

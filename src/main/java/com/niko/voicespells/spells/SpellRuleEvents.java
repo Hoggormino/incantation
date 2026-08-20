@@ -15,12 +15,17 @@ import java.util.function.Consumer;
  * this follows the house style instead of introducing a build dependency that would have to be
  * resolvable for anyone building the mod.
  *
- * <p>The three hooks, all of which exist with identical signatures on 1.20.1 and 1.21.1:
+ * <p>Two hooks, both with identical signatures on 1.20.1 and 1.21.1:
  * <ul>
  *   <li>{@code SpellCooldownAddedEvent$Pre} — {@code setEffectiveCooldown(int)}</li>
- *   <li>{@code ModifySpellLevelEvent} — {@code addLevels(int)}</li>
  *   <li>{@code SpellPreCastEvent} — cancellable, {@code getSpellId()}</li>
  * </ul>
+ *
+ * <p>{@code ModifySpellLevelEvent} is deliberately NOT among them. It exists and its
+ * {@code addLevels(int)} is real, but it never fires on the path a voice cast takes — the level
+ * is already fixed by the time the cast is initiated — so a hook there registered cleanly and
+ * did nothing. The level bonus is applied in {@link SpellCaster} instead, where the mod owns the
+ * number it passes in.
  *
  * <p>Server-side. Cooldown and spell level are gameplay, so a client cannot be trusted with them,
  * and an incantation requirement that only the client enforced would be worth nothing.
