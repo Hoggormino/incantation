@@ -619,13 +619,15 @@ public final class ClientEvents {
         private static final long HISTORY_LIFETIME_NANOS = 4_500_000_000L;
         private static final int CHIP_H   = 14;
         private static final int PAD_X    = 5;
-        /**
-         * The mic indicator's footprint. 32 wide so the two 16px slices meet cleanly in the flat
-         * middle of the sprite, 5 tall because that is the only height any Minecraft bar is:
-         * one cap row, three body rows, one cap row.
-         */
-        private static final int BAR_W = 32;
-        private static final int BAR_H = 5;
+        // Back to the dot and the thin track, which is the shape the author asked for. The
+        // reason it used to disappear was never the shape: its track was 0x90101010, the same
+        // RGB-over-black value that made every WELL in the mod invisible. That colour adds a
+        // fixed +9 luma floor, so below ground luma 16 it is brighter than what it sits on. Pure
+        // black has no constant term, so the track is now genuinely darker than the world in
+        // every scene - which is all the separation a 4px dot beside it ever needed.
+        private static final int DOT_SIZE = 4;
+        private static final int METER_W  = 26;
+        private static final int METER_H  = 4;
 
         /**
          * Mic state dot plus a live level meter.
@@ -650,103 +652,49 @@ public final class ClientEvents {
             boolean calibrating = VoiceController.isTranscribing();
             boolean silent = !calibrating && VoiceController.deviceSilent();
 
+            // Three states, three colours - and idle is clearly darker than armed, because those
+            // two collapsed to one grey when the accents were deleted and this chip is the mod's
+            // only listening indicator.
+            int dotColor = silent      ? 0xFFFF6166   // red: device open, delivering silence
+                         : calibrating ? 0xFFFFB347   // amber: calibrating, not casting
+                         : !armed      ? 0xFF585858   // dark grey: not listening
+                         : hot         ? 0xFFFFFFFF   // white: audio reaching the recogniser
+                                       : 0xFFA0A0A0; // light grey: armed, below the gate
+
             String tail = calibrating ? "calibrating" : silent ? "mic silent" : "";
-            int chipW = PAD_X + BAR_W + (tail.isEmpty() ? 0 : 4 + font.width(tail)) + PAD_X;
+            int chipW = PAD_X + DOT_SIZE + 4 + METER_W
+                      + (tail.isEmpty() ? 0 : 4 + font.width(tail)) + PAD_X;
             int x = alignX(anchorX, chipW);
 
             // Sits opposite the toast so the two never overlap as history stacks up.
             int chipY = y + (isBottom ? CHIP_H + 3 : -(CHIP_H + 3));
-            int barX = x + PAD_X;
-            int barY = chipY + (CHIP_H - BAR_H) / 2;
-
-            // How much of the bar is lit, in pixels of the 31 the track has inside its right cap.
-            //
-            // Each state gets a distinct AMOUNT as well as a distinct hue, because two states that
-            // differ only in colour collapse the moment anything is wrong - which is exactly what
-            // the old two-grey dot did, and what the screens' own rule forbids.
-            int track = BAR_W - 1;
-            int filled;
-            float r, gr, b;
-            if (silent) {
-                // A device that is open and delivering pure silence. Full width and red: the one
-                // state that must never be mistaken for "nobody is talking".
-                filled = track;  r = 1.00f; gr = 0.38f; b = 0.40f;
-            } else if (calibrating) {
-                filled = Math.max(4, Math.round(level * track));
-                r = 1.00f; gr = 0.70f; b = 0.28f;
-            } else if (!armed) {
-                filled = 0;      r = 1f; gr = 1f; b = 1f;          // idle: an empty trough
-            } else if (hot) {
-                // Speaking. The sprite's own colour, untinted - this is the one moment the
-                // indicator should look like a Minecraft bar filling up, because that is what it is.
-                filled = Math.max(3, Math.min(track, Math.round(level * track)));
-                r = 1f; gr = 1f; b = 1f;
-            } else {
-                // Armed but below the noise gate: a short, dimmed nub. Present, not active.
-                filled = 3;      r = 0.62f; gr = 0.62f; b = 0.62f;
-            }
-
             float a = Math.max(0f, Math.min(1f, VoiceSpellsConfig.cOpacity));
-            g.setColor(1f, 1f, 1f, a);
-            bar(g, false, barX, barY, 0);                     // track, always
-            if (filled > 0) {
-                g.setColor(r, gr, b, a);
-                bar(g, true, barX, barY, filled);
+
+            int dotX = x + PAD_X;
+            int dotY = chipY + (CHIP_H - DOT_SIZE) / 2;
+            g.fill(dotX, dotY, dotX + DOT_SIZE, dotY + DOT_SIZE, withAlpha(dotColor, a));
+
+            // The track, in pure black.
+            //
+            // This is the one substantive change from the original. It was 0xB0101010 - RGB over
+            // black - which carries a fixed +9 luma floor and is therefore BRIGHTER than any
+            // ground below luma 16. That is why the indicator vanished against stone and why it
+            // needed an outline bolted on to be seen at all. The same wrong value made every well
+            // in the mod invisible; pure black has no constant term and is darker than the world
+            // in every scene, so the shape works as drawn with nothing added to it.
+            int meterX = dotX + DOT_SIZE + 4;
+            int meterY = chipY + (CHIP_H - METER_H) / 2;
+            g.fill(meterX, meterY, meterX + METER_W, meterY + METER_H, withAlpha(0xB0000000, a));
+            if (armed && level > 0f) {
+                int filled = Math.max(1, Math.min(METER_W, Math.round(level * METER_W)));
+                g.fill(meterX, meterY, meterX + filled, meterY + METER_H, withAlpha(dotColor, a));
             }
-            g.setColor(1f, 1f, 1f, 1f);                       // never leak tint into later draws
 
             if (!tail.isEmpty()) {
-                g.drawString(font, tail, barX + BAR_W + 4,
+                g.drawString(font, tail, meterX + METER_W + 4,
                     chipY + (CHIP_H - font.lineHeight) / 2 + 1,
                     silent ? 0xFFFF6166 : 0xFFFFFFFF, true);
             }
-        }
-
-        /**
-         * One slice of Minecraft's own experience bar.
-         *
-         * <p>Blitted, not drawn. The mod already made this argument once and acted on it
-         * everywhere else: "an imitation is what it looks like, and no amount of tuning the
-         * numbers fixes a difference in kind" - which is why NeonButton and NeonSlider lost their
-         * hand-painted bodies and became real vanilla widgets. The mic indicator was the last
-         * hand-drawn thing in the mod, a flat rectangle with a hand-computed rim, and it read
-         * exactly the way those controls did before they were replaced.
-         *
-         * <p>It also inherits what a texture gets for free: a resource pack restyles it, and the
-         * shading vanilla bakes into its caps is what keeps a 5px bar readable over snow, stone
-         * and lava without any outline of ours. Vanilla puts an opaque black rim on small ICONS
-         * and on none of its twenty-seven BARS - the previous version had borrowed the wrong
-         * treatment.
-         *
-         * <p>Drawn as two slices so both end caps survive at a width the sprite was never meant
-         * to be: the left 16 columns from u=0, the right 16 from u=166, seam in the flat middle.
-         * The progress overlay is instead cropped from u=0 to {@code filled}, a hard right cut,
-         * which is precisely what {@code Gui.renderExperienceBar} does.
-         */
-        private static void bar(GuiGraphics g, boolean progress, int x, int y, int filled) {
-            if (progress) {
-                if (filled > 0) blitBar(g, true, x, y, 0, Math.min(filled, BAR_W - 1));
-                return;
-            }
-            int half = BAR_W / 2;
-            blitBar(g, false, x,        y, 0,             half);
-            blitBar(g, false, x + half, y, 182 - (BAR_W - half), BAR_W - half);
-        }
-
-        /** The version-split blit. Same sprite, same UVs; only the call shape differs. */
-        private static void blitBar(GuiGraphics g, boolean progress, int x, int y, int u, int w) {
-            if (w <= 0) return;
-//? if forge {
-/*            // 1.20.1 has no sprite atlas for HUD elements: the experience bar lives in
-            // icons.png at v=64 (track) and v=69 (progress), 182x5 - the exact UVs
-            // Gui.renderExperienceBar uses on this version.
-            g.blit(new net.minecraft.resources.ResourceLocation("textures/gui/icons.png"),
-                x, y, u, progress ? 69 : 64, w, BAR_H);
-*///?} else {
-            g.blitSprite(net.minecraft.resources.ResourceLocation.withDefaultNamespace(
-                    progress ? "hud/experience_bar_progress" : "hud/experience_bar_background"),
-                182, BAR_H, u, 0, x, y, w, BAR_H);
-//?}
         }
 
         @Override
