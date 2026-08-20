@@ -1064,6 +1064,21 @@ public final class VoiceController {
                 // option says, and it persisted until something else forced a rebuild.
                 rebuildRecognizer("VoiceSpells-Grammar", VoiceController::currentGrammar);
             }
+            // The scan still runs, on the same interval, purely to keep the inscribed-level map
+            // fresh - the owned SET is discarded here, and no grammar or gate is touched.
+            //
+            // Without this the client's mana check falls back to level 1 for anyone who turns
+            // "Only owned spells" off, because that is the only thing that ever calls scan(). It
+            // then under-counts the cost of an upgraded spellbook, waves a cast through, and the
+            // server refuses it - the exact silent failure the level-aware check was added to fix,
+            // just narrowed to one config combination.
+            long idleNow = System.nanoTime();
+            if (idleNow - lastOwnedScanNanos >= OWNED_SCAN_INTERVAL_NANOS) {
+                lastOwnedScanNanos = idleNow;
+                try {
+                    com.niko.voicespells.client.OwnedSpells.scan();
+                } catch (Throwable ignored) { /* levels stay as they were */ }
+            }
             return;
         }
         long now = System.nanoTime();

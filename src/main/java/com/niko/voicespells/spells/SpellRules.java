@@ -62,7 +62,8 @@ public final class SpellRules {
      * @param manaDiscount how much the level bonus inflated this cast's mana cost. Subtracted
      *                     when Iron's Spells charges for it, so the bonus is free.
      */
-    private record Pending(String spellId, long atNanos, boolean precastUsed, int manaDiscount) {}
+    private record Pending(String spellId, long atNanos, boolean precastUsed,
+                           int manaDiscount, boolean cooldownUsed) {}
 
     /** Most recent voice cast per player, until its cooldown is applied or it expires. */
     private static final Map<UUID, Pending> pending = new ConcurrentHashMap<>();
@@ -88,7 +89,7 @@ public final class SpellRules {
      */
     public static void beginVoiceCast(UUID player, String spellId, int manaDiscount) {
         if (player == null || spellId == null) return;
-        pending.put(player, new Pending(spellId, System.nanoTime(), false, Math.max(0, manaDiscount)));
+        pending.put(player, new Pending(spellId, System.nanoTime(), false, Math.max(0, manaDiscount), false));
         if (learned.computeIfAbsent(player, k -> ConcurrentHashMap.newKeySet()).add(spellId)) {
             dirty = true;
             // Written HERE, not left to logout or shutdown. An unlock is unrecoverable - under
@@ -145,7 +146,7 @@ public final class SpellRules {
         if (!hasPendingFor(player, spellId)) return false;
         Pending p = pending.get(player);
         if (p == null || p.precastUsed()) return false;
-        pending.put(player, new Pending(p.spellId(), p.atNanos(), true, p.manaDiscount()));
+        pending.put(player, new Pending(p.spellId(), p.atNanos(), true, p.manaDiscount(), p.cooldownUsed()));
         return true;
     }
 
@@ -234,11 +235,20 @@ public final class SpellRules {
      *
      * @param base the cooldown Iron's Spells was about to apply, in ticks
      */
-    public static int voiceCooldown(Player player, int base) {
-        if (player == null || !hasPending(player.getUUID())) return -1;
-        // Consumed here: one cast, one cooldown. Leaving it would let the next clicked cast of
-        // any spell inside the TTL take the discount too.
-        pending.remove(player.getUUID());
+    public static int voiceCooldown(Player player, String spellId, int base) {
+        if (player == null || spellId == null) return -1;
+        UUID id = player.getUUID();
+        // Spell-aware and single-use, like the other two things the stamp carries. This used to
+        // ask only "does this player have a stamp" and then delete the whole entry - so a voice
+        // cast of one spell discounted the cooldown of whatever was cast next inside the ten
+        // seconds, including a clicked one, and it destroyed the mana discount on its way out.
+        Pending p = pending.get(id);
+        if (p == null || p.cooldownUsed() || !spellId.equals(p.spellId())) return -1;
+        if (System.nanoTime() - p.atNanos() > PENDING_TTL_NANOS) {
+            pending.remove(id);
+            return -1;
+        }
+        pending.put(id, new Pending(p.spellId(), p.atNanos(), p.precastUsed(), p.manaDiscount(), true));
         int pct;
         try {
             pct = VoiceSpellsServerConfig.SERVER.voiceCooldownPercent.get();
@@ -363,7 +373,7 @@ public final class SpellRules {
         // the cooldown hook can find it, and without this a CLICKED cast of the same spell inside
         // that window would collect a discount it never earned - the discount exists to offset a
         // level bonus that only a spoken cast receives. One stamp, one cast, one discount.
-        pending.put(id, new Pending(p.spellId(), p.atNanos(), p.precastUsed(), 0));
+        pending.put(id, new Pending(p.spellId(), p.atNanos(), p.precastUsed(), 0, p.cooldownUsed()));
         return Math.max(0, base - p.manaDiscount());
     }
 

@@ -100,8 +100,14 @@ public final class SpellRuleEvents {
             // on cooldown threw ClassCastException into warnOnce and latched a permanent WARN on
             // any server that has them - a scary log line for a case that is simply not ours.
             if (!(call(e, "getEntity") instanceof Player p)) return;
+            // The spell this cooldown belongs to. Without it the discount was handed to whatever
+            // the player cast next, not to the spell they actually spoke.
+            Object spell = call(e, "getSpell");
+            if (spell == null) return;
+            Object sid = spell.getClass().getMethod("getSpellId").invoke(spell);
+            if (!(sid instanceof String cdSpellId)) return;
             int base = (int) call(e, "getEffectiveCooldown");
-            int scaled = SpellRules.voiceCooldown(p, base);
+            int scaled = SpellRules.voiceCooldown(p, cdSpellId, base);
             if (scaled >= 0) {
                 e.getClass().getMethod("setEffectiveCooldown", int.class).invoke(e, scaled);
             }
