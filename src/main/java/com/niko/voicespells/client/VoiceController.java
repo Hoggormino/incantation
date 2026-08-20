@@ -726,7 +726,15 @@ public final class VoiceController {
         // thread free to keep reading the device.
         if (gateWasOpen) {
             gateWasOpen = false;
-            speechStartNanos = 0L;      // next utterance times from its own gate-open
+            // speechStartNanos is deliberately NOT cleared here.
+            //
+            // The flush started on the next line is what settles the utterance into a final
+            // result, and that final result is what dispatches the cast - so clearing the
+            // timestamp first meant the dispatch always read zero and fell back to the old, wrong
+            // anchor. The normal path, not an edge case.
+            //
+            // Nothing needs clearing: the closed-to-open edge above re-stamps on the first loud
+            // frame of the next utterance, which is the only moment the value should change.
             Thread t = new Thread(() -> { s.flush(); s.reset(); }, "VoiceSpells-Flush");
             t.setDaemon(true);
             t.start();

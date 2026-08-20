@@ -61,8 +61,14 @@ public final class VoskSession implements AutoCloseable {
         // when it does it overwrites the registration. The trap is that
         // Native.getStringEncoding(LibVosk.class) still reads "UTF-8" afterwards, so the broken
         // order self-verifies as working. setLogLevel first forces the clinit; then we re-register.
-        LibVosk.setLogLevel(LogLevel.WARNINGS);
         try {
+            // Inside the try, not before it. This call is what forces LibVosk's clinit, which
+            // unpacks and loads the native library - so it is also the statement that throws when
+            // the library is missing, the wrong architecture, or has been quarantined by
+            // antivirus. Outside, that became an ExceptionInInitializerError from this class's
+            // own static block, after which every touch of VoskSession throws NoClassDefFoundError
+            // and the player gets a bare stack trace instead of the mod saying what is wrong.
+            LibVosk.setLogLevel(LogLevel.WARNINGS);
             String lib = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")
                 ? "libvosk" : "vosk";
             // Scoped to this library, not global. Native.getDefaultStringEncoding() is left alone,
@@ -71,6 +77,12 @@ public final class VoskSession implements AutoCloseable {
                 com.sun.jna.NativeLibrary.getInstance(lib,
                     java.util.Map.of(com.sun.jna.Library.OPTION_STRING_ENCODING, "UTF-8")));
             utf8Grammar = "UTF-8".equalsIgnoreCase(com.sun.jna.Native.getStringEncoding(LibVosk.class));
+        } catch (UnsatisfiedLinkError | NoClassDefFoundError nativeMissing) {
+            utf8Grammar = false;
+            VoiceSpells.LOGGER.error("The Vosk speech library could not be loaded ({}). Voice "
+                + "casting will not work. This is usually a missing or quarantined native "
+                + "library - check that antivirus has not removed libvosk from the mod jar's "
+                + "extracted natives.", nativeMissing.toString());
         } catch (Throwable t) {
             utf8Grammar = false;
             VoiceSpells.LOGGER.warn("Could not force UTF-8 on the Vosk native boundary ({}); "
