@@ -58,7 +58,11 @@ public final class SpellRules {
      *                    time - but it must authorise exactly ONE cast, or it doubles as a
      *                    ten-second licence to click-cast the same spell.
      */
-    private record Pending(String spellId, long atNanos, boolean precastUsed) {}
+    /**
+     * @param manaDiscount how much the level bonus inflated this cast's mana cost. Subtracted
+     *                     when Iron's Spells charges for it, so the bonus is free.
+     */
+    private record Pending(String spellId, long atNanos, boolean precastUsed, int manaDiscount) {}
 
     /** Most recent voice cast per player, until its cooldown is applied or it expires. */
     private static final Map<UUID, Pending> pending = new ConcurrentHashMap<>();
@@ -83,8 +87,12 @@ public final class SpellRules {
      * cooldown hook uses it, and expires on its own otherwise.
      */
     public static void beginVoiceCast(UUID player, String spellId) {
+        beginVoiceCast(player, spellId, 0);
+    }
+
+    public static void beginVoiceCast(UUID player, String spellId, int manaDiscount) {
         if (player == null || spellId == null) return;
-        pending.put(player, new Pending(spellId, System.nanoTime(), false));
+        pending.put(player, new Pending(spellId, System.nanoTime(), false, Math.max(0, manaDiscount)));
         if (learned.computeIfAbsent(player, k -> ConcurrentHashMap.newKeySet()).add(spellId)) {
             dirty = true;
             // Written HERE, not left to logout or shutdown. An unlock is unrecoverable - under
@@ -141,7 +149,7 @@ public final class SpellRules {
         if (!hasPendingFor(player, spellId)) return false;
         Pending p = pending.get(player);
         if (p == null || p.precastUsed()) return false;
-        pending.put(player, new Pending(p.spellId(), p.atNanos(), true));
+        pending.put(player, new Pending(p.spellId(), p.atNanos(), true, p.manaDiscount()));
         return true;
     }
 
@@ -335,6 +343,26 @@ public final class SpellRules {
         } catch (Throwable t) {
             return false;
         }
+    }
+
+    /**
+     * The mana cost Iron's Spells should actually charge for this cast.
+     *
+     * <p>Returns {@code -1} to leave it alone. Called from the {@code SpellOnCastEvent} hook,
+     * which fires inside {@code castSpell} immediately before the deduction - the only correct
+     * moment, because that is when the mana is taken.
+     *
+     * <p>The first attempt refunded the difference straight after {@code attemptInitiateCast}
+     * returned, which is wrong for any spell with a cast time: mana is not deducted at
+     * initiation but seconds later when the spell RESOLVES. So the refund landed before the
+     * charge, and a cast interrupted in between was free mana, repeatable.
+     */
+    public static int discountedManaCost(Player player, String spellId, int base) {
+        if (player == null || spellId == null) return -1;
+        Pending p = pending.get(player.getUUID());
+        if (p == null || !spellId.equals(p.spellId()) || p.manaDiscount() <= 0) return -1;
+        if (System.nanoTime() - p.atNanos() > PENDING_TTL_NANOS) return -1;
+        return Math.max(0, base - p.manaDiscount());
     }
 
     /** Told to the player when a cast is refused, so the rule is never silent. */

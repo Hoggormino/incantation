@@ -337,6 +337,9 @@ public final class SpellCaster {
             int baseLevel  = castLevel;
             int levelBonus = SpellRules.configuredLevelBonus();
             if (levelBonus > 0) castLevel = Math.min(castLevel + levelBonus, 10);
+            // How much the bonus inflated the price. Carried on the voice stamp and subtracted by
+            // the SpellOnCastEvent hook at the moment Iron's Spells charges for it.
+            int manaDiscount = manaDelta(spell, spellClass, player, baseLevel, castLevel);
             // The preflight below still checks against the BOOSTED level, so a player can never
             // start a cast they could not have afforded outright - the refund lands after, not
             // instead. That keeps mana honest under any failure path.
@@ -361,7 +364,7 @@ public final class SpellCaster {
             // leave the player marked as permanently voice-casting - that would hand them the
             // voice bonuses for free and, under the ALWAYS rule, let them click-cast forever.
             boolean ok;
-            SpellRules.beginVoiceCast(player.getUUID(), spellId.toString());
+            SpellRules.beginVoiceCast(player.getUUID(), spellId.toString(), manaDiscount);
             try {
                 ok = (boolean) cast.invoke(
                     spell, castStack, castLevel, player.level(), player,
@@ -380,7 +383,6 @@ public final class SpellCaster {
                 feedback(player, "voicespells.cast.failed",
                     SpellInfo.of(spellId.toString()).displayName());
             } else {
-                refundLevelBonusMana(player, spell, spellClass, baseLevel, castLevel);
                 appendCastLog(player, spellId);
                 broadcastNearby(player, spellId);
                 // Count on the SERVER first, then award from the server's number.
@@ -608,26 +610,18 @@ public final class SpellCaster {
      * fall back to its silent failure with the generic "Could not cast" toast.
      */
     /**
-     * Give back the mana the level bonus cost, so the bonus is an advantage rather than a trade.
+     * How much more the boosted level costs than the base one, or 0 if it cannot be worked out.
      *
-     * <p>Iron's Spells charges by the level it is handed and there is no hook to change that, so
-     * the only honest way to make the bonus free is to put the difference back afterwards. Done
-     * AFTER a successful cast, never before: the preflight has already required the player to
-     * afford the boosted cost, so nobody can start a cast on credit, and a cast that fails costs
-     * exactly what it always did.
-     *
-     * <p>Best-effort. If any of this reflection is unavailable the player simply pays full
-     * price - which is the behaviour before this existed, and strictly safer than guessing.
+     * <p>Pure arithmetic - nothing is credited here. The difference is handed to the voice stamp
+     * and applied by the {@code SpellOnCastEvent} hook, which runs at the instant the mana is
+     * actually taken. Crediting it at initiation, which is what this used to do, was wrong for
+     * every spell with a cast time: mana is deducted when the spell RESOLVES, so the credit
+     * arrived first and an interrupted cast kept it.
      */
-    private static void refundLevelBonusMana(ServerPlayer player, Object spell,
-                                             Class<?> spellClass, int baseLevel, int castLevel) {
-        if (castLevel <= baseLevel) return;
+    private static int manaDelta(Object spell, Class<?> spellClass, ServerPlayer player,
+                                 int baseLevel, int castLevel) {
+        if (castLevel <= baseLevel) return 0;
         try {
-            Class<?> magicDataCls = Class.forName(MAGIC_DATA_CLASS);
-            Object magicData = magicDataCls
-                .getMethod("getPlayerMagicData", LivingEntity.class).invoke(null, player);
-            if (magicData == null) return;
-
             java.lang.reflect.Method getCost;
             boolean withCaster;
             try {
@@ -637,20 +631,13 @@ public final class SpellCaster {
                 getCost = spellClass.getMethod("getManaCost", int.class);
                 withCaster = false;
             }
-            int paid = ((Number) (withCaster ? getCost.invoke(spell, castLevel, player)
+            int high = ((Number) (withCaster ? getCost.invoke(spell, castLevel, player)
                                              : getCost.invoke(spell, castLevel))).intValue();
-            int owed = ((Number) (withCaster ? getCost.invoke(spell, baseLevel, player)
+            int low  = ((Number) (withCaster ? getCost.invoke(spell, baseLevel, player)
                                              : getCost.invoke(spell, baseLevel))).intValue();
-            int refund = paid - owed;
-            if (refund <= 0) return;
-
-            // addMana, not setMana: Iron's Spells clamps addMana to the player's maximum, and
-            // computing a new absolute value here would race the regeneration tick.
-            magicDataCls.getMethod("addMana", float.class).invoke(magicData, (float) refund);
-            VoiceSpells.LOGGER.debug("Refunded {} mana for the voice level bonus ({} -> {})",
-                refund, baseLevel, castLevel);
+            return Math.max(0, high - low);
         } catch (Throwable t) {
-            VoiceSpells.LOGGER.debug("Could not refund level-bonus mana: {}", t.toString());
+            return 0;   // pay full price rather than guess
         }
     }
 

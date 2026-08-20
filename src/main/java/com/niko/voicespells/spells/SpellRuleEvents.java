@@ -15,10 +15,12 @@ import java.util.function.Consumer;
  * this follows the house style instead of introducing a build dependency that would have to be
  * resolvable for anyone building the mod.
  *
- * <p>Two hooks, both with identical signatures on 1.20.1 and 1.21.1:
+ * <p>Three hooks, all with identical signatures on 1.20.1 and 1.21.1:
  * <ul>
  *   <li>{@code SpellCooldownAddedEvent$Pre} — {@code setEffectiveCooldown(int)}</li>
  *   <li>{@code SpellPreCastEvent} — cancellable, {@code getSpellId()}</li>
+ *   <li>{@code SpellOnCastEvent} — {@code setManaCost(int)}, posted immediately before the
+ *       mana is deducted</li>
  * </ul>
  *
  * <p>{@code ModifySpellLevelEvent} is deliberately NOT among them. It exists and its
@@ -54,6 +56,7 @@ public final class SpellRuleEvents {
         int hooked = 0;
         hooked += addListener(bus, PKG + "SpellCooldownAddedEvent$Pre", SpellRuleEvents::onCooldown) ? 1 : 0;
         hooked += addListener(bus, PKG + "SpellPreCastEvent",           SpellRuleEvents::onPreCast) ? 1 : 0;
+        hooked += addListener(bus, PKG + "SpellOnCastEvent",            SpellRuleEvents::onCast)    ? 1 : 0;
         if (hooked > 0) {
             VoiceSpells.LOGGER.info("Voice-advantage rules active ({} Iron's Spells hook(s))", hooked);
         }
@@ -113,6 +116,29 @@ public final class SpellRuleEvents {
     // attemptInitiateCast runs, the level is already decided, so the bonus silently did nothing.
     // SpellCaster applies it directly to the level it is about to cast with, which is the value
     // Iron's Spells actually uses.
+
+    /**
+     * Charge the level bonus at base price.
+     *
+     * <p>{@code SpellOnCastEvent} is posted inside {@code castSpell} immediately before
+     * {@code MagicData.setMana}, and the deduction reads {@code event.getManaCost()} - so
+     * setting it here is the only point at which the cost can be changed rather than
+     * compensated for afterwards. {@code setManaCost(int)} exists on both jars.
+     */
+    private static void onCast(Object e) {
+        try {
+            if (!(call(e, "getEntity") instanceof Player p)) return;
+            Object id = call(e, "getSpellId");
+            if (!(id instanceof String spellId)) return;
+            int base = (int) call(e, "getManaCost");
+            int discounted = SpellRules.discountedManaCost(p, spellId, base);
+            if (discounted >= 0 && discounted != base) {
+                e.getClass().getMethod("setManaCost", int.class).invoke(e, discounted);
+            }
+        } catch (Throwable t) {
+            warnOnce("oncast", t);
+        }
+    }
 
     private static void onPreCast(Object e) {
         try {
