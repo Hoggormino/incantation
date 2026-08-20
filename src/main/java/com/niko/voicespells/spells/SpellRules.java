@@ -292,6 +292,22 @@ public final class SpellRules {
     private static final long EXPLAIN_COOLDOWN_NANOS = 2_000_000_000L;
     private static final Map<UUID, Long> lastExplained = new ConcurrentHashMap<>();
 
+    /**
+     * Whether this player must SPEAK for every single cast, i.e. the ALWAYS rule applies to them.
+     *
+     * <p>Only ALWAYS. Under FIRST_CAST a repeat is fine by definition - the spell was unlocked by
+     * speaking it, which is the whole rule - so the quick-recast key stays useful there.
+     */
+    public static boolean requiresSpeechEveryCast(Player player) {
+        if (player == null || !canSpeak(player)) return false;
+        try {
+            return VoiceSpellsServerConfig.SERVER.incantationOnly.get()
+                == VoiceSpellsServerConfig.IncantationRule.ALWAYS;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     /** Told to the player when a cast is refused, so the rule is never silent. */
     public static void explainBlocked(Player player, String spellId) {
         try {

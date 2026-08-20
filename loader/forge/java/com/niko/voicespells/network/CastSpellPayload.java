@@ -11,6 +11,8 @@ import net.minecraft.resources.ResourceLocation;
  *   - {@code volumeScale} : client's current audio RMS (0..1). Optional spellbook-level scaling.
  *   - {@code totalCasts}  : client's lifetime voice-cast count (from VoiceStats)
  *   - {@code streak}      : current consecutive-cast streak (resets after inactivity)
+ *   - {@code spoken}      : true when the player actually said the spell; false when this is a
+ *                           quick-recast of the previous one from the keybind
  *
  * The two count fields exist so the server can fire the {@link com.niko.voicespells.advancements.VoiceCastTrigger}
  * with accurate per-player numbers without maintaining its own persistent counter — the client
@@ -21,13 +23,14 @@ import net.minecraft.resources.ResourceLocation;
  * the {@link Network#CHANNEL} message builder by hand. Field order must match between the two.
  */
 public record CastSpellPayload(ResourceLocation spellId, float volumeScale,
-                                int totalCasts, int streak) {
+                                int totalCasts, int streak, boolean spoken) {
 
     public static void encode(CastSpellPayload msg, FriendlyByteBuf buf) {
         buf.writeUtf(msg.spellId.toString());
         buf.writeFloat(msg.volumeScale);
         buf.writeVarInt(msg.totalCasts);
         buf.writeVarInt(msg.streak);
+        buf.writeBoolean(msg.spoken);
     }
 
     public static CastSpellPayload decode(FriendlyByteBuf buf) {
@@ -39,8 +42,13 @@ public record CastSpellPayload(ResourceLocation spellId, float volumeScale,
         float volume = buf.readFloat();
         int total = buf.readVarInt();
         int streak = buf.readVarInt();
+        // Read only when bytes remain. spoken was added after release and the channel accepts a
+        // client on an older build, whose payload is four fields long; reading unconditionally
+        // would throw on the netty decode thread and disconnect them. Absent means spoken=true,
+        // because the version that could send anything else is the version that writes the flag.
+        boolean spoken = buf.readableBytes() > 0 ? buf.readBoolean() : true;
         return new CastSpellPayload(
             id != null ? id : new ResourceLocation("minecraft", "empty"),
-            volume, total, streak);
+            volume, total, streak, spoken);
     }
 }

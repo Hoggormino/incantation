@@ -85,7 +85,8 @@ public final class Network {
                         payload.spellId(),
                         payload.volumeScale(),
                         payload.totalCasts(),
-                        payload.streak());
+                        payload.streak(),
+                        payload.spoken());
                 }
             })
             .add();

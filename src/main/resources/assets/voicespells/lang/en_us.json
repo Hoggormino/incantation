@@ -44,5 +44,6 @@
   "advancements.voicespells.voice_maestro.title": "Maestro",
   "advancements.voicespells.voice_maestro.description": "Voice-cast 10 spells in a row without a pause",
   "voicespells.incantation.always": "%s can only be cast by speaking its name.",
-  "voicespells.incantation.first": "Speak %s once to learn its incantation."
+  "voicespells.incantation.first": "Speak %s once to learn its incantation.",
+  "voicespells.cast.recast_blocked": "%s can only be cast by speaking its name - repeat is disabled here."
 }

@@ -464,7 +464,7 @@ public final class VoiceController {
         int streakForTrigger = currentStreak();
         Minecraft.getInstance().execute(() -> {
             SpellSelector.select(dispatched);
-            dispatchCast(dispatched, 1.0f, totalForTrigger, streakForTrigger);
+            dispatchCast(dispatched, 1.0f, totalForTrigger, streakForTrigger, false);
             if (VoiceSpellsConfig.cEchoSfx) playEchoChime(dispatched);
         });
     }
@@ -1099,8 +1099,17 @@ public final class VoiceController {
      * assumption rather than a guarantee. Falling back costs nothing and keeps casting working in
      * both cases.
      */
+    /** @param spoken false only for the quick-recast keybind, which repeats a spell the player
+     *                 is not saying again. The server needs to know, because incantationOnly
+     *                 = ALWAYS means every cast must be spoken and a recast is not. */
     private static void dispatchCast(ResourceLocation spellId, float volume,
                                      int totalForTrigger, int streakForTrigger) {
+        dispatchCast(spellId, volume, totalForTrigger, streakForTrigger, true);
+    }
+
+    private static void dispatchCast(ResourceLocation spellId, float volume,
+                                     int totalForTrigger, int streakForTrigger,
+                                     boolean spoken) {
         // Order matters, and it used to be wrong. ClientCast.tryCast() was tried FIRST and
         // returned early on success, so on NeoForge — the published target — a voice cast went out
         // as Iron's Spells' own packet and this mod's server side never saw it. Everything
@@ -1115,7 +1124,7 @@ public final class VoiceController {
         // on a server that does not have this mod, where there is no server-side config to
         // enforce in the first place.
         if (serverHandlesCasts()) {
-            sendCastPayload(spellId, volume, totalForTrigger, streakForTrigger);
+            sendCastPayload(spellId, volume, totalForTrigger, streakForTrigger, spoken);
             return;
         }
         if (ClientCast.tryCast(spellId)) return;
@@ -1156,13 +1165,14 @@ public final class VoiceController {
     /** Single place the cast packet leaves the client, so the loader split lives here rather than
      *  at each of the call sites it used to be duplicated across. */
     private static void sendCastPayload(ResourceLocation spellId, float volume,
-                                        int totalForTrigger, int streakForTrigger) {
+                                        int totalForTrigger, int streakForTrigger,
+                                        boolean spoken) {
 //? if forge {
 /*        Network.sendToServer(
-            new CastSpellPayload(spellId, volume, totalForTrigger, streakForTrigger));
+            new CastSpellPayload(spellId, volume, totalForTrigger, streakForTrigger, spoken));
 *///?} else {
         PacketDistributor.sendToServer(
-            new CastSpellPayload(spellId, volume, totalForTrigger, streakForTrigger));
+            new CastSpellPayload(spellId, volume, totalForTrigger, streakForTrigger, spoken));
 //?}
     }
 

@@ -105,6 +105,22 @@ public final class SpellCaster {
 
     public static boolean cast(ServerPlayer player, ResourceLocation spellId,
                                 float volumeScale, int totalCasts, int streak) {
+        return cast(player, spellId, volumeScale, totalCasts, streak, true);
+    }
+
+    /**
+     * @param spoken false when this came from the quick-recast keybind rather than from speech.
+     *               Under {@code incantationOnly = ALWAYS} that is the difference between a
+     *               legitimate cast and a way to bypass the rule entirely - speak once, then
+     *               hold the key. The server cannot infer it, so the client says so.
+     */
+    public static boolean cast(ServerPlayer player, ResourceLocation spellId,
+                                float volumeScale, int totalCasts, int streak, boolean spoken) {
+        if (!spoken && SpellRules.requiresSpeechEveryCast(player)) {
+            feedback(player, "voicespells.cast.recast_blocked",
+                SpellInfo.of(spellId.toString()).displayName());
+            return false;
+        }
         // Per-player whitelist gate — empty list = everyone allowed; otherwise must match the
         // player's name or UUID exactly. Cheap string check, runs before everything else.
         try {
