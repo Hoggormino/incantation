@@ -130,9 +130,38 @@ public final class SpellRuleEvents {
             if (!source.equals("SPELLBOOK") && !source.equals("SCROLL") && !source.equals("SWORD")) return;
             if (!SpellRules.blockClickedCast(p, spellId)) return;
             e.getClass().getMethod("setCanceled", boolean.class).invoke(e, true);
+            clearDesignatedTarget(p);
             SpellRules.explainBlocked(p, spellId);
         } catch (Throwable t) {
             warnOnce("incantation", t);
+        }
+    }
+
+    /**
+     * Undo the target a refused cast just designated.
+     *
+     * <p>Iron's Spells picks the target inside {@code checkPreCastConditions}, which
+     * {@code attemptInitiateCast} runs BEFORE it posts the cancellable pre-cast event - verified
+     * in the bytecode: {@code checkPreCastConditions} at offset 87, the event constructed at 96
+     * and its cancel checked at 124. So by the time this mod can refuse a cast, a targeted spell
+     * has already called {@code MagicData.setAdditionalCastData} and told the player "X targeted
+     * with Y".
+     *
+     * <p>The message cannot be unsent - it left before any listener existed. The STATE can, and
+     * should: leaving it means a refused cast silently arms a target that some later cast picks
+     * up, which is a worse surprise than the stray line. Roughly twenty spells use this helper -
+     * Sunbeam, Telekinesis, Slow, Wololo, Ice Block, Chain Lightning among them.
+     */
+    private static void clearDesignatedTarget(Player p) {
+        try {
+            Class<?> magicDataCls = Class.forName("io.redspace.ironsspellbooks.api.magic.MagicData");
+            Object md = magicDataCls
+                .getMethod("getPlayerMagicData", net.minecraft.world.entity.LivingEntity.class)
+                .invoke(null, p);
+            if (md != null) magicDataCls.getMethod("resetAdditionalCastData").invoke(md);
+        } catch (Throwable t) {
+            // Best effort. A stale target is untidy, not dangerous, and must never cost a cast.
+            VoiceSpells.LOGGER.debug("Could not clear the designated target: {}", t.toString());
         }
     }
 
