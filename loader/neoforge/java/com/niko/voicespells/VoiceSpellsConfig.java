@@ -198,7 +198,11 @@ public final class VoiceSpellsConfig {
                       "shadowed text over the world - the way vanilla draws the action bar and",
                       "the way Simple Voice Chat draws its mic indicator. Set background to",
                       "something like CC0A0A0A if you would rather have a solid chip behind it.",
-                      "Existing configs keep whatever you already had.");
+                      "Existing configs keep whatever you already had.",
+                      "",
+                      "textMuted colours the secondary chips - history strip, miss toast, heard",
+                      "chip. toast colours the queued-cast chip only; the cast toast itself takes",
+                      "its colour from the spell's school.");
             bgColor      = b.define("background",   "00000000");
             borderColor  = b.define("border",       "00000000");
             textMuted    = b.define("textMuted",    "FF8A8A8A");
@@ -206,7 +210,7 @@ public final class VoiceSpellsConfig {
             b.pop();
 
             b.push("recognition");
-            b.comment("Show the live recognition monitor in the config screen. Debug aid.");
+            b.comment("Log every recognition at INFO instead of DEBUG, for support logs. The Live Monitor is a separate screen (More... > Live Monitor) and is not gated by this.");
             debugMonitor = b.define("debugMonitor", false);
             b.comment("Fuzzy fallback edit distance. 0 exact only, 1 lenient, 2 most lenient.");
             fuzzyMaxDistance = b.defineInRange("fuzzyMaxDistance", 1, 0, 2);

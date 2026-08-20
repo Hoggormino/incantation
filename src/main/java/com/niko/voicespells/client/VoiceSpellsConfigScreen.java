@@ -215,12 +215,18 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // is the most visible feature of the layout. One metric, one alignment.
         // Three tabs share the grid width, on the same gutter as everything else.
         tabRowY = tabsY; tabRowX = gridX; tabRowW = gridW;
+        // The last tab absorbs the division remainder, exactly as the "More..." button does in
+        // the footer. Three equal thirds of 310 leave 2px over, so the right edge of "Behaviour"
+        // stopped 2px short of the grid it is supposed to span - visible as a notch against the
+        // option column below it, on a screen where the alignment IS the design.
         tabColW = (gridW - COL_GAP * 2) / 3;
+        int lastTabX = gridX + (tabColW + COL_GAP) * 2;
+        int lastTabW = gridX + gridW - lastTabX;
         addRenderableWidget(new TabButton(gridX, tabsY, tabColW, TAB_H,
             "Recognition", Tab.RECOGNITION));
         addRenderableWidget(new TabButton(gridX + tabColW + COL_GAP, tabsY, tabColW, TAB_H,
             "HUD", Tab.HUD));
-        addRenderableWidget(new TabButton(gridX + (tabColW + COL_GAP) * 2, tabsY, tabColW, TAB_H,
+        addRenderableWidget(new TabButton(lastTabX, tabsY, lastTabW, TAB_H,
             "Behaviour", Tab.BEHAVIOUR));
 
         // --- Tab content: a two-column option grid ---
@@ -383,8 +389,9 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
         help(slot(NeonToggle.named(0, 0, colW, 20, "Verbose log", workDebug,
                 v -> workDebug = v), i++, gridX, colW, y),
-            "Log every recognition to the game log at INFO, and keep the Live Monitor's history. "
-            + "The monitor itself lives in More... > Live Monitor.");
+            "Log every recognition to the game log at INFO instead of DEBUG. Useful when sending "
+            + "a log to support. It does not affect the Live Monitor, which is always on and "
+            + "always keeps its history - open it from More... > Live Monitor.");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workFuzzy, 0, 2,
                 this::fuzzyLabel, v -> workFuzzy = v), i++, gridX, colW, y),
@@ -467,7 +474,9 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
         help(slot(NeonToggle.named(0, 0, colW, 20, "Show heard", workAlwaysShowHeard,
                 v -> workAlwaysShowHeard = v), i++, gridX, colW, y),
-            "Print everything heard to chat, matched or not.");
+            "Keep a chip on the HUD showing the last phrase heard, matched or not. It draws on "
+            + "the HUD and never touches chat. The Live Monitor shows the same stream with "
+            + "confidence scores, so turning both on is a wall of text.");
 
         help(slot(NeonToggle.named(0, 0, colW, 20, "Cast vignette", workCastVignette,
                 v -> workCastVignette = v), i++, gridX, colW, y),
@@ -666,8 +675,12 @@ public final class VoiceSpellsConfigScreen extends Screen {
         for (Tab t : Tab.values()) {
             if (t == currentTab) continue;      // the selected tab is simply the bright one
             int tx = tabRowX + t.ordinal() * (tabColW + COL_GAP);
-            g.fill(tx, tabRowY, tx + tabColW, ruleY, 0x99000000);
-            g.fill(tx, ruleY, tx + tabColW, ruleY + 1, 0x60FFFFFF);
+            // The last tab is wider than the other two - it absorbs the division remainder so
+            // the row ends flush with the grid - so the dim has to end where the ROW ends, not
+            // one tabColW along, or the notch reappears as an undimmed sliver.
+            int tw = t.ordinal() == Tab.values().length - 1 ? tabRowX + tabRowW - tx : tabColW;
+            g.fill(tx, tabRowY, tx + tw, ruleY, 0x99000000);
+            g.fill(tx, ruleY, tx + tw, ruleY + 1, 0x60FFFFFF);
         }
 
         // No accent rule under the title and no divider under the tabs. Neither exists in any
