@@ -38,9 +38,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
      *  other, and making it 2px shorter than the options meant its gaps could never line up with
      *  theirs no matter what padding was chosen. */
     private static final int TAB_H         = 20;
-    /** Space above the title inside the panel, and below it before the tabs. */
-    private static final int TITLE_TOP     = 8;
-    private static final int TITLE_H       = 18;
 
     /** Three pages, because the mod has 33 settings and the screen was showing nine of them.
      *  The rest were toml-only, which is also why the screen looked empty: it was empty. */
