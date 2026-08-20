@@ -61,14 +61,23 @@ public final class SpellIndex {
         ALIASES.put("sculk tentacles", List.of("skulk tentacles", "scull tentacles"));
         ALIASES.put("nullflare",    List.of("null flare", "no flare"));
         // "abyssal" and "telekinesis" are both absent from the shipped small English model's
-        // symbol table (verified by scanning graph/Gr.fst on the installed model), and neither had
-        // an alias - so these two spells have been uncastable for every English player on the
-        // default model since they were indexed, with no error and nothing in the log above DEBUG.
+        // vocabulary, and neither had an alias - so these two spells have been uncastable for
+        // every English player on the default model since they were indexed, with no error and
+        // nothing in the log above DEBUG.
+        //
         // The respelling rescue that should have caught this cannot run either: Lexicon.load reads
-        // graph/words.txt, and the shipped model ships only Gr.fst, HCLr.fst, disambig_tid.int and
-        // phones. "abyss", "abysmal", "tele" and "kinesis" are all in vocabulary.
+        // graph/words.txt, and the shipped model contains only Gr.fst, HCLr.fst, disambig_tid.int
+        // and phones. Lexicon.ready() is therefore false for everyone on the default model.
+        //
+        // Candidates below were checked against the model's actual symbol table - the OpenFST
+        // table at the head of Gr.fst - not by eye and not by grepping the binary. "kinesis"
+        // occurs inside longer entries but is not itself a word, so the obvious "tele kinesis"
+        // split would have failed exactly like the name it replaces. "abyss", "abysmal",
+        // "shroud", "mind", "push", "psychic" and "force" are all real entries. telekinesis has
+        // no sayable phonetic split at all, so it takes a semantic alias - the same treatment
+        // "wololo" already gets above.
         ALIASES.put("abyssal shroud", List.of("abyss shroud", "abysmal shroud"));
-        ALIASES.put("telekinesis",  List.of("tele kinesis", "kinesis"));
+        ALIASES.put("telekinesis",  List.of("mind push", "psychic force"));
     }
 
     private static final AtomicReference<State> STATE = new AtomicReference<>(State.EMPTY);

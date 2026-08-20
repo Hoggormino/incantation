@@ -65,6 +65,30 @@ public final class VoiceSpellsCommands {
                 "  (the toml is re-read automatically when it changes on disk)")
                 .withStyle(ChatFormatting.DARK_GRAY), false);
 
+            // Who the incantation rule actually applies to.
+            //
+            // There was no way to see this, and the rule is invisible from inside the game when it
+            // is NOT applying to someone - a player just casts normally and the host assumes the
+            // setting works. That is exactly how the old "has sent us a cast packet" test went
+            // unnoticed. One line per online player, saying whether the mod is present on their
+            // connection and therefore whether the rule constrains them.
+            String rule = com.niko.voicespells.VoiceSpellsServerConfig.SERVER.incantationOnly.get().name();
+            src.sendSuccess(() -> Component.literal("Incantation rule — incantationOnly=" + rule)
+                .withStyle(ChatFormatting.AQUA), false);
+            if (!"OFF".equals(rule)) {
+                for (net.minecraft.server.level.ServerPlayer p : src.getServer().getPlayerList().getPlayers()) {
+                    boolean hasMod  = SpellCaster.hasVoiceClient(p.getUUID());
+                    boolean allowed = SpellCaster.voiceAllowedFor(p);
+                    boolean bound   = hasMod && allowed;
+                    String who = p.getName().getString();
+                    String why = bound ? "constrained by the rule"
+                        : !hasMod ? "exempt - Incantation not on their connection"
+                                  : "exempt - excluded by voiceAllowedPlayers";
+                    src.sendSuccess(() -> Component.literal("  " + who + ": " + why)
+                        .withStyle(bound ? ChatFormatting.GREEN : ChatFormatting.YELLOW), false);
+                }
+            }
+
             List<String> recent = SpellCaster.recentLog();
             if (recent.isEmpty()) {
                 src.sendSuccess(() -> Component.literal("No voice casts logged this session.")

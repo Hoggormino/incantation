@@ -37,8 +37,46 @@ import java.util.Locale;
 public final class VoskSession implements AutoCloseable {
     private static final float SAMPLE_RATE = 16_000f;
 
+    /**
+     * True when the Vosk native boundary is carrying UTF-8, so non-ASCII phrases survive it.
+     *
+     * <p>Read by {@link Diagnostics} rather than used to filter phrases. A phrase that cannot be
+     * encoded is REPORTED, never silently dropped - a grammar entry that vanishes with no message
+     * is this mod's worst failure mode, because it presents as a dead microphone.
+     */
+    public static volatile boolean utf8Grammar = false;
+
     static {
+        // ORDER IS THE WHOLE FIX, and it is the opposite of what looks right.
+        //
+        // org.vosk.LibVosk is JNA DIRECT-MAPPED: its own <clinit> calls
+        // Native.register(LibVosk.class, "libvosk") - the plain two-arg form, four times, verified
+        // with javap - which bakes the JVM's default native encoding into every method handle.
+        // On a default Windows JVM that is windows-1252, so every accented character in a grammar
+        // phrase reaches the recogniser mangled and Vosk answers
+        //     WARNING (VoskAPI:UpdateGrammarFst()) Ignoring word missing in vocabulary: 'bart?k'
+        // and drops the phrase.
+        //
+        // Registering UTF-8 BEFORE touching LibVosk does nothing: the clinit has not run yet, and
+        // when it does it overwrites the registration. The trap is that
+        // Native.getStringEncoding(LibVosk.class) still reads "UTF-8" afterwards, so the broken
+        // order self-verifies as working. setLogLevel first forces the clinit; then we re-register.
         LibVosk.setLogLevel(LogLevel.WARNINGS);
+        try {
+            String lib = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")
+                ? "libvosk" : "vosk";
+            // Scoped to this library, not global. Native.getDefaultStringEncoding() is left alone,
+            // so Minecraft's own oshi - the reason both buildscripts pin JNA 5.12.1 - is untouched.
+            com.sun.jna.Native.register(LibVosk.class,
+                com.sun.jna.NativeLibrary.getInstance(lib,
+                    java.util.Map.of(com.sun.jna.Library.OPTION_STRING_ENCODING, "UTF-8")));
+            utf8Grammar = "UTF-8".equalsIgnoreCase(com.sun.jna.Native.getStringEncoding(LibVosk.class));
+        } catch (Throwable t) {
+            utf8Grammar = false;
+            VoiceSpells.LOGGER.warn("Could not force UTF-8 on the Vosk native boundary ({}); "
+                + "phrases containing non-ASCII characters will not reach the recogniser intact",
+                t.toString());
+        }
     }
 
     /** Consumer callback. {@code isFinal} distinguishes a settled utterance result (with a
