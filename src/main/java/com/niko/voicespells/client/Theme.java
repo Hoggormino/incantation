@@ -270,8 +270,45 @@ public final class Theme {
         int w = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
         int h = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight();
         g.fill(0, 0, w, h, C_SCRIM);
-        rule(g, 0, headerY, w);
-        rule(g, 0, footerY, w);
+        chromeRules(g, headerY, footerY, 0, w);
+    }
+
+    /**
+     * The same, with the rules spanning the CONTENT rather than the window.
+     *
+     * <p>A separator exists to band a header, a body and a footer. Drawn edge to edge across a
+     * screen whose content is a narrow centred column, it bands nothing - it just draws two lines
+     * through empty scenery, which is the "floating lines" this chrome was rewritten to stop. It
+     * is also what this file already says it is for: chrome tied to the screen's content and not
+     * to a notional panel.
+     *
+     * <p>Vanilla's own options screens do run their separators edge to edge, but their content is
+     * edge to edge too. The rule that transfers is "the separator matches the content", not "the
+     * separator is 100% wide". A screen whose content really does fill the window passes its own
+     * full width here and gets the vanilla result.
+     */
+    public static void screenChrome(net.minecraft.client.gui.screens.Screen screen, GuiGraphics g,
+                                    int mouseX, int mouseY, float partialTick,
+                                    int headerY, int footerY, int contentX, int contentW) {
+        background(screen, g, mouseX, mouseY, partialTick);
+        int w = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
+        int h = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight();
+        g.fill(0, 0, w, h, C_SCRIM);
+        chromeRules(g, headerY, footerY, contentX, contentW);
+    }
+
+    /**
+     * Both rules, widened a little beyond the content so they read as framing it rather than as
+     * underlining it. Eight pixels is the same overhang vanilla's own container art carries past
+     * its inner well, and it is what stops the rule ending flush with a button edge and looking
+     * like part of the button.
+     */
+    private static void chromeRules(GuiGraphics g, int headerY, int footerY, int x, int w) {
+        int screenW = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
+        int rx = Math.max(0, x - 8);
+        int rw = Math.min(screenW - rx, w + 16);
+        rule(g, rx, headerY, rw);
+        rule(g, rx, footerY, rw);
     }
 
     /** Public form of the header/footer rule, for screens that place their own. */

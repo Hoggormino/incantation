@@ -269,8 +269,18 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private static final int GRID_ROW = 25;
 
     /** Header / footer rule. Delegates so every screen draws the identical line. */
+    /**
+     * A header/footer rule spanning the option grid, not the window.
+     *
+     * <p>Edge to edge it banded nothing: the grid is 310px in the middle of a window that is
+     * usually three times that, so the two rules ran out through empty scenery on both sides
+     * instead of framing anything. Vanilla's options screens do run theirs full width, but their
+     * content is full width too - the rule that transfers is that a separator matches its content.
+     */
     private void separator(GuiGraphics g, int y) {
-        Theme.rule(g, 0, y, width);
+        int gridW = Math.min(GRID_W, panelW - 24);
+        int gridX = (width - gridW) / 2;
+        Theme.rule(g, Math.max(0, gridX - 8), y, Math.min(width, gridW + 16));
     }
 
     /** Rows the current tab's options occupy, two per row.
