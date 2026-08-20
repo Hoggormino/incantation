@@ -171,13 +171,25 @@ public final class VoiceCodexScreen extends Screen {
 
         y += cardH + 6;
 
+        // Row pitch derived from the room that exists, not a fixed 13.
+        //
+        // Eight rows at ROW_H put the last one 217px below the panel top, but the footer rule
+        // sits at panelH - 34, so anything under a 251px panel pushed "Speak to cast" and
+        // "Daily challenge" through the rule and down beside the Back button. That is a 720p
+        // window at GUI Scale 3 - not an edge case - and the two rows it loses are the two a
+        // returning player is most likely to be checking. Compressing to a 9px pitch is worse
+        // typography than dropping them would be, and much better than dropping them.
+        final int ROWS = 8;
+        int rowsBottom = py + panelH - 34 - 4;
+        int rowH = Math.max(9, Math.min(ROW_H, (rowsBottom - y) / ROWS));
+
         // Stat rows
-        line(g, x, y, "Total casts",       String.valueOf(VoiceStats.totalCasts())); y += ROW_H;
-        line(g, x, y, "Best streak",       String.valueOf(VoiceStats.longestStreak())); y += ROW_H;
-        line(g, x, y, "Schools touched",   String.valueOf(VoiceStats.distinctSchoolsCast())); y += ROW_H;
-        line(g, x, y, "Distinct spells",   String.valueOf(VoiceStats.snapshotAll().size())); y += ROW_H;
-        line(g, x, y, "First cast",        VoiceStats.fmtDate(VoiceStats.firstCastMs())); y += ROW_H;
-        line(g, x, y, "Last cast",         VoiceStats.fmtElapsed(VoiceStats.lastCastMs())); y += ROW_H;
+        line(g, x, y, "Total casts",       String.valueOf(VoiceStats.totalCasts())); y += rowH;
+        line(g, x, y, "Best streak",       String.valueOf(VoiceStats.longestStreak())); y += rowH;
+        line(g, x, y, "Schools touched",   String.valueOf(VoiceStats.distinctSchoolsCast())); y += rowH;
+        line(g, x, y, "Distinct spells",   String.valueOf(VoiceStats.snapshotAll().size())); y += rowH;
+        line(g, x, y, "First cast",        VoiceStats.fmtDate(VoiceStats.firstCastMs())); y += rowH;
+        line(g, x, y, "Last cast",         VoiceStats.fmtElapsed(VoiceStats.lastCastMs())); y += rowH;
         double avgMs = VoiceController.averageLatencyMs();
         // "Speak to cast" — measured from first audio of the utterance to dispatch. Median,
         // not mean, so a hesitant cast every now and then doesn't blow the number up.
@@ -188,12 +200,12 @@ public final class VoiceCodexScreen extends Screen {
         // the placeholder says what to do about it.
         line(g, x, y, "Speak to cast (session)",
             avgMs < 0 ? "after 1st cast"
-                      : String.format(java.util.Locale.ROOT, "%.0fms (median)", avgMs)); y += ROW_H;
+                      : String.format(java.util.Locale.ROOT, "%.0fms (median)", avgMs)); y += rowH;
         int streak = VoiceStats.sotdStreak();
         // This counts consecutive days of completing the SPELL-OF-THE-DAY challenge, not days
         // the mod was used — "Daily streak" invited the second reading and then showed "—" to a
         // player casting every day, which looks like a bug rather than an uncompleted challenge.
-        line(g, x, y, "Daily challenge", streak > 0 ? streak + " day(s)" : "not done today"); y += ROW_H;
+        line(g, x, y, "Daily challenge", streak > 0 ? streak + " day(s)" : "not done today"); y += rowH;
 
         // (Right-column heading is drawn inside TopList.renderWidget so it sits below the
         //  accent rule glow instead of overlapping it.)

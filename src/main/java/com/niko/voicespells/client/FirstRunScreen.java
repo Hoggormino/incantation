@@ -389,10 +389,25 @@ public final class FirstRunScreen extends Screen {
         Theme.roundedFrame(g, x, y, w, h, good ? Theme.C_SUCCESS : Theme.C_DIVIDER);
         // Left-edge state bar: neon when good, faint otherwise.
         g.fill(x + 1, y + 1, x + 3, y + h - 1, good ? Theme.F_MATCH : Theme.C_FAINT);
-        g.drawString(font, Component.literal(label),     x + 6, y + 3,
+        // Both strings are fitted to the pill. The value used to be drawn unclipped, and
+        // VoiceController.statusLine() can return "ERROR no Vosk model - see chat", which is
+        // roughly twice a pill wide at any window size - so it painted straight across the
+        // Microphone pill beside it. That happens in exactly the state this screen exists to
+        // diagnose: the player whose model failed cannot read whether their mic is working,
+        // and Next is gated on the meter moving.
+        g.drawString(font, Component.literal(fit(label, w - 12)), x + 6, y + 3,
             Theme.C_MUTED, !Theme.lightSurface());
-        g.drawString(font, Component.literal(value),     x + 6, y + 13,
+        g.drawString(font, Component.literal(fit(value, w - 12)), x + 6, y + 13,
             good ? Theme.C_SUCCESS : Theme.C_TEXT, !Theme.lightSurface());
+    }
+
+    /** Truncate to {@code room} pixels with an ellipsis, the way the spell list and the device
+     *  picker already do. Returns the string unchanged when it fits. */
+    private String fit(String s, int room) {
+        if (room <= 0 || font.width(s) <= room) return s;
+        int ell = font.width("...");
+        if (room <= ell) return "";
+        return font.plainSubstrByWidth(s, room - ell) + "...";
     }
 
     /** Big live audio meter — dim background, neon fill that grows with the smoothed RMS

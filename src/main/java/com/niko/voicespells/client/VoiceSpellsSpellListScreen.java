@@ -151,14 +151,17 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         // the remaining space above the footer. Keeps the footer text from being clipped by
         // the action buttons sitting at the same y-row.
         int buttonsY = height - 28;
-        int footerY  = buttonsY - 14;            // 9px text + gap above the buttons
-        footerRuleY  = buttonsY - 8;
+        // The rule goes ABOVE the status line, not through it. footerRuleY used to be
+        // buttonsY - 8, which lands inside the 9px band the footer text occupies, so the
+        // separator drew a line straight through the middle of its own caption.
+        footerRuleY  = buttonsY - 20;
+        int footerY  = footerRuleY + 6;          // 9px text, 5px clear of the buttons below
         int listX = px;
         int listY = searchY + 18 + Theme.GAP_MD;
         int listW = panelW;
         // Whole rows only: a partial row at the bottom is a row the player can see half of and
         // not click, which is how the last hit-test bug got in.
-        int listH = ((footerY - Theme.GAP_SM) - listY) / ROW_H * ROW_H + 4;
+        int listH = ((footerRuleY - Theme.GAP_SM) - listY) / ROW_H * ROW_H + 4;
         list = new ListWidget(listX, listY, listW, listH);
         addRenderableWidget(list);
 

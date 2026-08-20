@@ -51,7 +51,11 @@ public final class LiveMonitorScreen extends Screen {
 
         // Fills the window, with vanilla's footer button parked at the bottom.
         listX = Math.max(20, width / 2 - 220);
-        listY = 46;
+        // 48, not 46. The header rule at y=32 is three pixels tall (32-34) and the heap/
+        // waveform row hangs 12px above the list, so at 46 that row started at 34 and painted
+        // over the rule it is supposed to sit under - the separator simply vanished behind
+        // the meter whenever anyone spoke.
+        listY = 48;
         listW = Math.min(440, width - listX * 2);
         listH = Math.max(40, height - listY - 56);
 
@@ -85,9 +89,9 @@ public final class LiveMonitorScreen extends Screen {
         long usedMb  = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
         long totalMb = rt.totalMemory() / (1024 * 1024);
         String heap = "heap " + usedMb + "/" + totalMb + "MB";
-        Theme.text(g, font, heap, listX, listY - 12, Theme.C_MUTED);
+        Theme.text(g, font, heap, listX, listY - 11, Theme.C_MUTED);
         int meterX = listX + font.width(heap) + 10;
-        drawWaveform(g, meterX, listY - 13, listX + listW - meterX, 9);
+        drawWaveform(g, meterX, listY - 12, listX + listW - meterX, 9);
 
         g.fill(listX, listY, listX + listW, listY + listH, Theme.C_INSET);
         Theme.insetShadow(g, listX, listY, listW);
