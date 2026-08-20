@@ -171,6 +171,18 @@ public final class VoiceCodexScreen extends Screen {
 
         y += cardH + 6;
 
+        // The stat block gets the same well the card above and the list beside it have.
+        // Unframed, it was the only bare element on a screen with two framed panels, so it read
+        // as text spilled underneath the card rather than as the third panel it is. The well runs
+        // to the same bottom edge as the list on the right, which is what makes the two columns
+        // look like one layout instead of two.
+        int statsTop = y - 4;
+        int statsBottom = py + panelH - 36;
+        g.fill(x, statsTop, x + colW, statsBottom, Theme.C_INSET);
+        Theme.roundedFrame(g, x, statsTop, colW, statsBottom - statsTop, Theme.C_DIVIDER);
+        x += 8;                       // inset the rows inside their new frame
+        y += 2;
+
         // Row pitch derived from the room that exists, not a fixed 13.
         //
         // Eight rows at ROW_H put the last one 217px below the panel top, but the footer rule
@@ -180,7 +192,7 @@ public final class VoiceCodexScreen extends Screen {
         // returning player is most likely to be checking. Compressing to a 9px pitch is worse
         // typography than dropping them would be, and much better than dropping them.
         final int ROWS = 8;
-        int rowsBottom = py + panelH - 34 - 4;
+        int rowsBottom = py + panelH - 36 - 6;
         int rowH = Math.max(9, Math.min(ROW_H, (rowsBottom - y) / ROWS));
 
         // Stat rows
@@ -198,9 +210,13 @@ public final class VoiceCodexScreen extends Screen {
         // even for a player with hundreds of lifetime casts. Showing a bare "—" next to
         // "Total casts 44" reads as a broken counter, so the label says which scope it means and
         // the placeholder says what to do about it.
-        line(g, x, y, "Speak to cast (session)",
+        // "Speak to cast (session)" did not fit beside its own value and was being truncated to
+        // "Speak to cast (ses..." - a label that has to be cut to make room for its value is the
+        // wrong label. The scope moves into the value, which has room for it, and the empty case
+        // still says what to do about it rather than showing a bare dash.
+        line(g, x, y, "Speak to cast",
             avgMs < 0 ? "after 1st cast"
-                      : String.format(java.util.Locale.ROOT, "%.0fms (median)", avgMs)); y += rowH;
+                      : String.format(java.util.Locale.ROOT, "%.0fms this session", avgMs)); y += rowH;
         int streak = VoiceStats.sotdStreak();
         // This counts consecutive days of completing the SPELL-OF-THE-DAY challenge, not days
         // the mod was used — "Daily streak" invited the second reading and then showed "—" to a
@@ -212,7 +228,9 @@ public final class VoiceCodexScreen extends Screen {
     }
 
     private void line(GuiGraphics g, int x, int y, String label, String value) {
-        int colW = panelW / 2 - Theme.PAD - 6;
+        // The rows are drawn inset inside the stats well, so the column they share is narrower
+        // than the well by that inset on both sides.
+        int colW = panelW / 2 - Theme.PAD - 6 - 16;
         int vw = font.width(value);
         // Trim the LABEL to whatever the value leaves, rather than letting the two overlap.
         // "Speak to cast (session)" against "after 1st cast" needs more than the column has, and
