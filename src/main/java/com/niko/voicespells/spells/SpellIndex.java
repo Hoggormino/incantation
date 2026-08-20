@@ -906,16 +906,57 @@ public final class SpellIndex {
     }
 
     /**
+     * What the loaded speech model can and cannot say, for {@code /voicespells vocab}.
+     *
+     * <p>The same classification the startup warning uses, but reported rather than logged: a
+     * player is not going to read a log to find out why one spell never works, and until now that
+     * was the only place the answer existed - when it existed at all.
+     *
+     * @param vocabularyWords how many words the model knows; 0 when no vocabulary could be read
+     * @param rescued         phrases the model cannot say that an alias or respelling covers
+     * @param dead            phrases the model cannot say with no other route to the same spell
+     */
+    public record VocabReport(int vocabularyWords, java.util.List<String> rescued,
+                              java.util.List<String> dead) {}
+
+    public static VocabReport vocabularyReport() {
+        int size = com.niko.voicespells.speech.Lexicon.size();
+        List<String> rescued = new ArrayList<>();
+        List<String> dead    = new ArrayList<>();
+        if (size > 0) {
+            Map<String, ResourceLocation> phrases = STATE.get().phraseToId();
+            for (Map.Entry<String, ResourceLocation> e : phrases.entrySet()) {
+                String phrase = e.getKey();
+                if (sayable(phrase)) continue;
+                String route = sayableRouteFor(phrases, e.getValue(), phrase);
+                if (route != null) rescued.add(phrase + "  ->  " + route);
+                else dead.add(phrase);
+            }
+            java.util.Collections.sort(rescued);
+            java.util.Collections.sort(dead);
+        }
+        return new VocabReport(size, rescued, dead);
+    }
+
+    /** The first sayable alternative phrase for this spell, or {@code null} if there is none. */
+    private static String sayableRouteFor(Map<String, ResourceLocation> phrases,
+                                          ResourceLocation id, String except) {
+        String best = null;
+        for (Map.Entry<String, ResourceLocation> e : phrases.entrySet()) {
+            if (e.getKey().equals(except)) continue;
+            if (!e.getValue().equals(id) || !sayable(e.getKey())) continue;
+            if (best == null || e.getKey().compareTo(best) < 0) best = e.getKey();
+        }
+        return best;
+    }
+
+    /**
      * Whether some OTHER phrase for the same spell is sayable - an alias, a respelling, or a
      * custom phrase. If one is, the spell is castable and the unsayable spelling is harmless.
      */
     private static boolean hasSayableRoute(Map<String, ResourceLocation> phrases,
                                            ResourceLocation id, String except) {
-        for (Map.Entry<String, ResourceLocation> e : phrases.entrySet()) {
-            if (e.getKey().equals(except)) continue;
-            if (e.getValue().equals(id) && sayable(e.getKey())) return true;
-        }
-        return false;
+        return sayableRouteFor(phrases, id, except) != null;
     }
 
     /** Whether every word of a phrase is already in the model's vocabulary. */

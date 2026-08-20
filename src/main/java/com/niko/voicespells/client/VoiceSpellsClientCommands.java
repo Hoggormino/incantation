@@ -107,6 +107,56 @@ public final class VoiceSpellsClientCommands {
             return 1;
         }));
 
+        root.then(Commands.literal("vocab").executes(ctx -> {
+            com.niko.voicespells.spells.SpellIndex.VocabReport r =
+                com.niko.voicespells.spells.SpellIndex.vocabularyReport();
+            if (r.vocabularyWords() == 0) {
+                ctx.getSource().sendSuccess(() -> Component
+                    .literal("No speech-model vocabulary loaded — nothing can be checked.")
+                    .withStyle(ChatFormatting.YELLOW), false);
+                ctx.getSource().sendSuccess(() -> Component
+                    .literal("  The model may still be downloading, or its word list could not be read.")
+                    .withStyle(ChatFormatting.DARK_GRAY), false);
+                return 1;
+            }
+            ctx.getSource().sendSuccess(() -> Component
+                .literal("Speech model vocabulary — " + r.vocabularyWords() + " words")
+                .withStyle(ChatFormatting.GOLD), false);
+
+            if (r.dead().isEmpty()) {
+                ctx.getSource().sendSuccess(() -> Component
+                    .literal("  Every indexed phrase can be spoken. Nothing is stranded.")
+                    .withStyle(ChatFormatting.GREEN), false);
+            } else {
+                ctx.getSource().sendSuccess(() -> Component
+                    .literal("  " + r.dead().size() + " spell(s) CANNOT be cast by voice — the model "
+                           + "has no entry for a word in the name and no alias covers it:")
+                    .withStyle(ChatFormatting.RED), false);
+                for (String d : r.dead()) {
+                    ctx.getSource().sendSuccess(() -> Component.literal("    " + d)
+                        .withStyle(ChatFormatting.RED), false);
+                }
+                ctx.getSource().sendSuccess(() -> Component
+                    .literal("  Add a phrase for each in customPhrases, or use Add alias... on the "
+                           + "spell list.")
+                    .withStyle(ChatFormatting.DARK_GRAY), false);
+            }
+
+            // The rescued list is the interesting half on a healthy install: it is the answer to
+            // "why does saying the spell's actual name not work, when the spell casts fine?"
+            if (!r.rescued().isEmpty()) {
+                ctx.getSource().sendSuccess(() -> Component
+                    .literal("  " + r.rescued().size() + " name(s) the model cannot say, covered by "
+                           + "an alias — say the right-hand form:")
+                    .withStyle(ChatFormatting.AQUA), false);
+                for (String s : r.rescued()) {
+                    ctx.getSource().sendSuccess(() -> Component.literal("    " + s)
+                        .withStyle(ChatFormatting.GRAY), false);
+                }
+            }
+            return 1;
+        }));
+
         root.then(Commands.literal("test").executes(ctx -> {
             boolean on = VoiceController.toggleTranscription();
             if (on) {
