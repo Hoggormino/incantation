@@ -1966,13 +1966,25 @@ public final class VoiceController {
         });
     }
 
-    /** Title-cased display string for a spell: prefer the localised {@code getDisplayName()}
-     *  via {@link SpellInfo} (preserves mod authors' intended casing like "Magic Missile"),
-     *  fall back to a snake_case-to-Title-Case derivation if reflection comes up empty. */
+    /**
+     * The spell's name in the PLAYER'S language.
+     *
+     * <p>Resolved through {@link SpellInfo#displayName()}, which carries Iron's Spells' own
+     * translation key rather than a string somebody already resolved. Resolving here is correct
+     * because this is the client: {@code getString()} uses the language the player has selected,
+     * so a Spanish player sees "Bola de Fuego" - which has been sitting in Iron's Spells' own
+     * lang file the whole time while this showed them "Fireball".
+     *
+     * <p>Falls back to the prettified registry path if the key is missing or reflection fails,
+     * which is also what the mod displayed before.
+     */
     private static String displayNameFor(ResourceLocation spellId) {
         try {
             SpellInfo info = SpellInfo.of(spellId.toString());
-            if (info != null && info.name != null && !info.name.isBlank()) return info.name;
+            if (info != null) {
+                String resolved = info.displayName().getString();
+                if (resolved != null && !resolved.isBlank()) return resolved;
+            }
         } catch (Throwable ignored) { /* fall through */ }
         return SpellCaster.prettyName(spellId);
     }

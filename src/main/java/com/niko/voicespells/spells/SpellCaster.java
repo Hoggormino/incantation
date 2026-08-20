@@ -136,7 +136,7 @@ public final class SpellCaster {
                 for (String b : blocked) {
                     if (b != null && b.equalsIgnoreCase(idStr)) {
                         feedback(player, "voicespells.cast.blocked",
-                            spellId.getPath().replace('_', ' '));
+                            SpellInfo.of(spellId.toString()).displayName());
                         return false;
                     }
                 }
@@ -253,12 +253,12 @@ public final class SpellCaster {
                             isContainer, getContainer, indexForSpell, getAtIndex, getLevel);
                         if (elsewhere != null) {
                             feedback(player, "voicespells.cast.not_in_curios",
-                                spellId.getPath().replace('_', ' '));
+                                SpellInfo.of(spellId.toString()).displayName());
                             return false;
                         }
                     }
                     feedback(player, "voicespells.cast.no_spellbook",
-                        spellId.getPath().replace('_', ' '));
+                        SpellInfo.of(spellId.toString()).displayName());
                     return false;
                 }
                 castStack       = match.stack;
@@ -322,7 +322,7 @@ public final class SpellCaster {
                 String reason = preflightCheck(player, spell, spellId, castLevel, spellClass);
                 if (reason != null) {
                     feedback(player, "voicespells.cast." + reason,
-                        spellId.getPath().replace('_', ' '));
+                        SpellInfo.of(spellId.toString()).displayName());
                     return false;
                 }
             }
@@ -352,7 +352,7 @@ public final class SpellCaster {
             if (!ok) SpellRules.endVoiceCast(player.getUUID());
             if (!ok) {
                 feedback(player, "voicespells.cast.failed",
-                    spellId.getPath().replace('_', ' '));
+                    SpellInfo.of(spellId.toString()).displayName());
             } else {
                 appendCastLog(player, spellId);
                 broadcastNearby(player, spellId);

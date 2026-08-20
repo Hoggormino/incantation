@@ -15,19 +15,44 @@ import java.util.concurrent.ConcurrentHashMap;
  * across versions, so we try a couple of likely method names per field.
  */
 public final class SpellInfo {
+    /** English name, always resolvable. Used as the fallback when the key has no translation. */
     public final String name;
+    /**
+     * Iron's Spells' own translation key for this spell, e.g. {@code spell.irons_spellbooks.fireball},
+     * or empty when it could not be resolved. Prefer {@link #displayName()} over {@link #name}.
+     */
+    public final String nameKey;
     public final String school;
     public final int    manaCost;       // -1 if unknown
     public final int    castTimeTicks;  // -1 if unknown, 0 = instant
 
-    private SpellInfo(String name, String school, int manaCost, int castTimeTicks) {
+    private SpellInfo(String name, String nameKey, String school, int manaCost, int castTimeTicks) {
         this.name = name;
+        this.nameKey = nameKey;
         this.school = school;
         this.manaCost = manaCost;
         this.castTimeTicks = castTimeTicks;
     }
 
-    private static final SpellInfo EMPTY = new SpellInfo("", "", -1, -1);
+    /**
+     * The spell's name as a Component, resolved in whoever renders it.
+     *
+     * <p>This is the whole point of keeping the key instead of a string. A resolved string is
+     * resolved on ONE side in ONE language: on a dedicated server that is always English, so a
+     * Spanish player was told "Fireball" no matter what their game was set to, and Iron's Spells
+     * already had "Bola de Fuego" sitting in its own lang file. Sending the key lets every client
+     * render it in its own language, which is also the only correct answer on a mixed server.
+     *
+     * <p>{@code translatableWithFallback} rather than {@code translatable}: an addon that ships no
+     * lang file for the player's language would otherwise render the raw key on screen. The
+     * fallback is the English name we already derived. Present on both 1.20.1 and 1.21.1.
+     */
+    public net.minecraft.network.chat.Component displayName() {
+        if (nameKey.isEmpty()) return net.minecraft.network.chat.Component.literal(name);
+        return net.minecraft.network.chat.Component.translatableWithFallback(nameKey, name);
+    }
+
+    private static final SpellInfo EMPTY = new SpellInfo("", "", "", -1, -1);
     private static final Map<String, SpellInfo> CACHE = new ConcurrentHashMap<>();
 
     public static SpellInfo of(String spellId) {
@@ -51,31 +76,44 @@ public final class SpellInfo {
             String actualId = (String) spellCls.getMethod("getSpellId").invoke(spell);
             if (!spellId.equals(actualId)) return EMPTY;
 
-            String name   = reflectName(spellCls, spell, spellId);
-            String school = reflectSchool(spellCls, spell);
-            int mana      = reflectInt(spellCls, spell, "getManaCost");
-            int castTicks = reflectInt(spellCls, spell, "getCastTime");
-            return new SpellInfo(name, school, mana, castTicks);
+            String name    = reflectName(spellCls, spell, spellId);
+            String nameKey = reflectNameKey(spellCls, spell);
+            String school  = reflectSchool(spellCls, spell);
+            int mana       = reflectInt(spellCls, spell, "getManaCost");
+            int castTicks  = reflectInt(spellCls, spell, "getCastTime");
+            return new SpellInfo(name, nameKey, school, mana, castTicks);
         } catch (Throwable t) {
             return EMPTY;
         }
     }
 
-    /** Try {@code getSpellName()} (returns Component) and fall back to a prettified id. */
-    private static String reflectName(Class<?> spellCls, Object spell, String spellId) {
+    /**
+     * Iron's Spells' translation key for this spell, or {@code ""}.
+     *
+     * <p>{@code getComponentId()} returns {@code String.format("spell.%s.%s", namespace,
+     * spellName)} - verified by disassembling the method on both the 1.20.1 and 1.21.1 jars -
+     * which is exactly the key its own lang files are written against
+     * ({@code "spell.irons_spellbooks.fireball": "Fireball"}).
+     */
+    private static String reflectNameKey(Class<?> spellCls, Object spell) {
         try {
-            Method m = spellCls.getMethod("getDisplayName");
-            Object o = m.invoke(spell);
-            if (o != null) {
-                try {
-                    Method getStr = o.getClass().getMethod("getString");
-                    Object s = getStr.invoke(o);
-                    if (s instanceof String str && !str.isBlank()) return str;
-                } catch (NoSuchMethodException ignored) { /* not a Component */ }
-                if (o instanceof CharSequence cs && cs.length() > 0) return cs.toString();
-            }
+            Object o = spellCls.getMethod("getComponentId").invoke(spell);
+            if (o instanceof String key && !key.isBlank()) return key;
         } catch (Throwable ignored) {}
-        // Fallback: prettify "ns:fire_ball" → "Fire Ball"
+        return "";
+    }
+
+    /**
+     * The English name, used as the translation fallback.
+     *
+     * <p>This used to try a zero-argument {@code getDisplayName()}, which does not exist - the
+     * real signature is {@code getDisplayName(Player)}. So {@code getMethod} threw
+     * NoSuchMethodException on every call and the prettified path below has always been the only
+     * code that ran. Keeping the path fallback and dropping the dead probe: the display name is
+     * now obtained properly, as a translation key, by {@link #reflectNameKey}.
+     */
+    private static String reflectName(Class<?> spellCls, Object spell, String spellId) {
+        // Prettify "ns:fire_ball" -> "Fire Ball"
         int colon = spellId.indexOf(':');
         String path = colon >= 0 ? spellId.substring(colon + 1) : spellId;
         StringBuilder sb = new StringBuilder(path.length());

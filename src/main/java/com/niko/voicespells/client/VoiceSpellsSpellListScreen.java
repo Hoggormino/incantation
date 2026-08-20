@@ -381,7 +381,10 @@ public final class VoiceSpellsSpellListScreen extends Screen {
          *  on-screen relative to the cursor. */
         void drawSpellTooltip(GuiGraphics g, String spellId, int mouseX, int mouseY) {
             SpellInfo info = SpellInfo.of(spellId);
-            String title = (info.name == null || info.name.isEmpty()) ? prettifyId(spellId) : info.name;
+            // displayName(), not name: the first is Iron's Spells' translation key resolved in
+            // the player's own language, the second is the English fallback.
+            String resolved = info.displayName().getString();
+            String title = (resolved == null || resolved.isEmpty()) ? prettifyId(spellId) : resolved;
 
             List<String> body = new ArrayList<>();
             StringBuilder meta = new StringBuilder();

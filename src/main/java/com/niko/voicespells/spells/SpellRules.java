@@ -307,7 +307,7 @@ public final class SpellRules {
                 : "voicespells.incantation.first";
             player.displayClientMessage(
                 net.minecraft.network.chat.Component.translatable(key,
-                    spellId.substring(spellId.indexOf(':') + 1).replace('_', ' ')), true);
+                    SpellInfo.of(spellId).displayName()), true);
         } catch (Throwable t) {
             VoiceSpells.LOGGER.debug("Could not explain blocked cast: {}", t.toString());
         }
