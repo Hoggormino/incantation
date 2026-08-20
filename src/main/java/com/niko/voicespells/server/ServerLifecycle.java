@@ -63,9 +63,16 @@ public final class ServerLifecycle {
      */
     private static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         try {
-            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer sp
-                    && com.niko.voicespells.network.Network.hasVoiceChannel(sp)) {
-                SpellCaster.noteVoiceClient(sp.getUUID());
+            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                boolean present = com.niko.voicespells.network.Network.hasVoiceChannel(sp);
+                if (present) SpellCaster.noteVoiceClient(sp.getUUID());
+                // Logged at INFO, and deliberately so. This one boolean decides whether the
+                // incantation rule applies to this player at all, and when it is wrong the
+                // symptom is that the rule silently does nothing - which is indistinguishable
+                // from the rule being off. An admin who sets ALWAYS and sees "Incantation not
+                // present" for a player now knows why that player can still click-cast.
+                VoiceSpells.LOGGER.info("{} joined - Incantation {} on their connection",
+                    sp.getName().getString(), present ? "present" : "NOT present");
             }
         } catch (Throwable t) {
             // A failed probe must never keep a player out of the game, and it must never be the

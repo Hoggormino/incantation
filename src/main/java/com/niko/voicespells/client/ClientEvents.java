@@ -619,9 +619,13 @@ public final class ClientEvents {
         private static final long HISTORY_LIFETIME_NANOS = 4_500_000_000L;
         private static final int CHIP_H   = 14;
         private static final int PAD_X    = 5;
-        private static final int DOT_SIZE = 4;
-        private static final int METER_W  = 24;
-        private static final int METER_H  = 4;
+        // The mic indicator is the only thing on screen that says whether the mod is listening,
+        // and at 4px square over a dark-grey track it read as two specks of debris under the
+        // spell name rather than as an instrument. Bigger, and outlined so it survives a light
+        // background - the HUD sits over the world, which can be snow, sky or a lava lake.
+        private static final int DOT_SIZE = 5;
+        private static final int METER_W  = 30;
+        private static final int METER_H  = 6;
 
         /**
          * Mic state dot plus a live level meter.
@@ -675,7 +679,10 @@ public final class ClientEvents {
             int chipY = y + (isBottom ? CHIP_H + 3 : -(CHIP_H + 3));
             int dotX = x + PAD_X;
             int dotY = chipY + (CHIP_H - DOT_SIZE) / 2;
-            g.fill(dotX, dotY, dotX + DOT_SIZE, dotY + DOT_SIZE, dotColor);
+            // Outlined, like every readable element vanilla draws over the world. Text gets a
+            // drop shadow for exactly this reason; a bare fill had nothing, so the idle dot
+            // (0xFF585858) vanished against stone and the hot dot (white) vanished against snow.
+            outlined(g, dotX, dotY, DOT_SIZE, DOT_SIZE, dotColor, alphaOf(dotColor));
 
             // Level meter. Drawn even when idle (as an empty track) so the chip keeps a stable
             // width and does not jitter as speech starts and stops.
@@ -686,10 +693,13 @@ public final class ClientEvents {
             // and became a floating light slab over the world once the container palette made
             // the panel tone light. The HUD must not borrow screen-panel colours: it draws over
             // the world, not on a panel.
-            g.fill(meterX, meterY, meterX + METER_W, meterY + METER_H, 0x90101010);
+            outlined(g, meterX, meterY, METER_W, METER_H, 0xB0101010, 0xB0);
             if (armed && level > 0f) {
-                int filled = Math.max(1, Math.min(METER_W, Math.round(level * METER_W)));
-                g.fill(meterX, meterY, meterX + filled, meterY + METER_H, dotColor);
+                // Inset by the outline so the fill never paints over its own frame, and floored
+                // at 2px so the first audible syllable is visible rather than a hairline.
+                int track  = METER_W - 2;
+                int filled = Math.max(2, Math.min(track, Math.round(level * track)));
+                g.fill(meterX + 1, meterY + 1, meterX + 1 + filled, meterY + METER_H - 1, dotColor);
             }
 
             // Calibration mode replaces casting entirely, so say so rather than letting the chip
@@ -860,12 +870,15 @@ public final class ClientEvents {
             }
             alpha = Math.max(0f, Math.min(1f, alpha));
 
-            String text = VoiceSpellsConfig.cStreamerMode
-                ? "✦ " + obscure(spell)
-                : "✦ " + capitalize(spell);
+            // No decorative glyph. Vanilla never prefixes a HUD line with one - the item-name
+            // popup, the action bar and the subtitle overlay are all just the words, shadowed -
+            // and a diamond in front of the spell name is exactly the invented chrome the screens
+            // had stripped out of them. The school colour already carries the "this was a cast"
+            // signal, and it does it without spending a character.
+            String name = VoiceSpellsConfig.cStreamerMode ? obscure(spell) : capitalize(spell);
             int streak = VoiceController.castStreak();
-            if (streak >= 2) text += "  ×" + streak; // chained casts get a streak badge
-            int textW = font.width(text);
+            String tally = streak >= 2 ? "  ×" + streak : "";
+            int textW = font.width(name) + font.width(tally);
             int toastW = PAD_X + textW + PAD_X;
             // With no persistent chip beneath us, the toast sits right at the anchor.
             int toastX = alignX(anchorX, toastW);
@@ -884,7 +897,15 @@ public final class ClientEvents {
             // cTextToast was "still used as the alpha source", which was not true of this call.
             int color = withAlpha(schoolRgb, alpha * VoiceSpellsConfig.cOpacity);
             int textY = toastY + (CHIP_H - 8) / 2;
-            g.drawString(font, Component.literal(text), toastX + PAD_X, textY, color, true);
+            int nameX = toastX + PAD_X;
+            g.drawString(font, Component.literal(name), nameX, textY, color, true);
+            // The streak is secondary information and used to be drawn in the same weight and
+            // hue as the spell name, so "Fireball x14" read as one four-word phrase. Muted, it
+            // stops competing with the thing you actually want to read.
+            if (!tally.isEmpty()) {
+                g.drawString(font, Component.literal(tally), nameX + font.width(name), textY,
+                    withAlpha(0xFFA0A0A0, alpha * VoiceSpellsConfig.cOpacity), true);
+            }
         }
 
         /** Stack of recent-cast history chips trailing the main cast toast. Index 0 of the
@@ -1022,6 +1043,28 @@ public final class ClientEvents {
             if (((bg >>> 24) & 0xFF) > 0) {
                 g.fill(x + 1, y + 1, x + w - 1, y + h - 1, bg);
             }
+        }
+
+        /**
+         * A filled rectangle with a one-pixel dark surround.
+         *
+         * <p>The HUD draws over the world, so any element that is only a flat fill is legible on
+         * some backgrounds and invisible on others. Vanilla solves this for text with a drop
+         * shadow and for its bars with a textured frame; this is the same idea at the size these
+         * two elements actually are. The surround carries the element's own alpha so it fades
+         * with it instead of outliving it.
+         */
+        private static void outlined(GuiGraphics g, int x, int y, int w, int h, int color, int a) {
+            int edge = (Math.max(0, Math.min(255, a)) << 24);   // black at the element's alpha
+            g.fill(x - 1, y - 1, x + w + 1, y,         edge);   // top
+            g.fill(x - 1, y + h, x + w + 1, y + h + 1, edge);   // bottom
+            g.fill(x - 1, y,     x,         y + h,     edge);   // left
+            g.fill(x + w, y,     x + w + 1, y + h,     edge);   // right
+            g.fill(x, y, x + w, y + h, color);
+        }
+
+        private static int alphaOf(int argb) {
+            return (argb >>> 24) & 0xFF;
         }
 
         private static int withAlpha(int argb, float alpha) {
