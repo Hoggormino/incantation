@@ -52,7 +52,10 @@ public final class ConfigMoreScreen extends Screen {
         int colW   = (gridW - colGap) / 2;
         px = (width - gridW) / 2;
         panelW = gridW;
-        py = 46;
+        // 42, not 46. Four pixels reclaimed for the button grid - see the stride note below.
+        // The title occupies 14..23 and nothing is drawn at headerY any more, so there is no
+        // chrome between them to clear.
+        py = 42;
         headerY = 32;
         footerY = height - 40;
 
@@ -130,7 +133,16 @@ public final class ConfigMoreScreen extends Screen {
         // action spent the last of it. Dividing the real gap among the real rows means the next
         // button added compresses the grid instead of silently landing on the status line.
         int gridRows = (grid.size() + 1) / 2;
-        int gridBottom = footerY - 34;             // leave room for the two hint lines
+        // footerY - 26, not - 34. The two hint lines start at footerY - 24 and are 9px tall,
+        // so 34 reserved ten pixels for nothing.
+        //
+        // Those fourteen pixels are the difference between vanilla-sized buttons and not. Six
+        // rows need a stride of 22 to carry a 20px button; the old arithmetic yielded 20 at the
+        // most common window sizes, so setHeight clamped every button to 18 and the whole screen
+        // read as slightly shrunken next to any real Minecraft menu. Reclaiming the padding
+        // rather than letting the buttons absorb the shortfall keeps them at vanilla's height,
+        // which is the one dimension a player's eye actually calibrates against.
+        int gridBottom = footerY - 26;
         int stride = Math.max(15, Math.min(24, (gridBottom - y) / Math.max(1, gridRows)));
         for (NeonButton btn : grid) {
             btn.setX(slot % 2 == 0 ? colX1 : colX2);
