@@ -51,7 +51,14 @@ public final class SpellRules {
     private static final long PENDING_TTL_NANOS = 10_000_000_000L;
 
     /** A voice cast waiting for its cooldown to be applied. */
-    private record Pending(String spellId, long atNanos) {}
+    /**
+     * @param precastUsed whether the pre-cast gate has already let one cast through on this
+     *                    stamp. The stamp has to outlive the cast for the COOLDOWN hook, which
+     *                    fires when the spell resolves - seconds later for anything with a cast
+     *                    time - but it must authorise exactly ONE cast, or it doubles as a
+     *                    ten-second licence to click-cast the same spell.
+     */
+    private record Pending(String spellId, long atNanos, boolean precastUsed) {}
 
     /** Most recent voice cast per player, until its cooldown is applied or it expires. */
     private static final Map<UUID, Pending> pending = new ConcurrentHashMap<>();
@@ -77,7 +84,7 @@ public final class SpellRules {
      */
     public static void beginVoiceCast(UUID player, String spellId) {
         if (player == null || spellId == null) return;
-        pending.put(player, new Pending(spellId, System.nanoTime()));
+        pending.put(player, new Pending(spellId, System.nanoTime(), false));
         if (learned.computeIfAbsent(player, k -> ConcurrentHashMap.newKeySet()).add(spellId)) {
             dirty = true;
             // Written HERE, not left to logout or shutdown. An unlock is unrecoverable - under
@@ -116,6 +123,26 @@ public final class SpellRules {
             return false;
         }
         return spellId.equals(p.spellId());
+    }
+
+    /**
+     * Claim the stamp's one pre-cast authorisation, or {@code false} if it is spent.
+     *
+     * <p>The stamp used to be a plain "is this player mid-voice-cast" test, which meant it
+     * authorised every cast inside its ten-second life rather than the one it was created for.
+     * Speak Fireball, then click Fireball, and the rule waved it through - so ALWAYS reduced to
+     * "speak once every ten seconds". Reported from a live server as "after i voice cast i can
+     * cast normally", which is exactly what it was.
+     *
+     * <p>The entry is not removed here. It has to survive for the cooldown hook, which fires
+     * when the spell RESOLVES, and that is the whole reason the TTL is ten seconds.
+     */
+    private static boolean claimPrecast(UUID player, String spellId) {
+        if (!hasPendingFor(player, spellId)) return false;
+        Pending p = pending.get(player);
+        if (p == null || p.precastUsed()) return false;
+        pending.put(player, new Pending(p.spellId(), p.atNanos(), true));
+        return true;
     }
 
     /** True if this player has a live, unconsumed voice cast. */
@@ -241,8 +268,10 @@ public final class SpellRules {
      */
     public static boolean blockClickedCast(Player player, String spellId) {
         if (player == null) return false;
-        // Our own cast, always allowed - but only the spell we actually stamped. See hasPendingFor.
-        if (hasPendingFor(player.getUUID(), spellId)) return false;
+        // Our own cast, always allowed - once. claimPrecast, not hasPendingFor: the stamp
+        // authorises the single cast it was created for, and any later cast of the same spell
+        // inside the TTL is judged on its own merits like anything else.
+        if (claimPrecast(player.getUUID(), spellId)) return false;
         VoiceSpellsServerConfig.IncantationRule rule;
         try {
             rule = VoiceSpellsServerConfig.SERVER.incantationOnly.get();
