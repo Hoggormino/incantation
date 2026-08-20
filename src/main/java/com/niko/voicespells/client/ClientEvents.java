@@ -619,13 +619,13 @@ public final class ClientEvents {
         private static final long HISTORY_LIFETIME_NANOS = 4_500_000_000L;
         private static final int CHIP_H   = 14;
         private static final int PAD_X    = 5;
-        // The mic indicator is the only thing on screen that says whether the mod is listening,
-        // and at 4px square over a dark-grey track it read as two specks of debris under the
-        // spell name rather than as an instrument. Bigger, and outlined so it survives a light
-        // background - the HUD sits over the world, which can be snow, sky or a lava lake.
-        private static final int DOT_SIZE = 5;
-        private static final int METER_W  = 30;
-        private static final int METER_H  = 6;
+        /**
+         * The mic indicator's footprint. 32 wide so the two 16px slices meet cleanly in the flat
+         * middle of the sprite, 5 tall because that is the only height any Minecraft bar is:
+         * one cap row, three body rows, one cap row.
+         */
+        private static final int BAR_W = 32;
+        private static final int BAR_H = 5;
 
         /**
          * Mic state dot plus a live level meter.
@@ -647,68 +647,106 @@ public final class ClientEvents {
             boolean armed = VoiceController.isArmed();
             float level = VoiceController.audioLevel();
             boolean hot = armed && level > 0.02f;
-
-            // Fixed greys for the non-accent states — C_FAINT/C_MUTED are PALETTE text tones
-            // and the palette is now light by default, which made these invisible or wrong over
-            // the world. Same rule as the meter track above: fixed colours only.
-            // Three states, three colours.
-            //
-            // Deleting the accent left "armed" and "idle" both on 0xFFA0A0A0, which collapsed the
-            // chip to two states — and this chip is the mod's ONLY listening indicator. With the
-            // default HOLD_ITEM gating, "mic closed" is the normal resting state, so a player
-            // holding their spellbook saw exactly the same grey dot as with it stowed and had no
-            // way to confirm the mic had opened short of talking and hoping. Idle is now clearly
-            // darker than armed.
-            int dotColor = VoiceController.deviceSilent() ? 0xFFFF6166   // red: open but silent
-                         : !armed ? 0xFF585858                          // dark grey: not listening
-                         : hot    ? Theme.withPulsedAlpha(Theme.C_HL & 0x00FFFFFF, 0.75f, 1.0f)
-                                  : Theme.C_HL_DIM;                     // light grey: armed
-
             boolean calibrating = VoiceController.isTranscribing();
-            // A device that is open and delivering pure silence is the one failure the chip could
-            // not previously express: the dot sat in its armed colour and the meter stayed flat,
-            // which looks exactly like "nobody is talking". Saying it on the HUD means the player
-            // finds out while playing rather than after giving up.
             boolean silent = !calibrating && VoiceController.deviceSilent();
+
             String tail = calibrating ? "calibrating" : silent ? "mic silent" : "";
-            int chipW = PAD_X + DOT_SIZE + 4 + METER_W
-                      + (tail.isEmpty() ? 0 : 4 + font.width(tail)) + PAD_X;
+            int chipW = PAD_X + BAR_W + (tail.isEmpty() ? 0 : 4 + font.width(tail)) + PAD_X;
             int x = alignX(anchorX, chipW);
 
             // Sits opposite the toast so the two never overlap as history stacks up.
             int chipY = y + (isBottom ? CHIP_H + 3 : -(CHIP_H + 3));
-            int dotX = x + PAD_X;
-            int dotY = chipY + (CHIP_H - DOT_SIZE) / 2;
-            // Outlined, like every readable element vanilla draws over the world. Text gets a
-            // drop shadow for exactly this reason; a bare fill had nothing, so the idle dot
-            // (0xFF585858) vanished against stone and the hot dot (white) vanished against snow.
-            outlined(g, dotX, dotY, DOT_SIZE, DOT_SIZE, dotColor, alphaOf(dotColor));
+            int barX = x + PAD_X;
+            int barY = chipY + (CHIP_H - BAR_H) / 2;
 
-            // Level meter. Drawn even when idle (as an empty track) so the chip keeps a stable
-            // width and does not jitter as speech starts and stops.
-            int meterX = dotX + DOT_SIZE + 4;
-            int meterY = chipY + (CHIP_H - METER_H) / 2;
-            // Fixed translucent dark, the way vanilla draws HUD tracks (boss bar, experience
-            // background). This used Theme.C_PANEL, which was harmless while panels were dark
-            // and became a floating light slab over the world once the container palette made
-            // the panel tone light. The HUD must not borrow screen-panel colours: it draws over
-            // the world, not on a panel.
-            outlined(g, meterX, meterY, METER_W, METER_H, 0xB0101010, 0xB0);
-            if (armed && level > 0f) {
-                // Inset by the outline so the fill never paints over its own frame, and floored
-                // at 2px so the first audible syllable is visible rather than a hairline.
-                int track  = METER_W - 2;
-                int filled = Math.max(2, Math.min(track, Math.round(level * track)));
-                g.fill(meterX + 1, meterY + 1, meterX + 1 + filled, meterY + METER_H - 1, dotColor);
+            // How much of the bar is lit, in pixels of the 31 the track has inside its right cap.
+            //
+            // Each state gets a distinct AMOUNT as well as a distinct hue, because two states that
+            // differ only in colour collapse the moment anything is wrong - which is exactly what
+            // the old two-grey dot did, and what the screens' own rule forbids.
+            int track = BAR_W - 1;
+            int filled;
+            float r, gr, b;
+            if (silent) {
+                // A device that is open and delivering pure silence. Full width and red: the one
+                // state that must never be mistaken for "nobody is talking".
+                filled = track;  r = 1.00f; gr = 0.38f; b = 0.40f;
+            } else if (calibrating) {
+                filled = Math.max(4, Math.round(level * track));
+                r = 1.00f; gr = 0.70f; b = 0.28f;
+            } else if (!armed) {
+                filled = 0;      r = 1f; gr = 1f; b = 1f;          // idle: an empty trough
+            } else if (hot) {
+                // Speaking. The sprite's own colour, untinted - this is the one moment the
+                // indicator should look like a Minecraft bar filling up, because that is what it is.
+                filled = Math.max(3, Math.min(track, Math.round(level * track)));
+                r = 1f; gr = 1f; b = 1f;
+            } else {
+                // Armed but below the noise gate: a short, dimmed nub. Present, not active.
+                filled = 3;      r = 0.62f; gr = 0.62f; b = 0.62f;
             }
 
-            // Calibration mode replaces casting entirely, so say so rather than letting the chip
-            // imply spells are about to fire.
+            float a = Math.max(0f, Math.min(1f, VoiceSpellsConfig.cOpacity));
+            g.setColor(1f, 1f, 1f, a);
+            bar(g, false, barX, barY, 0);                     // track, always
+            if (filled > 0) {
+                g.setColor(r, gr, b, a);
+                bar(g, true, barX, barY, filled);
+            }
+            g.setColor(1f, 1f, 1f, 1f);                       // never leak tint into later draws
+
             if (!tail.isEmpty()) {
-                g.drawString(font, tail, meterX + METER_W + 4,
+                g.drawString(font, tail, barX + BAR_W + 4,
                     chipY + (CHIP_H - font.lineHeight) / 2 + 1,
                     silent ? 0xFFFF6166 : 0xFFFFFFFF, true);
             }
+        }
+
+        /**
+         * One slice of Minecraft's own experience bar.
+         *
+         * <p>Blitted, not drawn. The mod already made this argument once and acted on it
+         * everywhere else: "an imitation is what it looks like, and no amount of tuning the
+         * numbers fixes a difference in kind" - which is why NeonButton and NeonSlider lost their
+         * hand-painted bodies and became real vanilla widgets. The mic indicator was the last
+         * hand-drawn thing in the mod, a flat rectangle with a hand-computed rim, and it read
+         * exactly the way those controls did before they were replaced.
+         *
+         * <p>It also inherits what a texture gets for free: a resource pack restyles it, and the
+         * shading vanilla bakes into its caps is what keeps a 5px bar readable over snow, stone
+         * and lava without any outline of ours. Vanilla puts an opaque black rim on small ICONS
+         * and on none of its twenty-seven BARS - the previous version had borrowed the wrong
+         * treatment.
+         *
+         * <p>Drawn as two slices so both end caps survive at a width the sprite was never meant
+         * to be: the left 16 columns from u=0, the right 16 from u=166, seam in the flat middle.
+         * The progress overlay is instead cropped from u=0 to {@code filled}, a hard right cut,
+         * which is precisely what {@code Gui.renderExperienceBar} does.
+         */
+        private static void bar(GuiGraphics g, boolean progress, int x, int y, int filled) {
+            if (progress) {
+                if (filled > 0) blitBar(g, true, x, y, 0, Math.min(filled, BAR_W - 1));
+                return;
+            }
+            int half = BAR_W / 2;
+            blitBar(g, false, x,        y, 0,             half);
+            blitBar(g, false, x + half, y, 182 - (BAR_W - half), BAR_W - half);
+        }
+
+        /** The version-split blit. Same sprite, same UVs; only the call shape differs. */
+        private static void blitBar(GuiGraphics g, boolean progress, int x, int y, int u, int w) {
+            if (w <= 0) return;
+//? if forge {
+/*            // 1.20.1 has no sprite atlas for HUD elements: the experience bar lives in
+            // icons.png at v=64 (track) and v=69 (progress), 182x5 - the exact UVs
+            // Gui.renderExperienceBar uses on this version.
+            g.blit(new net.minecraft.resources.ResourceLocation("textures/gui/icons.png"),
+                x, y, u, progress ? 69 : 64, w, BAR_H);
+*///?} else {
+            g.blitSprite(net.minecraft.resources.ResourceLocation.withDefaultNamespace(
+                    progress ? "hud/experience_bar_progress" : "hud/experience_bar_background"),
+                182, BAR_H, u, 0, x, y, w, BAR_H);
+//?}
         }
 
         @Override
@@ -1043,28 +1081,6 @@ public final class ClientEvents {
             if (((bg >>> 24) & 0xFF) > 0) {
                 g.fill(x + 1, y + 1, x + w - 1, y + h - 1, bg);
             }
-        }
-
-        /**
-         * A filled rectangle with a one-pixel dark surround.
-         *
-         * <p>The HUD draws over the world, so any element that is only a flat fill is legible on
-         * some backgrounds and invisible on others. Vanilla solves this for text with a drop
-         * shadow and for its bars with a textured frame; this is the same idea at the size these
-         * two elements actually are. The surround carries the element's own alpha so it fades
-         * with it instead of outliving it.
-         */
-        private static void outlined(GuiGraphics g, int x, int y, int w, int h, int color, int a) {
-            int edge = (Math.max(0, Math.min(255, a)) << 24);   // black at the element's alpha
-            g.fill(x - 1, y - 1, x + w + 1, y,         edge);   // top
-            g.fill(x - 1, y + h, x + w + 1, y + h + 1, edge);   // bottom
-            g.fill(x - 1, y,     x,         y + h,     edge);   // left
-            g.fill(x + w, y,     x + w + 1, y + h,     edge);   // right
-            g.fill(x, y, x + w, y + h, color);
-        }
-
-        private static int alphaOf(int argb) {
-            return (argb >>> 24) & 0xFF;
         }
 
         private static int withAlpha(int argb, float alpha) {
