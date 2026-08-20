@@ -84,10 +84,6 @@ public final class Theme {
     public static final int C_HL     = 0xFFFFFFFF;   // active / speaking
     public static final int C_HL_DIM = 0xFFA0A0A0;   // idle / armed
 
-    /** There is one style and it is the panelless one. Kept as a field because a few
-     *  drawing helpers branch on it; it never changes. */
-    public static final boolean panelless = true;
-
     /**
      * The palette. There is exactly one.
      *
@@ -250,90 +246,8 @@ public final class Theme {
     // and interior tiled from 4px chunks of known-uniform areas of the same texture. Tiling
     // rather than stretching keeps the border crisp at any panel size.
 
-    private static final net.minecraft.resources.ResourceLocation PANEL_TEX =
-//? if forge {
-/*        new net.minecraft.resources.ResourceLocation("minecraft", "textures/gui/container/generic_54.png");
-*///?} else {
-        net.minecraft.resources.ResourceLocation.withDefaultNamespace(
-            "textures/gui/container/generic_54.png");
-//?}
 
-    /** Corner slice size: the 1px outline plus vanilla's 3px bevel. */
-    private static final int SLICE = 4;
-    /** Panel region inside the 256x256 texture. */
-    private static final int SRC_W = 176, SRC_H = 222;
-    /** A patch of flat body colour inside the texture (the title area, above the slots). */
-    private static final int BODY_U = 8, BODY_V = 6;
 
-    /**
-     * A complete Minecraft panel, blitted from the game's own container texture and tinted to
-     * the active palette. This is the one call a screen needs for its main surface — it draws
-     * the body AND the border, so callers must not add a frame of their own on top.
-     */
-    public static void panel(GuiGraphics g, int x, int y, int w, int h) {
-        if (panelless) {
-            // No window. Two rules instead, at the top and bottom of where the panel would have
-            // been: the header/footer separators every vanilla options screen draws. They are
-            // what stops content floating on scenery — the eye reads a header band, a content
-            // band and a footer band. Drawn rather than blitted because the sprites for them
-            // only exist from 1.20.5 onward and this has to match on 1.20.1.
-            //
-            // Full WINDOW width, not the notional panel's: vanilla's rules run edge to edge, and
-            // a rule that stops short of the edges reads as the top of a box that is not there.
-            int screenW = net.minecraft.client.Minecraft.getInstance()
-                .getWindow().getGuiScaledWidth();
-            separatorRule(g, 0, y, screenW);
-            separatorRule(g, 0, y + h, screenW);
-            return;
-        }
-        if (w < SLICE * 2 || h < SLICE * 2) {           // too small to slice; fall back
-            g.fill(x, y, x + w, y + h, C_PANEL);
-            return;
-        }
-        // Nine STRETCHED blits, not tiled 4x4 chunks.
-        //
-        // The tiled version issued one draw call per 4x4 pixel of panel: a 328x190 panel is
-        // about 3,900 tiles, and GuiGraphics flushes per blit, so simply having a settings
-        // screen open cost several thousand immediate-mode draw calls EVERY frame. Stretching is
-        // pixel-identical here because each source region is uniform along the axis it spans —
-        // the border strips do not vary along their length and the interior is flat 0xC6C6C6 —
-        // and GUI blits sample nearest-neighbour. Same pixels, nine calls instead of thousands.
-        float[] t = panelTint();
-        try {
-            // Tint carries the palette. The texture is a light stone panel, so multiplying gives
-            // a darker panel that KEEPS the real border relief, which recolouring a flat fill
-            // cannot.
-            g.setColor(t[0], t[1], t[2], 1.0F);
-
-            int iw = w - SLICE * 2, ih = h - SLICE * 2;     // interior span to fill
-            // Corners
-            g.blit(PANEL_TEX, x,             y,             0,             0,             SLICE, SLICE);
-            g.blit(PANEL_TEX, x + w - SLICE, y,             SRC_W - SLICE, 0,             SLICE, SLICE);
-            g.blit(PANEL_TEX, x,             y + h - SLICE, 0,             SRC_H - SLICE, SLICE, SLICE);
-            g.blit(PANEL_TEX, x + w - SLICE, y + h - SLICE, SRC_W - SLICE, SRC_H - SLICE, SLICE, SLICE);
-            // Edges: one stretched blit each.
-            g.blit(PANEL_TEX, x + SLICE,     y,             iw,    SLICE, SLICE,         0,             SLICE, SLICE, 256, 256);
-            g.blit(PANEL_TEX, x + SLICE,     y + h - SLICE, iw,    SLICE, SLICE,         SRC_H - SLICE, SLICE, SLICE, 256, 256);
-            g.blit(PANEL_TEX, x,             y + SLICE,     SLICE, ih,    0,             SLICE,         SLICE, SLICE, 256, 256);
-            g.blit(PANEL_TEX, x + w - SLICE, y + SLICE,     SLICE, ih,    SRC_W - SLICE, SLICE,         SLICE, SLICE, 256, 256);
-            // Interior: a flat fill in the palette colour, not a tinted blit.
-            //
-            // The body of a vanilla container panel is uniform 0xC6C6C6 — there is no texture
-            // detail to lose — so filling it costs nothing in fidelity and gains the exact
-            // palette colour. It also fixes MIDNIGHT: multiplying by 0x141414/0xC6C6C6 collapsed
-            // the white bevel and the body to within four 8-bit levels of each other, so the
-            // dark palette lost its border relief completely and became a black rectangle. The
-            // border ring keeps a floored tint (below) so the frame stays visible, and the
-            // interior lands on precisely the colour the palette asked for.
-            g.setColor(1.0F, 1.0F, 1.0F, 1.0F);
-            g.fill(x + SLICE, y + SLICE, x + w - SLICE, y + h - SLICE, C_PANEL);
-        } finally {
-            // In a finally so an exception mid-panel cannot leave every later draw on the screen
-            // tinted — a leaked setColor is invisible in the code that caused it and baffling in
-            // the code that suffers it.
-            g.setColor(1.0F, 1.0F, 1.0F, 1.0F);
-        }
-    }
 
     /** One of vanilla's header/footer rules: a dark line with a soft highlight under it. */
     /**
@@ -372,30 +286,6 @@ public final class Theme {
         g.fill(x, y + 2, x + w, y + 3, 0x60000000);
     }
 
-    /**
-     * Multiplier applied to the panel texture for the active palette.
-     *
-     * <p>Derived from C_PANEL against vanilla's own body tone, so a palette only has to state
-     * what colour it wants the panel to be and the texture follows — no per-palette tint table
-     * to keep in sync with the colours right above it.
-     */
-    private static float[] panelTint() {
-        final float VANILLA_BODY = 0xC6 / 255.0F;
-        // Floored, because a multiply is a ratio and ratios stop being visible near black. At
-        // MIDNIGHT's 0x141414 the raw factor is 0.08, which maps vanilla's white bevel to 0x14
-        // and its body to 0x10 — a four-level difference nobody can see, so the frame vanished
-        // and the panel became a plain black rectangle. The floor keeps the border ring readable
-        // as a frame; the interior no longer depends on this at all, it is filled with C_PANEL.
-        final float FLOOR = 0.34F;
-        float r = ((C_PANEL >> 16) & 0xFF) / 255.0F / VANILLA_BODY;
-        float gg = ((C_PANEL >> 8) & 0xFF) / 255.0F / VANILLA_BODY;
-        float b = (C_PANEL & 0xFF) / 255.0F / VANILLA_BODY;
-        return new float[] {
-            Math.min(1.0F, Math.max(FLOOR, r)),
-            Math.min(1.0F, Math.max(FLOOR, gg)),
-            Math.min(1.0F, Math.max(FLOOR, b)),
-        };
-    }
 
     /**
      * Draw the vanilla bevel over an already-filled rect.
@@ -439,20 +329,6 @@ public final class Theme {
         g.fill(x + w - 2, y + 1, x + w - 1, y + h - 1, darken(color, 0.4f));
     }
 
-    /**
-     * Header band — intentionally almost nothing now.
-     *
-     * <p>A container screen has no header band; the title is simply text sitting on the same
-     * panel. Anything more is decoration the game does not have. Kept as a no-op-shaped call
-     * (it still paints the panel tone, so callers that draw it before their title do not get
-     * a hole) so the nine screens did not each need editing.
-     */
-    public static void headerBand(GuiGraphics g, int x, int y, int w, int h) {
-        // Deliberately empty. A container screen has no header band — the title is text on the
-        // panel — and now that the panel is a real texture, painting a flat rectangle over the
-        // top of it would erase exactly the part the player notices. Kept as a call so the ten
-        // screens that invoke it did not each need editing.
-    }
 
     /**
      * Section rule under a header.
@@ -502,12 +378,10 @@ public final class Theme {
      * having to know which one is active.
      */
     public static boolean lightSurface() {
-        // A panelless screen's surface is the blurred world, not C_PANEL — always treat it as
-        // dark so text is drawn white AND shadowed, which is the only way it stays readable over
-        // arbitrary scenery.
-        if (panelless) return false;
-        int r = (C_PANEL >> 16) & 0xFF, gg = (C_PANEL >> 8) & 0xFF, b = C_PANEL & 0xFF;
-        return (r * 299 + gg * 587 + b * 114) / 1000 > 128;
+        // The surface is the blurred world, never a panel, so text is always drawn white AND
+        // shadowed - the only way it stays readable over arbitrary scenery. Kept as a method
+        // because ~40 call sites pass its result to drawString's shadow flag.
+        return false;
     }
 
     /** Draw text with the shadow convention the current surface calls for. */

@@ -404,6 +404,5 @@ public final class ConfigMoreScreen extends Screen {
         // of all of that and was a large part of why the screens felt foreign.
         Theme.screenChrome(this, g, mouseX, mouseY, partial, headerY, footerY);
         super.render(g, mouseX, mouseY, partial);
-        Theme.headerRule(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
     }
 }

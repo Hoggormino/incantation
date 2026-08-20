@@ -219,7 +219,6 @@ public final class FirstRunScreen extends Screen {
 
         super.render(g, mouseX, mouseY, partial);
 
-        Theme.headerRule(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
 
         // "Step 1 of 3" rather than indicator dots — see HelpScreen for why: the game paginates
         // with a written count, not with dots, and a count is legible on every surface.

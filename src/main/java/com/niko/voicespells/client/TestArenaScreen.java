@@ -105,7 +105,6 @@ public final class TestArenaScreen extends Screen {
 
         super.render(g, mouseX, mouseY, partial);
 
-        Theme.headerRule(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
 
         int x = px + Theme.PAD;
         int y = py + Theme.HEADER_H + Theme.GAP_MD;
@@ -218,12 +217,27 @@ public final class TestArenaScreen extends Screen {
                     outcome = "rejected: " + e.matched();
                     color = Theme.F_DEDUP;
                 } else {
-                    String spellId = e.matched().split(" ")[0];
+                    // Keep the qualifier. matched() is either a bare spell id (a real cast) or an
+                    // id followed by a reason in brackets - "(queued)", "(already in flight)",
+                    // "(menu)", "(afk)", "(not equipped)". Splitting on the space threw the reason
+                    // away and drew every one of them exactly like a successful cast, so a single
+                    // spoken word that produced one cast and one suppressed follow-up looked like
+                    // the mod had heard the player twice. It was the arena lying, not the mic.
+                    String raw = e.matched();
+                    int sp = raw.indexOf(' ');
+                    String spellId = sp > 0 ? raw.substring(0, sp) : raw;
+                    String reason  = sp > 0 ? raw.substring(sp + 1) : "";
                     SpellInfo info = SpellInfo.of(spellId);
                     String name = (info.name != null && !info.name.isEmpty())
                         ? info.name : prettyId(spellId);
-                    outcome = "→ " + name;
-                    color = Theme.F_MATCH;
+                    if (reason.isEmpty()) {
+                        outcome = "→ " + name + "  CAST";
+                        color = Theme.F_MATCH;
+                    } else {
+                        // Suppressed: shown, but never in the colour that means "this fired".
+                        outcome = "· " + name + "  " + reason;
+                        color = Theme.F_DEDUP;
+                    }
                 }
                 String tier = e.tier() == ' ' ? " " : String.valueOf(e.tier());
                 String line = String.format(Locale.ROOT, "%2ds [%s] c%.2f  \"%s\"  %s",

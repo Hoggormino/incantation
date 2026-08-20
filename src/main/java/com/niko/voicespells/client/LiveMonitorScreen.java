@@ -116,8 +116,18 @@ public final class LiveMonitorScreen extends Screen {
                 color = Theme.F_DEDUP;
                 outcome = "↻ " + shortId(e.matched().replace(" (deduped)", "")) + " (dup)";
             } else {
-                color = Theme.F_MATCH;
-                outcome = "→ " + shortId(e.matched());
+                // Same distinction the Test Arena makes: a bare id is a cast, an id with a
+                // trailing reason was suppressed. Drawing both with the arrow made one utterance
+                // look like two casts.
+                String raw = e.matched();
+                int sp = raw.indexOf(' ');
+                if (sp > 0) {
+                    color = Theme.F_DEDUP;
+                    outcome = "· " + shortId(raw.substring(0, sp)) + " " + raw.substring(sp + 1);
+                } else {
+                    color = Theme.F_MATCH;
+                    outcome = "→ " + shortId(raw) + " CAST";
+                }
             }
             String line = String.format(Locale.ROOT, "%2ds  c%.2f  [%s]  \"%s\"  %s",
                 ageSec, e.confidence(), e.tier() == ' ' ? " " : String.valueOf(e.tier()),

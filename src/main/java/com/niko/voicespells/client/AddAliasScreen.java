@@ -275,6 +275,5 @@ public final class AddAliasScreen extends Screen {
         Theme.screenChrome(this, g, mouseX, mouseY, partial,
             py + 22, py + panelH - 34);
         super.render(g, mouseX, mouseY, partial);
-        Theme.headerRule(g, px + Theme.PAD, py + Theme.HEADER_H, panelW - Theme.PAD * 2);
     }
 }
