@@ -391,9 +391,17 @@ public final class VoiceSpellsSpellListScreen extends Screen {
             List<String> body = new ArrayList<>();
             StringBuilder meta = new StringBuilder();
             if (!info.school.isEmpty()) meta.append(capitalize(info.school));
-            if (info.manaCost > 0) {
+            // At the level the player's own book inscribes it at, not level 1. Iron's Spells
+            // scales cost with level, so the level-1 figure is simply the wrong number for
+            // anyone with an upgraded spellbook - and it is the number they compare against
+            // their mana bar when a cast does not happen.
+            int lv = OwnedSpells.levelOf(spellId);
+            int cost = SpellInfo.manaCostAt(spellId, lv);
+            if (cost < 0) cost = info.manaCost;
+            if (cost > 0) {
                 if (meta.length() > 0) meta.append("  ·  ");
-                meta.append(info.manaCost).append(" mana");
+                meta.append(cost).append(" mana");
+                if (lv > 1) meta.append(" (lv ").append(lv).append(')');
             }
             if (meta.length() > 0) body.add(meta.toString());
             String ct = info.castTimeFormatted();

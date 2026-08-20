@@ -49,6 +49,23 @@ public final class OwnedSpells {
     private static volatile Method   getSpellId;      // (AbstractSpell) -> String
     private static volatile Class<?> spellSlotClass;  // SpellSlot — getAllSpells() element type on current builds (may be null)
     private static volatile Method   spellSlotGetData;// SpellSlot.spellData()/getSpellData() -> SpellData
+    private static volatile Method   dataGetLevel;    // SpellData.getLevel() -> int
+
+    /**
+     * The level each equipped spell is inscribed at, by spell id.
+     *
+     * <p>The scan already walks every equipped SpellData and threw this away, so the client had
+     * no idea what level it was about to cast at and every mana check hardcoded 1. On an upgraded
+     * spellbook that under-counts the cost, so the client waved a cast through and the server
+     * refused it - the player speaks, nothing happens, and the only clue is a failure toast.
+     */
+    private static volatile java.util.Map<String, Integer> levels = java.util.Map.of();
+
+    /** Inscribed level of an equipped spell, or 1 when it is not equipped or unknown. */
+    public static int levelOf(String spellId) {
+        Integer lv = levels.get(spellId);
+        return lv == null || lv < 1 ? 1 : lv;
+    }
 
     private static volatile boolean curiosAvailable = false;
     private static volatile Method  curiosGetInventory;       // (LivingEntity) -> Optional<handler>
@@ -76,6 +93,11 @@ public final class OwnedSpells {
                 catch (NoSuchMethodException ignored2) {}
             }
             getAtIndex      = containerCls.getMethod("getSpellAtIndex", int.class);
+            try {
+                dataGetLevel = Class.forName(SPELL_DATA).getMethod("getLevel");
+            } catch (Throwable noLevel) {
+                dataGetLevel = null;   // older build: every spell reads as level 1, as before
+            }
             getSpellFromData= dataCls.getMethod("getSpell");
             getSpellId      = spellCls.getMethod("getSpellId");
         } catch (Throwable t) {
@@ -133,6 +155,8 @@ public final class OwnedSpells {
         Player p = Minecraft.getInstance().player;
         if (p == null) return Optional.empty();
         Set<String> out = new HashSet<>();
+        java.util.Map<String, Integer> lv = new java.util.HashMap<>();
+        SINK_LEVELS.set(lv);
         boolean reliable = true;
 
         // Only the actively-held slots — main hand (current hotbar selection) + off hand.
@@ -177,6 +201,11 @@ public final class OwnedSpells {
                 reliable = false;
             }
         }
+        // Publish the levels whether or not the id set is trustworthy. A partial level map only
+        // ever makes a mana estimate MORE accurate than the hardcoded 1 it replaces, and an
+        // unknown spell falls back to 1 exactly as before.
+        levels = java.util.Map.copyOf(lv);
+        SINK_LEVELS.remove();
         // A reflection failure mid-scan means `out` may be missing a spellbook the player
         // actually has equipped — treat the whole result as untrustworthy and fail open
         // rather than risk rejecting a spell they own.
@@ -271,6 +300,11 @@ public final class OwnedSpells {
         }
     }
 
+    /** Level sink for the scan in progress. A field rather than a parameter so the four
+     *  addSpellsFrom / addFromData overloads keep their existing signatures. */
+    private static final ThreadLocal<java.util.Map<String, Integer>> SINK_LEVELS =
+        ThreadLocal.withInitial(java.util.HashMap::new);
+
     private static void addFromData(Object data, Set<String> sink) {
         if (data == null) return;
         try {
@@ -289,7 +323,18 @@ public final class OwnedSpells {
             if (id != null) {
                 String s = id.toString();
                 // Some builds return the bare "none" sentinel — never include that.
-                if (!s.isEmpty() && !"irons_spellbooks:none".equals(s)) sink.add(s);
+                if (!s.isEmpty() && !"irons_spellbooks:none".equals(s)) {
+                    sink.add(s);
+                    if (dataGetLevel != null) {
+                        try {
+                            int level = ((Number) dataGetLevel.invoke(spellData)).intValue();
+                            // Highest wins: the same spell can sit in two equipped books, and the
+                            // server casts from whichever it finds, so the client must not
+                            // under-count.
+                            SINK_LEVELS.get().merge(s, level, Math::max);
+                        } catch (Throwable ignored) {}
+                    }
+                }
             }
         } catch (Throwable ignored) {}
     }

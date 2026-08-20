@@ -899,7 +899,13 @@ public final class VoiceController {
             }
             if (spell != null) {
                 try {
-                    int cost = ((Number) spellCls.getMethod("getManaCost", int.class).invoke(spell, 1)).intValue();
+                    // The level the spell is actually inscribed at, not a hardcoded 1. Using 1
+                    // under-counts the cost on any upgraded spellbook, so this waved the cast
+                    // through, the packet went out, and the server refused it - the player
+                    // speaks, nothing happens, and the only feedback is a failure toast.
+                    int level = OwnedSpells.levelOf(spellId.toString());
+                    int cost = ((Number) spellCls.getMethod("getManaCost", int.class)
+                        .invoke(spell, level)).intValue();
                     if (cost > mana) return false;
                 } catch (Throwable ignored) {}
             }
@@ -969,12 +975,13 @@ public final class VoiceController {
                     } catch (Throwable ignored) { /* no isOnCooldown — proceed */ }
                 }
 
-                // Mana cost > current? Skip. Use level 1 since we don't have the spellbook
-                // level on the client; this slightly under-counts cost for upgraded spellbooks
-                // but the server's preflight will catch a real shortfall.
+                // Mana cost > current? Skip. At the spell's real inscribed level - the scan
+                // already reads it, and level 1 made a loadout pick a spell the player could not
+                // afford, which then failed server-side with no route to the next candidate.
                 try {
                     java.lang.reflect.Method getCost = spellCls.getMethod("getManaCost", int.class);
-                    int cost = ((Number) getCost.invoke(spell, 1)).intValue();
+                    int cost = ((Number) getCost.invoke(spell, OwnedSpells.levelOf(rid.toString())))
+                        .intValue();
                     if (cost > mana) continue;
                 } catch (Throwable ignored) { /* no manaCost — proceed */ }
 

@@ -65,6 +65,28 @@ public final class SpellInfo {
         CACHE.clear();
     }
 
+    /**
+     * Mana cost at a given spell level, or {@code -1} when it cannot be read.
+     *
+     * <p>{@link #manaCost} is the level-1 figure, because that is all the cached record can hold
+     * without knowing which book the player has. Showing it as "the" cost is wrong on any
+     * upgraded spellbook: Iron's Spells scales cost with level, so a level-4 book's Fireball
+     * costs far more than the number the tooltip printed - which is the mismatch that had a
+     * player watching a cast fail at a mana total the UI said was plenty.
+     */
+    public static int manaCostAt(String spellId, int level) {
+        if (spellId == null || spellId.isEmpty() || level < 1) return -1;
+        try {
+            Class<?> registryCls = Class.forName("io.redspace.ironsspellbooks.api.registry.SpellRegistry");
+            Class<?> spellCls    = Class.forName("io.redspace.ironsspellbooks.api.spells.AbstractSpell");
+            Object spell = registryCls.getMethod("getSpell", String.class).invoke(null, spellId);
+            if (spell == null) return -1;
+            Object r = spellCls.getMethod("getManaCost", int.class).invoke(spell, level);
+            if (r instanceof Number n) return n.intValue();
+        } catch (Throwable ignored) {}
+        return -1;
+    }
+
     private static SpellInfo reflect(String spellId) {
         try {
             Class<?> registryCls = Class.forName("io.redspace.ironsspellbooks.api.registry.SpellRegistry");
