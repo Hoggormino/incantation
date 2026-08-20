@@ -1454,12 +1454,6 @@ public final class VoiceController {
         syncCapture();
     }
 
-    /** Legacy single-argument form. Kept so nothing breaks; attributes the hold to one shared
-     *  owner, which is the behaviour that caused the conflict, so prefer the keyed overload. */
-    public static void setDiagnosticCapture(boolean on) {
-        setDiagnosticCapture("legacy", on);
-    }
-
     /** True while the device picker is probing every capture device from its own thread. */
     private static volatile boolean probing = false;
 
@@ -1758,8 +1752,6 @@ public final class VoiceController {
                 && !strippedPhrase.equals(phrase))
             ? java.util.List.of(phrase, strippedPhrase)
             : java.util.List.of(usingTrigger && strippedPhrase.isEmpty() ? phrase : strippedPhrase);
-        final String matchPhrase = matchCandidates.get(0);
-
         // Initial coarse confidence gate: drop anything well below the global floor early so we
         // don't waste lookup work. Per-spell overrides are applied later, after we know which
         // spell the phrase resolved to — they can only RELAX the gate, never tighten it below

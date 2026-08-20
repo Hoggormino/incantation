@@ -337,9 +337,4 @@ public final class VoskSession implements AutoCloseable {
         }
         return out.toString().trim();
     }
-
-    public static Path defaultModelPath() {
-        // <gamedir>/config/voicespells/model
-        return Path.of("config", VoiceSpells.MOD_ID, "model");
-    }
 }
