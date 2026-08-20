@@ -1648,6 +1648,26 @@ public final class VoiceController {
             reportTranscription(phrase, isFinal, confidence);
             return;
         }
+        // Nor while the noise gate is being calibrated.
+        //
+        // Calibration holds the microphone open on purpose and the UI asks the player to "say a
+        // few spell names" - while the grammar is still live and nothing suppressed dispatch, so
+        // the mod invited you to speak and then cast what you said. transcription short-circuits
+        // above, but that is free-dictation mode; this is the separate five-second RMS sample and
+        // it had no guard at all. Only the audio LEVEL matters here, never the words.
+        if (calibrating) return;
+
+        // Nothing recognised while listening is off may cast.
+        //
+        // toggleListening() flushes the recogniser on the way off so the next on-state starts
+        // clean - and a flush makes Vosk EMIT a final result for whatever it had buffered. That
+        // result arrived here and was dispatched like any other, so pressing the toggle in the
+        // middle of a word cast the word. The one control whose entire purpose is to stop casting
+        // was the last thing that could cause one.
+        //
+        // Dropped rather than prevented: the flush still has to happen, and its result still has
+        // to be discarded, so the buffer is genuinely empty when listening resumes.
+        if (!listeningEnabled) return;
         // Utterance-boundary detection: a partial that follows a final is the start of a new
         // utterance. Bump the counter so the dedup check below can tell "still the same thing
         // I was just hearing" from "the player said it again".
