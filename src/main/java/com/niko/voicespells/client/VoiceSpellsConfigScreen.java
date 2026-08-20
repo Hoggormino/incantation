@@ -24,14 +24,6 @@ import net.minecraft.network.chat.Component;
  */
 public final class VoiceSpellsConfigScreen extends Screen {
 
-    // Preferred dimensions — the panel uses these when there's enough room. When the player
-    // turns Minecraft's GUI Scale up far enough that the available screen is smaller, the
-    // runtime {@code panelW} / {@code panelH} fields below get clamped via {@link Theme#fit}
-    // so the panel always fits within the screen instead of being cut off.
-    // 320 wide, sized toward Simple Voice Chat's fixed 248x219 rather than the old 384 slab
-    // that filled most of the screen at GUI-scale auto. Bottom buttons moved to two rows to
-    // make the narrower width workable and to remove the dead vertical gap the single
-    // overcrowded row used to leave above itself.
     // Vanilla's own option-button metrics: 150 wide, 20 tall, 4 apart, which is what every
     // two-column options screen in the game uses.
     private static final int COL_W         = 150;
@@ -42,12 +34,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private static final int GRID_W        = COL_W * 2 + COL_GAP;
 
     private static final int PANEL_W_PREF  = GRID_W + 24;   // grid + a 12px margin each side
-    private static final int PANEL_BASE_H  = 190;   // title + tabs + 3 grid rows + 2 button rows
-    private static final int MONITOR_H     = 156;   // extra height when the monitor is shown
-    /** Smallest monitor worth drawing: the header line, the level meter beside it, and one
-     *  entry. A single most-recent recognition plus a live meter is genuinely useful — refusing
-     *  to draw anything at 854x480, an ordinary window at GUI scale 2, was not. */
-    private static final int MONITOR_MIN   = 34;
     /** Tab height. The SAME as every other control on the screen: the tab row is a row like any
      *  other, and making it 2px shorter than the options meant its gaps could never line up with
      *  theirs no matter what padding was chosen. */
@@ -93,14 +79,11 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private boolean initializedOnce = false;
     private Tab currentTab = Tab.RECOGNITION;
 
-    /** Runtime panel size — clamped to fit within the screen so the layout doesn't get cut off
-     *  when the player picks a large Minecraft GUI Scale. Recomputed every {@link #init()}. */
-    private int panelX, panelY, panelW, panelH;
+    /** Width the grid is allowed to occupy, clamped so a large GUI Scale cannot cut it off.
+     *  The screen fills the window; only this one measurement is still panel-like. */
+    private int panelW;
     /** Y of the header and footer separator lines in panelless mode. */
     private int headerY, footerY;
-    /** Per-row pitch for the current layout — Theme.ROW_H normally, smaller when the panel is
-     *  height-clamped on small windows. Set in init() before the tab builders run. */
-
     /** Theme and palette as they were when the screen opened, plus whether Save ran.
      *
      *  <p>Cycling the theme or palette applies it immediately so the player can see the change
@@ -159,9 +142,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
             lastConfigStamp = configStamp(c);
         }
         panelW = Theme.fit(PANEL_W_PREF, width);
-        panelH = Theme.fit(PANEL_BASE_H, height);
-        panelX = (width  - panelW) / 2;
-        panelY = (height - panelH) / 2;
 
         int gridW = Math.min(GRID_W, panelW - 24);
         int colW  = (gridW - COL_GAP) / 2;
@@ -231,7 +211,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // metric. The old label-plus-control layout needed five and six rows, which is why it
         // had to compress rows on short windows and still collided with the buttons; halving the
         // row count made the whole compression mechanism unnecessary.
-        gridTop = contentY;
         rowPitch = gridPitch(contentY, footerY);
         placed = 0;
 
@@ -294,7 +273,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
         Theme.rule(g, 0, y, width);
     }
 
-    /** Left edge of the monitor block: the grid's own left edge under either layout. */
     /** Rows the current tab's options occupy, two per row.
      *
      *  Counted, not hardcoded. It was fixed at 3 for both tabs, which was right only while the
@@ -353,8 +331,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private int rowPitch = GRID_ROW;
     private int placed;
 
-    /** Y the option grid was actually laid out at; the monitor hangs off it. */
-    private int gridTop;
     /** Tab row geometry, kept so render() can draw the selection rule under it. */
     private int tabRowY, tabRowX, tabRowW, tabColW;
 
@@ -536,13 +512,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
         };
     }
 
-    private void addLabel(String text, int x, int y) {
-        StringWidget w = new StringWidget(x, y, font.width(text) + 2, 11,
-            Component.literal(text), font);
-        w.alignLeft();
-        w.setColor(Theme.C_TEXT);
-        addRenderableWidget(w);
-    }
 
     private String fuzzyLabel(int v) {
         return switch (v) {
@@ -693,13 +662,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
 
 
-    private static String shortId(String id) {
-        int colon = id.indexOf(':');
-        return colon >= 0 ? id.substring(colon + 1) : id;
-    }
-    private static String truncate(String s, int max) {
-        return s.length() <= max ? s : s.substring(0, max - 1) + "…";
-    }
 
     // ---------------------------------------------------------------------------------
     // Tab button.

@@ -21,11 +21,6 @@ import java.util.Locale;
  */
 public final class ConfigMoreScreen extends Screen {
 
-    // Preferred dimensions — clamped at init() time so the panel stays inside the screen
-    // at every Minecraft GUI Scale. Layout math uses the runtime {@code panelW} / {@code panelH}
-    // fields, not these constants.
-    private static final int PANEL_W_PREF = 340;
-    private static final int PANEL_H_PREF = 340;
     private static final String PROFILE_HEADER = "voicespells-profile:1";
 
     private final Screen parent;
@@ -37,7 +32,7 @@ public final class ConfigMoreScreen extends Screen {
     /** Previous frame's calibrating state, so the finish can be detected as an edge. */
     private boolean wasCalibrating = false;
     /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
-    private int px, py, panelW, panelH;
+    private int px, py, panelW;
     /** Header / footer rule positions for the shared chrome. */
     private int headerY, footerY;
 
@@ -48,18 +43,6 @@ public final class ConfigMoreScreen extends Screen {
 
     @Override
     protected void init() {
-        // Height from the CONTENT, not a constant.
-        //
-        // PANEL_H_PREF was 340 while the ten actions need about 210, so every style — panelled or
-        // not — showed a block of empty surface between the last button and the spell-of-the-day
-        // line, with Back marooned at the bottom. A panel should be the size of what is in it;
-        // the constant only survives as a ceiling for the clamp.
-        //
-        // Ten actions in two columns is five rows. Counted here rather than hardcoded so adding
-        // an eleventh grows the panel instead of silently eating the margin, which is exactly
-        // how the last overflow bug happened.
-        final int ACTION_COUNT = 11;
-        int rowsNeeded = (ACTION_COUNT + 1) / 2;
         // Full-window layout, matching the config screen: title at the top, actions under the
         // header rule, Back on the bottom edge. The old centred panel is why this screen drew two
         // rules at apparently random heights — they were the panel's edges, and the panel was
@@ -72,7 +55,6 @@ public final class ConfigMoreScreen extends Screen {
         py = 46;
         headerY = 32;
         footerY = height - 40;
-        panelH = rowsNeeded * 24;
 
         StringWidget titleW = new StringWidget(0, 14, width, 9, title, font);
         titleW.alignCenter();
@@ -80,7 +62,7 @@ public final class ConfigMoreScreen extends Screen {
         addRenderableWidget(titleW);
 
         // Back is registered BEFORE the button stack so it wins hit-testing. Widgets are probed
-        // in insertion order, and when panelH is clamped the stack grows down into the Back
+        // in insertion order, and under the old height-clamped panel the stack grew down into the Back
         // row — "Import Profile from Clipboard" spans nearly the full panel width, so it sat on
         // top of Back and swallowed the click, leaving Escape as the only way out.
         addRenderableWidget(NeonButton.of(width / 2 - 75, height - 28, 150, 20,
@@ -88,7 +70,7 @@ public final class ConfigMoreScreen extends Screen {
 
         // Two-column grid, the Video Settings idiom. The single full-width stack needed
         // roughly 300px of height for nine rows and overflowed the panel even at fullscreen
-        // (panelH clamps to ~254 at 1080p GUI-scale auto) — the Today's-spell label collided
+        // (the old panel clamped to ~254 at 1080p GUI-scale auto) — the Today's-spell label collided
         // with a button and the last rows ran off the bottom. Nine actions in two columns is
         // five rows, which fits every window down to the 854x480 dev size, and it is how
         // vanilla lays out exactly this many options.
@@ -162,7 +144,7 @@ public final class ConfigMoreScreen extends Screen {
         y += gridRows * stride + 4;
 
         // Anchored just above the Back row rather than to the accumulated y. The button stack
-        // adds up to roughly py+262 from a 340px preferred panel, but panelH is clamped to the
+        // added up to roughly py+262 from the old 340px preferred panel, which was clamped to the
         // window, so at GUI Scale 3-4 (including 1080p on Auto) the accumulated y landed below
         // the panel and the status line — the only feedback Import/Export gives — rendered
         // off-screen entirely.

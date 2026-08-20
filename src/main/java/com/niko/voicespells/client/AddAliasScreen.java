@@ -122,7 +122,17 @@ public final class AddAliasScreen extends Screen {
             addRenderableWidget(emptyLabel);
         } else {
             int rowH = 16;
-            int shown = Math.min(MAX_ROWS, aliasRows.size());
+            // Rows are dropped to make room for the overflow line, rather than the overflow line
+            // being clamped on top of the last row. MAX_ROWS is a fixed five but the panel is
+            // clamped to the window, so at 240 logical height the clamp below pulled
+            // "...and N more" up into the fifth alias and into the footer rule - the one line
+            // that tells you entries are hidden was the hardest one to read.
+            int roomBottom = py + panelH - 34 - 4;      // above the footer rule
+            // The 12px for the overflow line is reserved unconditionally: dropping a row can
+            // itself be what creates the overflow, so deciding the reservation from the
+            // untruncated count would leave that case with nowhere to put the line.
+            int fits = Math.max(1, (roomBottom - y - 12) / rowH);
+            int shown = Math.min(Math.min(MAX_ROWS, fits), aliasRows.size());
             for (int i = 0; i < shown; i++) {
                 String entry = aliasRows.get(i);
                 String phrase = entry.substring(0, entry.indexOf('='));
@@ -138,14 +148,13 @@ public final class AddAliasScreen extends Screen {
                     Component.literal("×"), b -> removeAlias(entry)));
                 y += rowH;
             }
-            if (aliasRows.size() > MAX_ROWS) {
-                // Clamped above the button row. MAX_ROWS is a fixed count but the panel is
-                // clamped to the window, so on a short screen the rows consumed the space the
-                // buttons live in and this line landed on top of Cancel / Save.
+            if (aliasRows.size() > shown) {
+                // The row count above already leaves room for this line; the clamp stays as a
+                // floor for the degenerate case where even one row does not fit.
                 int moreY = Math.min(y, py + panelH - 30 - 9);
                 StringWidget moreLabel = new StringWidget(px + Theme.PAD, moreY,
                     panelW - Theme.PAD * 2, 9,
-                    Component.literal("...and " + (aliasRows.size() - MAX_ROWS) + " more (edit toml)"),
+                    Component.literal("...and " + (aliasRows.size() - shown) + " more (edit toml)"),
                     font);
                 moreLabel.alignLeft();
                 moreLabel.setColor(Theme.C_MUTED);

@@ -30,11 +30,6 @@ import java.util.Locale;
  */
 public final class VoiceSpellsSpellListScreen extends Screen {
 
-    // Preferred dimensions — clamped at init() time so the panel stays inside the screen
-    // at every Minecraft GUI Scale. Layout math uses the runtime {@code panelW} / {@code panelH}
-    // fields, not these constants.
-    private static final int PANEL_W_PREF = 444;
-    private static final int PANEL_H_PREF = 308;
     private static final int ROW_H    = 14;
 
     /** Sort modes are fixed — they don't depend on what's indexed. */
@@ -66,7 +61,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
     private String selectedId = "";
 
     /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
-    private int px, py, panelW, panelH;
+    private int px, py, panelW;
     /** Header / footer rule positions for the shared chrome. */
     private int headerRuleY, footerRuleY;
 
@@ -85,7 +80,6 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         px = (width - panelW) / 2;
         py = 46;
         headerRuleY = 32;
-        panelH = height - py - 46;
 
         StringWidget titleW = new StringWidget(0, 14, width, 9, title, font);
         titleW.alignCenter();
@@ -147,7 +141,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         addRenderableWidget(search);
         setInitialFocus(search);
 
-        // Layout bottom-up: buttons at panelH-28, footer just above the buttons, list fills
+        // Layout bottom-up: buttons 28px off the bottom, footer just above them, list fills
         // the remaining space above the footer. Keeps the footer text from being clipped by
         // the action buttons sitting at the same y-row.
         int buttonsY = height - 28;
@@ -498,8 +492,14 @@ public final class VoiceSpellsSpellListScreen extends Screen {
             // multiple of ROW_H, so a strip of empty list sits under the last row — clicking it
             // computed a row one past the visible page and silently selected, and clipboard-
             // copied, a spell the player could not see.
-            int visibleRow = (int) ((my - getY() - 2) / ROW_H);   // matches the +2 draw inset
-            if (visibleRow < 0 || visibleRow >= rowsVisible) return;
+            // Reject the inset BEFORE dividing. A click in the top 2px frame gives a numerator
+            // of -2..-1, and an int cast truncates toward zero, so it produced row 0 and slipped
+            // past the < 0 guard - selecting and clipboard-copying the first row from a band
+            // that never highlights.
+            double rel = my - getY() - 2;                          // matches the +2 draw inset
+            if (rel < 0) return;
+            int visibleRow = (int) (rel / ROW_H);
+            if (visibleRow >= rowsVisible) return;
             int row = visibleRow + clampScroll();
             if (row >= 0 && row < filtered.size()) {
                 String id = filtered.get(row).id();
