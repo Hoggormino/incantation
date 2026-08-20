@@ -312,9 +312,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partial) {
             int x = getX(), y = getY(), w = getWidth(), h = getHeight();
-            g.fill(x, y, x + w, y + h, Theme.C_INSET);
-            Theme.insetShadow(g, x, y, w); // recessed top edge
-            Theme.roundedFrame(g, x, y, w, h, Theme.C_DIVIDER);
+            Theme.well(g, x, y, w, h);
 
             if (filtered.isEmpty()) {
                 g.drawString(font, Component.translatable("voicespells.spelllist.empty"),
@@ -335,17 +333,23 @@ public final class VoiceSpellsSpellListScreen extends Screen {
                 // Very subtle zebra striping — gives the eye a row anchor without chrome.
                 // No zebra striping. It made the list read as bands first and text second, and
                 // hover plus selection already say everything striping was saying.
-                if (sel && !hov) {
-                    // Persistent selection: dim accent so the row stays anchored after click.
-                    g.fill(x + 1, ry, contentRight, ry + ROW_H, 0x22FFFFFF);
-                    g.fill(x + 1, ry, x + 3, ry + ROW_H, 0x80FFFFFF);
-                }
-                if (hov) {
+                // Selection the way vanilla marks a list row: an opaque outline over an opaque
+                // black body, not a translucent wash with an accent bar down the left edge. The
+                // bar was an invented idiom with no counterpart anywhere in the game, and it was
+                // repeated on five screens. AbstractSelectionList.renderSelection does exactly
+                // this - white when the list has focus, dark grey when it does not.
+                if (sel) {
+                    int edge = hov ? 0xFFFFFFFF : 0xFF808080;
+                    g.fill(x + 1, ry - 1, contentRight, ry + ROW_H + 1, 0xFF000000);
+                    g.fill(x + 2, ry,     contentRight - 1, ry + ROW_H, 0xFF000000);
+                    g.fill(x + 1, ry - 1, contentRight, ry,             edge);
+                    g.fill(x + 1, ry + ROW_H, contentRight, ry + ROW_H + 1, edge);
+                    g.fill(x + 1, ry, x + 2, ry + ROW_H, edge);
+                    g.fill(contentRight - 1, ry, contentRight, ry + ROW_H, edge);
+                } else if (hov) {
                     g.fill(x + 1, ry, contentRight, ry + ROW_H, 0x40FFFFFF);
-                    // Neon left-edge marker on hover — confident, sleek.
-                    g.fill(x + 1, ry, x + 3, ry + ROW_H, 0xFFFFFFFF);
-                    hoveredRow = i;
                 }
+                if (hov) hoveredRow = i;
                 String id = r.id();
                 int idW = font.width(id);
                 int textColor = (hov || sel) ? 0xFFFFFFFF : Theme.C_TEXT;

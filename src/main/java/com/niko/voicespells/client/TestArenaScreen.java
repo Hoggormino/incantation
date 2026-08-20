@@ -115,8 +115,6 @@ public final class TestArenaScreen extends Screen {
         int discW = panelW - Theme.PAD * 2;
         int discH = 22;
         g.fill(x, y, x + discW, y + discH, Theme.C_INSET);
-        Theme.roundedFrame(g, x, y, discW, discH, Theme.C_DIVIDER);
-        g.fill(x + 1, y + 1, x + 3, y + discH - 1, 0xFFFFFFFF);
         g.drawString(font, Component.literal("PRACTICE MODE — spells will NOT actually cast."),
             x + 8, y + 3, Theme.C_TEXT, !Theme.lightSurface());
         g.drawString(font, Component.literal("Close this screen to cast for real."),
@@ -130,7 +128,6 @@ public final class TestArenaScreen extends Screen {
             int bannerW = panelW - Theme.PAD * 2;
             int bannerH = 24;
             g.fill(x, y, x + bannerW, y + bannerH, Theme.C_INSET);
-            Theme.roundedFrame(g, x, y, bannerW, bannerH, Theme.C_DANGER);
             g.drawString(font, Component.literal("⚠ Open a world first."), x + 6, y + 4,
                 Theme.C_DANGER, !Theme.lightSurface());
             g.drawString(font,
@@ -143,7 +140,6 @@ public final class TestArenaScreen extends Screen {
         int meterW = panelW - Theme.PAD * 2;
         int meterH = 12;
         g.fill(x, y, x + meterW, y + meterH, Theme.C_INSET);
-        Theme.roundedFrame(g, x, y, meterW, meterH, Theme.C_DIVIDER);
         float level = Math.max(0f, Math.min(1f, VoiceController.audioLevel()));
         int fillW = (int) (level * (meterW - 4));
         if (fillW > 0) {
@@ -189,9 +185,7 @@ public final class TestArenaScreen extends Screen {
             Theme.C_MUTED, !Theme.lightSurface());
         y += 12;
         int listH = panelH - (y - py) - 36;
-        g.fill(x, y, x + meterW, y + listH, Theme.C_INSET);
-        Theme.insetShadow(g, x, y, meterW);
-        Theme.roundedFrame(g, x, y, meterW, listH, Theme.C_DIVIDER);
+        Theme.well(g, x, y, meterW, listH);
 
         List<VoiceController.RecognitionEvent> events = VoiceController.recentEvents();
         if (events.isEmpty()) {

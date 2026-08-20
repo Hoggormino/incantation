@@ -158,9 +158,7 @@ public final class DiagnosticsScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partial) {
             int x = getX(), y = getY(), w = getWidth(), h = getHeight();
-            g.fill(x, y, x + w, y + h, Theme.C_INSET);
-            Theme.insetShadow(g, x, y, w);
-            Theme.roundedFrame(g, x, y, w, h, Theme.C_DIVIDER);
+            Theme.well(g, x, y, w, h);
             int rowsVisible = (h - 8) / ROW_H;
             int start = Math.max(0, Math.min(scroll, Math.max(0, results.size() - rowsVisible)));
             int end = Math.min(results.size(), start + rowsVisible);
@@ -180,7 +178,6 @@ public final class DiagnosticsScreen extends Screen {
             int pillW = font.width(pill);
             g.drawString(font, Component.literal(pill), x, y + 1, statusColor, !Theme.lightSurface());
             // Left-edge accent bar in the status colour for quick scan.
-            g.fill(x - 3, y, x - 1, y + ROW_H - 2, statusColor);
             // Name in main text colour.
             g.drawString(font, Component.literal(r.name()),
                 x + pillW + 6, y + 1, Theme.C_TEXT, !Theme.lightSurface());

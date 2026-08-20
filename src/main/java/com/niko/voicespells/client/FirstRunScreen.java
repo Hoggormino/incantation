@@ -322,8 +322,7 @@ public final class FirstRunScreen extends Screen {
                 Theme.C_MUTED, !Theme.lightSurface());
             feedY += 13;                          // label text + ~4px gap before the box
             feedH -= 13;
-            g.fill(feedX, feedY, feedX + feedW, feedY + feedH, Theme.C_INSET);
-            Theme.roundedFrame(g, feedX, feedY, feedW, feedH, Theme.C_DIVIDER);
+            Theme.well(g, feedX, feedY, feedW, feedH);
 
             List<VoiceController.RecognitionEvent> events = VoiceController.recentEvents();
             if (events.isEmpty()) {
@@ -386,7 +385,6 @@ public final class FirstRunScreen extends Screen {
     private void drawPill(GuiGraphics g, int x, int y, int w, String label, String value, boolean good) {
         int h = 24;
         g.fill(x, y, x + w, y + h, Theme.C_INSET);
-        Theme.roundedFrame(g, x, y, w, h, good ? Theme.C_SUCCESS : Theme.C_DIVIDER);
         // Left-edge state bar: neon when good, faint otherwise.
         g.fill(x + 1, y + 1, x + 3, y + h - 1, good ? Theme.F_MATCH : Theme.C_FAINT);
         // Both strings are fitted to the pill. The value used to be drawn unclipped, and
@@ -414,7 +412,6 @@ public final class FirstRunScreen extends Screen {
      *  level. Same algorithm as the config-screen meter, just bigger. */
     private static void drawAudioMeter(GuiGraphics g, int x, int y, int w, int h) {
         g.fill(x, y, x + w, y + h, Theme.C_INSET);
-        Theme.roundedFrame(g, x, y, w, h, Theme.C_DIVIDER);
         float level = Math.max(0f, Math.min(1f, VoiceController.audioLevel()));
         int fillW = (int) (level * (w - 4));
         if (fillW > 0) {

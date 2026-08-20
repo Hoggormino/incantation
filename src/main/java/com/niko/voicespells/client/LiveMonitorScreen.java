@@ -77,8 +77,7 @@ public final class LiveMonitorScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
-        Theme.background(this, g, mouseX, mouseY, partial);
-        g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
+        Theme.ground(this, g, mouseX, mouseY, partial);
 
         super.render(g, mouseX, mouseY, partial);
 
@@ -91,9 +90,7 @@ public final class LiveMonitorScreen extends Screen {
         int meterX = listX + font.width(heap) + 10;
         drawWaveform(g, meterX, listY - 12, listX + listW - meterX, 9);
 
-        g.fill(listX, listY, listX + listW, listY + listH, Theme.C_INSET);
-        Theme.insetShadow(g, listX, listY, listW);
-        Theme.roundedFrame(g, listX, listY, listW, listH, Theme.C_DIVIDER);
+        Theme.well(g, listX, listY, listW, listH);
 
         List<VoiceController.RecognitionEvent> events = VoiceController.recentEvents();
         if (events.isEmpty()) {
@@ -143,7 +140,6 @@ public final class LiveMonitorScreen extends Screen {
     private static void drawWaveform(GuiGraphics g, int x, int y, int w, int h) {
         if (w < 12) return;
         g.fill(x, y, x + w, y + h, Theme.C_INSET);
-        Theme.roundedFrame(g, x, y, w, h, Theme.C_DIVIDER);
         float[] data = VoiceController.waveformSnapshot();
         int bars = data.length;
         if (bars == 0) return;

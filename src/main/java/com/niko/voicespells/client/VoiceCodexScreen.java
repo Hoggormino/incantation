@@ -118,8 +118,7 @@ public final class VoiceCodexScreen extends Screen {
                                           : "Novice";
 
         int cardH = 70;
-        g.fill(x, y, x + colW, y + cardH, Theme.C_INSET);
-        Theme.roundedFrame(g, x, y, colW, cardH, Theme.C_DIVIDER);
+        Theme.well(g, x, y, colW, cardH);
 
         // Row 1: section header + tier
         g.drawString(font, Component.literal("VOICE CASTING"), x + 8, y + 5,
@@ -144,7 +143,6 @@ public final class VoiceCodexScreen extends Screen {
         int barW = colW - 16;
         int barH = 6;
         g.fill(barX, barY, barX + barW, barY + barH, Theme.C_PANEL);
-        Theme.roundedFrame(g, barX, barY, barW, barH, Theme.C_DIVIDER);
         int fillW = (int) ((double) progress / next * (barW - 2));
         if (fillW > 0) {
             g.fill(barX + 1, barY + 1, barX + 1 + fillW, barY + barH - 1, Theme.C_SUCCESS);
@@ -178,8 +176,7 @@ public final class VoiceCodexScreen extends Screen {
         // look like one layout instead of two.
         int statsTop = y - 4;
         int statsBottom = py + panelH - 36;
-        g.fill(x, statsTop, x + colW, statsBottom, Theme.C_INSET);
-        Theme.roundedFrame(g, x, statsTop, colW, statsBottom - statsTop, Theme.C_DIVIDER);
+        Theme.well(g, x, statsTop, colW, statsBottom - statsTop);
         x += 8;                       // inset the rows inside their new frame
         y += 2;
 
@@ -255,9 +252,7 @@ public final class VoiceCodexScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partial) {
             int x = getX(), y = getY(), w = getWidth(), h = getHeight();
-            g.fill(x, y, x + w, y + h, Theme.C_INSET);
-            Theme.insetShadow(g, x, y, w);
-            Theme.roundedFrame(g, x, y, w, h, Theme.C_DIVIDER);
+            Theme.well(g, x, y, w, h);
 
             // Header drawn inside the widget so it's clear of the accent rule glow up top.
             g.drawString(font, Component.literal("MOST CAST"), x + 4, y + 4,

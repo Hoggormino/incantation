@@ -382,8 +382,7 @@ public final class AudioDevicesScreen extends Screen {
 
 
         // Recessed list well, the way a vanilla container inventory is recessed.
-        g.fill(listX, listY, listX + listW, listY + listH, Theme.C_INSET);
-        Theme.bevel(g, listX, listY, listW, listH, true);
+        Theme.well(g, listX, listY, listW, listH);
 
         List<String> list = showingOutputs ? outputs : inputs;
         String current = showingOutputs ? currentOutput() : currentInput();
@@ -427,7 +426,6 @@ public final class AudioDevicesScreen extends Screen {
                 listX + 4, ry + (ROW - 8) / 2,
                 selected ? Theme.C_HEADING : Theme.C_TEXT);
 
-            if (row > 0) Theme.divider(g, listX + 2, ry, listW - 4);
         }
 
         Theme.scrollbar(g, listX + listW - 4, listY + 1, 3, listH - 2, total, rowsVisible, scroll);
@@ -451,7 +449,6 @@ public final class AudioDevicesScreen extends Screen {
 
         // Track, then fill. Same construction as the HUD meter.
         g.fill(barX, y, barX + barW, y + barH, light ? 0xFF8B8B8B : 0xFF101010);
-        Theme.bevel(g, barX, y, barW, barH, true);
         float level = Math.max(0f, Math.min(1f, VoiceController.audioLevel()));
         int fillW = (int) ((barW - 2) * level);
         if (fillW > 0) {

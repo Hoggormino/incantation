@@ -617,10 +617,9 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // honours the player's Menu Background Blur setting), then our own dim on top so
         // the panel still reads. Painting only a flat scrim, as this did before, opted out
         // of all of that and was a large part of why the screens felt foreign.
-        Theme.background(this, g, mouseX, mouseY, partial);
+        Theme.ground(this, g, mouseX, mouseY, partial);
         // The dim went missing here when the dead panelled branch was deleted — it used to sit
         // inside it — so this was the one screen with no ground under its controls at all.
-        g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
         // The two separator lines vanilla puts under its header and above its footer. They
         // are what stop an options screen from being controls floating on scenery: the eye
         // reads a header band, a content band and a footer band instead of one soup. Drawn

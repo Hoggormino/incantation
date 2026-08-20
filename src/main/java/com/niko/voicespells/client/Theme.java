@@ -110,7 +110,20 @@ public final class Theme {
         C_PANEL    = 0xFF303030;   // only reached by the small-rect fallback in panel()
         C_HEADER_T = 0xFF303030;
         C_HEADER_B = 0xFF303030;
-        C_INSET    = 0x90101010;   // wells are translucent dark over the world
+        // 0x70000000, not 0x90101010. This one number is why the screens read as empty.
+        //
+        // RGB 0x101010 at alpha 0.565 contributes a FIXED +9.0 luma floor, so a well's luma is
+        // 0.5647*ground + 9.035. Solve for the fixed point: at ground luma 16 the well and its
+        // background are identical, and BELOW 16 the well is BRIGHTER than the surface it is
+        // supposed to be cut into. In a cave it was 3 luma from its own ground; at night it
+        // inverted. The only thing the eye could find was the 2px frame drawn around it - which
+        // is exactly what "boxes around nothing" looks like.
+        //
+        // Pure black has no constant term: contrast is always 0.4392 * ground and can never
+        // invert. And it is not a guess - vanilla's own inworld_menu_list_background.png is
+        // 16x16 with all 256 pixels at #70000000. The mod had the right primitive and the wrong
+        // number.
+        C_INSET    = 0x70000000;   // wells are translucent black over the world
         C_INSET_2  = 0x18FFFFFF;   // zebra striping / hover wash
         C_BORDER   = 0xFF000000;
         C_DIVIDER  = 0x40FFFFFF;
@@ -177,13 +190,6 @@ public final class Theme {
         long t = System.currentTimeMillis();
         double phase = (t % (long) periodMs) / (double) periodMs;
         return (float) ((Math.sin(phase * Math.PI * 2) + 1.0) / 2.0);
-    }
-
-    /** Lerp the alpha channel of a base color between two 0..1 alphas. */
-    public static int withPulsedAlpha(int baseRgb, float minAlpha, float maxAlpha) {
-        float a = minAlpha + (maxAlpha - minAlpha) * pulse(2400f);
-        int aByte = Math.max(0, Math.min(255, (int) (a * 255)));
-        return (baseRgb & 0x00FFFFFF) | (aByte << 24);
     }
 
     // -----------------------------------------------------------------------
@@ -281,10 +287,7 @@ public final class Theme {
     public static void screenChrome(net.minecraft.client.gui.screens.Screen screen, GuiGraphics g,
                                     int mouseX, int mouseY, float partialTick,
                                     int headerY, int footerY) {
-        background(screen, g, mouseX, mouseY, partialTick);
-        int w = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
-        int h = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight();
-        g.fill(0, 0, w, h, C_SCRIM);
+        ground(screen, g, mouseX, mouseY, partialTick);
         // No separators - see the note above screenChrome.
     }
 
@@ -305,73 +308,13 @@ public final class Theme {
     public static void screenChrome(net.minecraft.client.gui.screens.Screen screen, GuiGraphics g,
                                     int mouseX, int mouseY, float partialTick,
                                     int headerY, int footerY, int contentX, int contentW) {
-        background(screen, g, mouseX, mouseY, partialTick);
-        int w = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
-        int h = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight();
-        g.fill(0, 0, w, h, C_SCRIM);
+        ground(screen, g, mouseX, mouseY, partialTick);
         // No separators; headerY/footerY remain as LAYOUT anchors for the caller.
     }
 
 
 
 
-
-    /**
-     * Draw the vanilla bevel over an already-filled rect.
-     *
-     * @param sunken {@code true} inverts the light so the surface reads as recessed — vanilla
-     *               uses this for text fields, list backgrounds and slots.
-     */
-    public static void bevel(GuiGraphics g, int x, int y, int w, int h, boolean sunken) {
-        // Vanilla container chrome: a 4px light border with a white inner highlight on the top
-        // and left and a mid-grey on the bottom and right, seated on black. This is the exact
-        // construction of a chest GUI's edge, and it is why those screens read as a physical
-        // panel rather than a coloured box.
-        int hi = sunken ? darken(C_PANEL, 0.40f) : lighten(C_PANEL, 0.60f);
-        int lo = sunken ? lighten(C_PANEL, 0.45f) : darken(C_PANEL, 0.32f);
-        int outline = 0xFF000000;
-        g.fill(x, y, x + w, y + 1, outline);
-        g.fill(x, y + h - 1, x + w, y + h, outline);
-        g.fill(x, y, x + 1, y + h, outline);
-        g.fill(x + w - 1, y, x + w, y + h, outline);
-        g.fill(x + 1, y + 1, x + w - 1, y + 3, hi);
-        g.fill(x + 1, y + 1, x + 3, y + h - 1, hi);
-        g.fill(x + 1, y + h - 3, x + w - 1, y + h - 1, lo);
-        g.fill(x + w - 3, y + 1, x + w - 1, y + h - 1, lo);
-    }
-
-    /**
-     * Frame helper kept at its original name and signature so every screen picks up the new
-     * look for free — it is called ~28 times across the UI. It used to draw a 2px-notched
-     * "rounded" outline in a single flat colour, which is a web idiom; Minecraft has no
-     * rounded corners anywhere in its GUI. Now it draws the vanilla bevel instead, tinted
-     * toward the requested colour so callers that pass an accent still get their emphasis.
-     */
-    public static void roundedFrame(GuiGraphics g, int x, int y, int w, int h, int color) {
-        g.fill(x, y, x + w, y + 1, 0xFF000000);
-        g.fill(x, y + h - 1, x + w, y + h, 0xFF000000);
-        g.fill(x, y, x + 1, y + h, 0xFF000000);
-        g.fill(x + w - 1, y, x + w, y + h, 0xFF000000);
-        g.fill(x + 1, y + 1, x + w - 1, y + 2, lighten(color, 0.25f));
-        g.fill(x + 1, y + 1, x + 2, y + h - 1, lighten(color, 0.25f));
-        g.fill(x + 1, y + h - 2, x + w - 1, y + h - 1, darken(color, 0.4f));
-        g.fill(x + w - 2, y + 1, x + w - 1, y + h - 1, darken(color, 0.4f));
-    }
-
-
-    /**
-     * Section rule under a header.
-     *
-     * <p>This was a seven-layer pulsing neon halo — the single most un-Minecraft thing in the
-     * mod, since nothing in vanilla glows or animates in a menu. It is now a 2px seated rule
-     * in the accent colour: a light line over a dark one, the same construction vanilla uses
-     * to separate the header from the body of a container screen. The accent still carries the
-     * player's chosen theme, so the personality survives without the neon.
-     */
-    /** Section rule under a header. Neutral now — there is no accent to carry. */
-    public static void headerRule(GuiGraphics g, int x, int y, int w) {
-        g.fill(x, y, x + w, y + 1, C_DIVIDER);
-    }
 
     /**
      * Paint the screen backdrop the way vanilla does, then dim behind the panel.
@@ -393,6 +336,61 @@ public final class Theme {
 /*        screen.renderBackground(g);
 *///?} else {
         screen.renderBackground(g, mouseX, mouseY, partialTick);
+//?}
+    }
+
+    /**
+     * Vanilla's backdrop plus the mod's dim - and the ONE place that dim is version-split.
+     *
+     * <p>On 1.21.1 the pair is correct and deliberate: {@code renderBackground} paints the
+     * blurred world, and {@code C_SCRIM} is a little lighter than the ~0xC0101010 vanilla itself
+     * uses, which is the value the author tuned on that loader.
+     *
+     * <p>On 1.20.1 it is double-counting. That version's {@code Screen.renderBackground} in a
+     * level IS {@code fillGradient(0xC0101010, 0xD0101010)} - literally the constant the 1.21.1
+     * comment cites as its reference - so filling the scrim again dimmed the world twice and made
+     * Forge players 1.8x darker than NeoForge players from identical code. Ground luma at a
+     * mid-grey world: 27.1 against 43.7.
+     *
+     * <p>1.20.1 also has no blur of any kind, so it now shows more of a SHARP world where 1.21.1
+     * shows a soft one. That is where every vanilla 1.20.1 options screen already sits, because
+     * on that loader this is now exactly vanilla's own backdrop and nothing else.
+     */
+    public static void ground(net.minecraft.client.gui.screens.Screen screen, GuiGraphics g,
+                              int mouseX, int mouseY, float partialTick) {
+        background(screen, g, mouseX, mouseY, partialTick);
+//? if forge {
+/*        // Deliberately nothing. See above: renderBackground has already dimmed it.
+*///?} else {
+        int w = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
+        int h = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight();
+        g.fill(0, 0, w, h, C_SCRIM);
+//?}
+    }
+
+    /**
+     * A recessed list surface, the way vanilla draws one.
+     *
+     * <p>Vanilla ships this as a 16x16 PNG whose 256 pixels are all {@code #70000000} - a flat
+     * translucent black, shipped as a texture rather than a constant precisely so a resource pack
+     * can restyle it. The 1.20.1 fill is therefore pixel-identical to the blit; the blit exists
+     * on 1.21.1 only so a GUI pack reaches it, which is the same argument that turned this mod's
+     * hand-painted buttons into real vanilla widgets.
+     *
+     * <p>1.20.1 ships no translucent GUI texture at all - its list ground is the OPAQUE dirt of
+     * options_background.png, which over an in-world screen is worse than the fill at night.
+     */
+    public static void well(GuiGraphics g, int x, int y, int w, int h) {
+//? if forge {
+/*        g.fill(x, y, x + w, y + h, C_INSET);
+*///?} else {
+        com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+        g.blit(net.minecraft.resources.ResourceLocation.withDefaultNamespace(
+                net.minecraft.client.Minecraft.getInstance().level == null
+                    ? "textures/gui/menu_list_background.png"
+                    : "textures/gui/inworld_menu_list_background.png"),
+            x, y, 0.0F, 0.0F, w, h, 32, 32);
+        com.mojang.blaze3d.systems.RenderSystem.disableBlend();
 //?}
     }
 
@@ -423,17 +421,6 @@ public final class Theme {
     public static void title(GuiGraphics g, net.minecraft.client.gui.Font font, String s,
                              int cx, int y, int color) {
         g.drawCenteredString(font, s, cx, y, color);
-    }
-
-    /** Inset shadow — 1px darker line at the top of a recessed surface so it reads as
-     *  "below" the panel. */
-    public static void insetShadow(GuiGraphics g, int x, int y, int w) {
-        g.fill(x, y, x + w, y + 1, C_SHADOW);
-    }
-
-    /** Thin horizontal divider, low contrast. */
-    public static void divider(GuiGraphics g, int x, int y, int w) {
-        g.fill(x, y, x + w, y + 1, C_DIVIDER);
     }
 
     /** Thin neon scrollbar — track + thumb. The thumb gets the soft accent so the eye finds it. */
