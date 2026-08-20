@@ -68,6 +68,22 @@ public final class VoiceController {
      *  keep the gate "open" for a short window after speech ends so mid-word dips don't kill
      *  the utterance. */
     private static volatile long lastLoudFrameNanos = 0L;
+
+    /**
+     * When the player actually started speaking - the moment audio first crossed the noise gate.
+     *
+     * <p>This is what "speak to cast" is supposed to measure, and it was being measured from the
+     * first RECOGNITION EVENT instead. Vosk buffers, so its first partial arrives well after
+     * speech begins; and when a cast matches on the first event of an utterance - a short phrase
+     * with no preceding partial, which is the common case in grammar mode - the clock started and
+     * stopped on the same call and the Codex read "0ms". A zero that is obviously wrong is worse
+     * than no number, because it makes the whole panel look broken.
+     *
+     * <p>Cleared when the gate closes, so each utterance is timed from its own beginning. Two
+     * casts inside one continuous breath both measure from that breath, which is the honest
+     * answer: that is when the player started speaking.
+     */
+    private static volatile long speechStartNanos = 0L;
     /** How long the noise gate stays open after the last loud frame. Generous enough to span
      *  phoneme transitions in slow speech without re-opening for stray noise. */
     private static final long NOISE_GATE_STICKY_NANOS = 450_000_000L; // 450ms
@@ -689,7 +705,14 @@ public final class VoiceController {
             return;
         }
         boolean loud = rms >= VoiceSpellsConfig.cNoiseGateRms;
-        if (loud) lastLoudFrameNanos = now;
+        if (loud) {
+            // Closed -> open is the moment speech begins. Stamp it before updating the sticky
+            // timestamp, or the transition can never be detected.
+            boolean wasClosed = lastLoudFrameNanos == 0L
+                || (now - lastLoudFrameNanos) > NOISE_GATE_STICKY_NANOS;
+            if (wasClosed) speechStartNanos = now;
+            lastLoudFrameNanos = now;
+        }
         boolean gateOpen = lastLoudFrameNanos != 0L
             && (now - lastLoudFrameNanos) <= NOISE_GATE_STICKY_NANOS;
 
@@ -703,6 +726,7 @@ public final class VoiceController {
         // thread free to keep reading the device.
         if (gateWasOpen) {
             gateWasOpen = false;
+            speechStartNanos = 0L;      // next utterance times from its own gate-open
             Thread t = new Thread(() -> { s.flush(); s.reset(); }, "VoiceSpells-Flush");
             t.setDaemon(true);
             t.start();
@@ -1948,9 +1972,14 @@ public final class VoiceController {
         lastCastSchool  = SpellInfo.of(spellKey).school;
         bumpStreak(now);
         VoiceStats.recordCast(spellKey, currentStreak());
-        // Record mic-heard → dispatched latency for the codex metric.
-        if (utteranceFirstHeardNanos > 0L) {
-            recordLatencyNanos(now - utteranceFirstHeardNanos);
+        // Speak-to-cast latency for the Codex. Measured from the gate opening, not from the
+        // first recognition event: Vosk buffers, so its first partial lands well after speech
+        // began, and a cast that matches on the first event of an utterance measured itself as
+        // zero. Falls back to the old anchor if the gate stamp is missing - which happens when
+        // capture is bypassed, e.g. a quick-recast.
+        long from = speechStartNanos > 0L ? speechStartNanos : utteranceFirstHeardNanos;
+        if (from > 0L && now > from) {
+            recordLatencyNanos(now - from);
         }
         synchronized (HISTORY) {
             HISTORY.addFirst(new HistoryEntry(lastCastDisplay, now));
