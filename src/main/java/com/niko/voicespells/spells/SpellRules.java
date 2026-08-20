@@ -79,13 +79,43 @@ public final class SpellRules {
         if (player == null || spellId == null) return;
         pending.put(player, new Pending(spellId, System.nanoTime()));
         if (learned.computeIfAbsent(player, k -> ConcurrentHashMap.newKeySet()).add(spellId)) {
-            dirty = true;      // a spell was learned for the first time; it must survive a restart
+            dirty = true;
+            // Written HERE, not left to logout or shutdown. An unlock is unrecoverable - under
+            // FIRST_CAST the player has to speak the spell again to get it back - and the two
+            // existing write points only run on a CLEAN exit. A host panel's nightly force-restart,
+            // an OOM, or a power cut takes back everything every online player unlocked since the
+            // last logout. add() returns true at most once per player per spell for the life of
+            // the world, so this write is rare enough to be free.
+            saveStore();
         }
     }
 
     /** Drop any pending entry - used on the failure path and on disconnect. */
     public static void endVoiceCast(UUID player) {
-        if (player != null) pending.remove(player);
+        if (player != null) {
+            pending.remove(player);
+            lastExplained.remove(player);
+        }
+    }
+
+    /**
+     * True if this player has a live, unconsumed voice cast OF THIS SPELL.
+     *
+     * <p>The spell id was always recorded and never read, so the permission the stamp grants was
+     * blind to which spell it was granted for: speak one cheap spell and every clicked cast was
+     * permitted until the stamp aged out. Ten seconds is a long time in a fight, and it is worse
+     * for a recast spell, where Iron's Spells skips the cooldown entirely so nothing consumes the
+     * stamp early and it always lives its full term.
+     */
+    private static boolean hasPendingFor(UUID player, String spellId) {
+        if (player == null || spellId == null) return false;
+        Pending p = pending.get(player);
+        if (p == null) return false;
+        if (System.nanoTime() - p.atNanos() > PENDING_TTL_NANOS) {
+            pending.remove(player);
+            return false;
+        }
+        return spellId.equals(p.spellId());
     }
 
     /** True if this player has a live, unconsumed voice cast. */
@@ -161,6 +191,7 @@ public final class SpellRules {
     public static void forgetAll() {
         saveStore();          // do not drop learned spells on the floor at shutdown
         pending.clear();
+        lastExplained.clear();
         learned.clear();
         storeFile = null;
     }
@@ -210,7 +241,8 @@ public final class SpellRules {
      */
     public static boolean blockClickedCast(Player player, String spellId) {
         if (player == null) return false;
-        if (isVoiceCasting(player.getUUID())) return false;      // our own cast, always allowed
+        // Our own cast, always allowed - but only the spell we actually stamped. See hasPendingFor.
+        if (hasPendingFor(player.getUUID(), spellId)) return false;
         VoiceSpellsServerConfig.IncantationRule rule;
         try {
             rule = VoiceSpellsServerConfig.SERVER.incantationOnly.get();
@@ -218,7 +250,7 @@ public final class SpellRules {
             return false;
         }
         // Never lock out someone who physically cannot comply.
-        if (!canSpeak(player.getUUID())) return false;
+        if (!canSpeak(player)) return false;
         return switch (rule) {
             case OFF        -> false;
             case ALWAYS     -> true;
@@ -231,17 +263,43 @@ public final class SpellRules {
      *
      * <p>A player without the mod client-side can never speak a spell, so under ALWAYS they would
      * be permanently unable to cast anything, with no way to find out why beyond a message that
-     * their client may not even have the translation for. The mod knows who has it: the client
-     * announces itself, and {@code SpellCaster} records those players. Anyone unknown is exempt
-     * from the rule rather than locked out of the game.
+     * their client may not even have the translation for. Anyone without the mod is therefore
+     * exempt rather than locked out.
+     *
+     * <p>The question is answered at LOGIN, by asking whether the connection negotiated the mod's
+     * network channel. It used to be inferred from "the server has received a cast packet from
+     * this player at some point since it booted", which was wrong in both directions and made the
+     * whole rule opt-in by the player it constrains: someone who never spoke was never recorded,
+     * so ALWAYS never touched them, and speaking once was what armed the lock on yourself. The
+     * set was also never persisted, so every restart un-constrained everybody, and it was sticky
+     * within a run, so a player who removed the mod or lost their microphone kept the flag and
+     * could not cast at all.
      */
-    public static boolean canSpeak(java.util.UUID player) {
-        return player != null && com.niko.voicespells.spells.SpellCaster.hasVoiceClient(player);
+    public static boolean canSpeak(Player player) {
+        if (player == null) return false;
+        // Not on the voice allowlist means they are forbidden to speak, so the rule cannot
+        // require it of them - that combination locked a player out of magic entirely.
+        if (!com.niko.voicespells.spells.SpellCaster.voiceAllowedFor(player)) return false;
+        return com.niko.voicespells.spells.SpellCaster.hasVoiceClient(player.getUUID());
     }
+
+    /**
+     * How often a blocked player may be told why. Iron's Spells posts a pre-cast event for every
+     * attempt, and a held right-click attempts several times a second, so an unthrottled message
+     * is a strobing action bar and a screen-reader backlog. Two seconds sits inside vanilla's own
+     * three-second overlay lifetime, so the text stays continuously visible without being redrawn.
+     */
+    private static final long EXPLAIN_COOLDOWN_NANOS = 2_000_000_000L;
+    private static final Map<UUID, Long> lastExplained = new ConcurrentHashMap<>();
 
     /** Told to the player when a cast is refused, so the rule is never silent. */
     public static void explainBlocked(Player player, String spellId) {
         try {
+            UUID id = player.getUUID();
+            long now = System.nanoTime();
+            Long prev = lastExplained.get(id);
+            if (prev != null && now - prev < EXPLAIN_COOLDOWN_NANOS) return;
+            lastExplained.put(id, now);
             VoiceSpellsServerConfig.IncantationRule rule =
                 VoiceSpellsServerConfig.SERVER.incantationOnly.get();
             String key = rule == VoiceSpellsServerConfig.IncantationRule.ALWAYS

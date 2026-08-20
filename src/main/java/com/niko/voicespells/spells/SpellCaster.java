@@ -77,6 +77,32 @@ public final class SpellCaster {
         }
     }
 
+    /**
+     * Whether {@code voiceAllowedPlayers} permits this player to voice-cast at all.
+     *
+     * <p>Exposed because the incantation rule has to know. A host who sets an allowlist AND
+     * {@code incantationOnly = ALWAYS} was otherwise handing everyone off the list a mod that
+     * cannot cast: voice refused by the allowlist, clicking refused by the incantation rule, and
+     * no combination of player action able to resolve it. Somebody who is not allowed to speak
+     * cannot be required to speak.
+     */
+    public static boolean voiceAllowedFor(net.minecraft.world.entity.player.Player player) {
+        try {
+            java.util.List<? extends String> allowed =
+                com.niko.voicespells.VoiceSpellsServerConfig.SERVER.voiceAllowedPlayers.get();
+            if (allowed == null || allowed.isEmpty()) return true;   // empty means everyone
+            String name = player.getName().getString();
+            String uuid = player.getUUID().toString();
+            for (String token : allowed) {
+                if (token == null) continue;
+                if (token.equalsIgnoreCase(name) || token.equalsIgnoreCase(uuid)) return true;
+            }
+            return false;
+        } catch (Throwable t) {
+            return true;   // a config read that fails must never restrict anybody
+        }
+    }
+
     public static boolean cast(ServerPlayer player, ResourceLocation spellId,
                                 float volumeScale, int totalCasts, int streak) {
         // Per-player whitelist gate — empty list = everyone allowed; otherwise must match the
@@ -267,18 +293,27 @@ public final class SpellCaster {
                 castSource      = src;
                 triggerCooldown = true;
 
-                // Voice level bonus, applied HERE because this is the number Iron's Spells will
-                // actually cast with. The first implementation tried ModifySpellLevelEvent, which
-                // never fires on this path - the level is already fixed by the time
-                // attemptInitiateCast is called - so the option silently did nothing.
-                //
-                // Allowed to exceed the spellbook's inscribed level on purpose: Iron's Spells
-                // itself lets getLevelFor exceed it through Curios, and a server that turns this
-                // on is asking for spoken casts to be stronger than clicked ones. Clamped only
-                // against absurd values.
-                int levelBonus = SpellRules.configuredLevelBonus();
-                if (levelBonus > 0) castLevel = Math.min(castLevel + levelBonus, 10);
             }
+
+            // Voice level bonus, applied HERE because this is the number Iron's Spells will
+            // actually cast with. The first implementation tried ModifySpellLevelEvent, which
+            // never fires on this path - the level is already fixed by the time
+            // attemptInitiateCast is called - so the option silently did nothing.
+            //
+            // Outside the spellbook branch on purpose. It used to sit inside it, which meant that
+            // under castMode=FREE - the mode an event server reaches for, because it needs no
+            // spellbook - castLevel stayed at the hardcoded 1 and voiceLevelBonus did nothing at
+            // all. That is the one mode where the bonus is the ONLY thing distinguishing a spoken
+            // cast, since FREE also passes triggerCooldown=false and so voiceCooldownPercent has
+            // no cooldown to scale.
+            //
+            // Allowed to exceed the spellbook's inscribed level on purpose: Iron's Spells itself
+            // lets getLevelFor exceed it through Curios, and a server that turns this on is asking
+            // for spoken casts to be stronger than clicked ones. Clamped only against absurd
+            // values. Applied BEFORE the preflight below so the mana check charges for the level
+            // actually being cast.
+            int levelBonus = SpellRules.configuredLevelBonus();
+            if (levelBonus > 0) castLevel = Math.min(castLevel + levelBonus, 10);
 
             // Pre-flight: in spellbook modes the cast costs mana and triggers a cooldown.
             // attemptInitiateCast itself will silently fail when either's not satisfied; rather
@@ -835,6 +870,11 @@ public final class SpellCaster {
     public static void forgetPlayer(UUID uuid) {
         if (uuid == null) return;
         RECENT_CASTS.remove(uuid);
+        // The mod-present flag is per CONNECTION, not per server run. Leaving it set meant a
+        // player who rejoined without the mod - uninstalled it, or came back on a vanilla
+        // profile - still counted as able to speak, so under ALWAYS every spell they owned was
+        // silently uncastable with no settings screen to explain it. Re-established at login.
+        VOICE_CLIENTS.remove(uuid);
         // Drop the in-flight voice-cast stamp too. A player who disconnects mid-cast would
         // otherwise stay marked as casting until the stamp aged out, and under the ALWAYS
         // incantation rule that is a window in which their next clicked cast would be allowed.

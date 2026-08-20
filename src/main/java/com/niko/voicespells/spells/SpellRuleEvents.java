@@ -93,8 +93,10 @@ public final class SpellRuleEvents {
             // first version threw NoSuchMethodException on every cast, caught it, logged at
             // DEBUG and did nothing - the option looked implemented and was dead. Verified
             // against both jars with javap rather than assumed a second time.
-            Player p = (Player) call(e, "getEntity");
-            if (p == null) return;
+            // instanceof, not a cast. getEntity() is a LivingEntity, so a spellcasting mob going
+            // on cooldown threw ClassCastException into warnOnce and latched a permanent WARN on
+            // any server that has them - a scary log line for a case that is simply not ours.
+            if (!(call(e, "getEntity") instanceof Player p)) return;
             int base = (int) call(e, "getEffectiveCooldown");
             int scaled = SpellRules.voiceCooldown(p, base);
             if (scaled >= 0) {
@@ -118,6 +120,14 @@ public final class SpellRuleEvents {
             if (!(caster instanceof Player p)) return;
             Object id = call(e, "getSpellId");
             if (!(id instanceof String spellId)) return;
+            // Only a cast the PLAYER initiated can be required to have been spoken. A command
+            // block, a datapack function or /cast produces a SpellPreCastEvent whose entity is
+            // the targeted player, and cancelling those makes map mechanics stop working for
+            // exactly the players who use voice - the ones the rule has switched on for. Compared
+            // by name so the CastSource class is never imported; an unrecognised source is left
+            // alone rather than blocked.
+            String source = String.valueOf(call(e, "getCastSource"));
+            if (!source.equals("SPELLBOOK") && !source.equals("SCROLL") && !source.equals("SWORD")) return;
             if (!SpellRules.blockClickedCast(p, spellId)) return;
             e.getClass().getMethod("setCanceled", boolean.class).invoke(e, true);
             SpellRules.explainBlocked(p, spellId);

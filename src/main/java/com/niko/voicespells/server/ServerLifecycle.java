@@ -37,14 +37,41 @@ public final class ServerLifecycle {
     /** Wire this up from the mod's constructor — see VoiceSpells.java. */
     public static void register() {
 //? if forge {
-/*        MinecraftForge.EVENT_BUS.addListener(ServerLifecycle::onPlayerLoggedOut);
+/*        MinecraftForge.EVENT_BUS.addListener(ServerLifecycle::onPlayerLoggedIn);
+        MinecraftForge.EVENT_BUS.addListener(ServerLifecycle::onPlayerLoggedOut);
         MinecraftForge.EVENT_BUS.addListener(ServerLifecycle::onServerStopped);
         MinecraftForge.EVENT_BUS.addListener(ServerLifecycle::onServerStarted);
 *///?} else {
+        NeoForge.EVENT_BUS.addListener(ServerLifecycle::onPlayerLoggedIn);
         NeoForge.EVENT_BUS.addListener(ServerLifecycle::onPlayerLoggedOut);
         NeoForge.EVENT_BUS.addListener(ServerLifecycle::onServerStopped);
         NeoForge.EVENT_BUS.addListener(ServerLifecycle::onServerStarted);
 //?}
+    }
+
+    /**
+     * Record whether this player actually has Incantation, by asking their live connection
+     * whether it negotiated the mod's channel.
+     *
+     * <p>This is what the incantation rule tests before it constrains anybody. It used to be
+     * inferred from having received a cast packet, which meant the rule only ever applied to
+     * players who had already voice-cast since the last server boot - so ALWAYS did nothing to
+     * anyone who simply never spoke, and speaking was what armed the lock on yourself.
+     *
+     * <p>Asked once at login rather than per cast: the channel set is fixed for the life of a
+     * connection, and a probe on the pre-cast event would run several times a second per player.
+     */
+    private static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        try {
+            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer sp
+                    && com.niko.voicespells.network.Network.hasVoiceChannel(sp)) {
+                SpellCaster.noteVoiceClient(sp.getUUID());
+            }
+        } catch (Throwable t) {
+            // A failed probe must never keep a player out of the game, and it must never be the
+            // reason a spell will not cast: unknown means exempt from the rule.
+            VoiceSpells.LOGGER.debug("Voice-channel probe failed at login: {}", t.toString());
+        }
     }
 
     /**

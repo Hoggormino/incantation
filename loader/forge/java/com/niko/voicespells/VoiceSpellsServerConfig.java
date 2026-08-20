@@ -102,10 +102,17 @@ public final class VoiceSpellsServerConfig {
                       "FIRST_CAST - a spell must be voice-cast once before it can be clicked;",
                       "             learning the incantation unlocks the spell for that player.",
                       "ALWAYS     - spells can only ever be cast by voice.",
-                      "Only applies to players the server has heard voice-cast at least once,",
-                      "i.e. players who demonstrably have the mod. A player without Incantation",
-                      "cannot speak a spell, so locking them out would brick them with no way to",
-                      "comply - they are left alone instead.");
+                      "Applies to players who have Incantation installed, checked at login by",
+                      "whether their connection negotiated the mod's channel. Someone without the",
+                      "mod cannot speak a spell, so requiring it would brick them with no way to",
+                      "comply - they are left alone instead. Same for anyone excluded by",
+                      "voiceAllowedPlayers, who is forbidden to speak and so cannot be required to.",
+                      "",
+                      "FIRST_CAST unlocks are per world, stored in <world>/voicespells/learned.txt,",
+                      "and written the moment a spell is unlocked so a crash cannot take them back.",
+                      "",
+                      "Casts that no player initiated - command blocks, datapacks, /cast, mobs -",
+                      "are never affected.");
             incantationOnly = b.defineEnum("incantationOnly", IncantationRule.OFF);
             b.pop();
         }

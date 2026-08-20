@@ -41,6 +41,25 @@ public final class Network {
         NetworkRegistry.acceptMissingOr(PROTOCOL)
     );
 
+    /**
+     * Whether this player's LIVE connection negotiated the mod's channel - see the 1.21.1 twin
+     * for why this replaced "we once received a cast packet from them".
+     *
+     * <p>{@code SimpleChannel.isRemotePresent(Connection)} is the Forge equivalent, verified
+     * against forge-1.20.1-47.4.10 with javap. The channel is declared with
+     * {@code acceptMissingOr}, so its presence means the remote actually has the mod.
+     */
+    public static boolean hasVoiceChannel(ServerPlayer sp) {
+        try {
+            // sp.connection is the ServerGamePacketListenerImpl; its Connection is a public
+            // FIELD on 1.20.1, not a getter - that accessor only arrives in 1.20.5.
+            return sp != null && CHANNEL.isRemotePresent(sp.connection.connection);
+        } catch (Throwable t) {
+            // Never let a channel probe decide a player cannot play. Unknown means exempt.
+            return false;
+        }
+    }
+
     /** Kept for symmetry with the 1.21.1 entry point; the channel itself needs no bus listener. */
     public static void register(IEventBus modBus) {
         // No-op on Forge 1.20.1. Message registration happens in registerMessages(), called from
@@ -62,9 +81,6 @@ public final class Network {
                 // setPacketHandled(true) for us.
                 ServerPlayer sp = ctx.get().getSender();
                 if (sp != null) {
-                    // Receiving this at all proves the client has the mod: the channel is
-                    // optional, so a client without it never negotiates it.
-                    SpellCaster.noteVoiceClient(sp.getUUID());
                     SpellCaster.cast(sp,
                         payload.spellId(),
                         payload.volumeScale(),
