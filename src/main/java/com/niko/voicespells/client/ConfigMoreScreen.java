@@ -150,16 +150,16 @@ public final class ConfigMoreScreen extends Screen {
         // off-screen entirely.
         // 8px apart for 9px text: the status line and the spell-of-the-day hint below it
         // overlapped by a pixel, so every "Profile copied" landed on top of "Today's spell".
-        // Centred, on the same axis as the title, the button grid and Back.
+        // Left edge of the button column, not the screen's centre axis.
         //
-        // These two lines were the only left-aligned things on the screen. Everything else is
-        // symmetric about the centre, so a line starting hard against the left column read as
-        // out of alignment even though it was exactly on the grid's left edge - it was aligned to
-        // an edge nothing else is aligned to. With the separators gone there is no longer any
-        // horizontal chrome to anchor a left edge to either.
+        // Centring it made it the loudest thing on the panel every time you pressed Reload
+        // grammar or Calibrate: a line of text arriving on the screen's own axis, directly under
+        // the spell-of-the-day hint, competing with it. A transient status is not a headline.
+        // The left edge is a real anchor here - it is where both button columns start - and it
+        // keeps the message out of the middle where the eye is already looking.
         statusLabel = new StringWidget(px, footerY - 12, panelW, 9,
             Component.empty(), font);
-        statusLabel.alignCenter();
+        statusLabel.alignLeft();
         statusLabel.setColor(Theme.C_MUTED);
         addRenderableWidget(statusLabel);
 
@@ -169,7 +169,7 @@ public final class ConfigMoreScreen extends Screen {
         if (!suggestion.isEmpty()) {
             StringWidget sotd = new StringWidget(px, footerY - 24, panelW, 9,
                 Component.literal("Today's spell: " + suggestion), font);
-            sotd.alignCenter();
+            sotd.alignLeft();
             // C_MUTED, not C_FAINT. This line names a spell and tracks progress toward it, so it
             // is content; the faintest tier is for things whose absence would not be noticed.
             sotd.setColor(Theme.C_MUTED);
@@ -183,6 +183,8 @@ public final class ConfigMoreScreen extends Screen {
             statusLabel.setMessage(Component.literal(text));
             statusLabel.setColor(color);
         }
+        // Cleared by tick() when the flash lapses, so the line does not sit there afterwards as
+        // a permanent label. A status that never leaves stops reading as a status.
         statusFlashUntil = System.currentTimeMillis() + 3500;
     }
 
