@@ -44,6 +44,8 @@ public final class Diagnostics {
         out.add(checkCurios());
         // --- Recognition stack ---
         out.add(checkVoskModel());
+        out.add(checkVocabulary());
+        out.add(checkGrammarEncoding());
         out.add(checkSpellIndex());
         out.add(checkPhraseCollisions());
         out.add(checkRecognitionActivity());
@@ -212,6 +214,53 @@ public final class Diagnostics {
     }
 
     // -------------------------------------------------------------------- Recognition
+
+    /**
+     * Whether the loaded model can actually pronounce the phrases the mod is listening for.
+     *
+     * <p>The failure this catches has no other symptom. Vosk cannot emit a word that is not in its
+     * lexicon, so a phrase containing one never matches: the player says the spell's name, nothing
+     * happens, and every other line on this screen says OK. Until the vocabulary could be read
+     * there was no way to distinguish that from a microphone problem.
+     */
+    private static Result checkVocabulary() {
+        com.niko.voicespells.spells.SpellIndex.VocabReport r =
+            com.niko.voicespells.spells.SpellIndex.vocabularyReport();
+        if (r.vocabularyWords() == 0) {
+            // Not a failure on its own - the model may still be loading, and every consumer of the
+            // vocabulary degrades to "change nothing" without it.
+            return new Result("Model vocabulary", Status.WARN,
+                "Not read yet - respelling and unsayable-name detection are inactive");
+        }
+        if (!r.dead().isEmpty()) {
+            String names = String.join(", ", r.dead().subList(0, Math.min(4, r.dead().size())));
+            return new Result("Model vocabulary", Status.FAIL,
+                r.dead().size() + " spell(s) cannot be spoken on this model (" + names
+                + (r.dead().size() > 4 ? ", ..." : "")
+                + ") - run /voicespells vocab, then bind an alias");
+        }
+        if (!r.rescued().isEmpty()) {
+            return new Result("Model vocabulary", Status.OK,
+                r.vocabularyWords() + " words; " + r.rescued().size()
+                + " name(s) need an alias and have one (/voicespells vocab)");
+        }
+        return new Result("Model vocabulary", Status.OK,
+            r.vocabularyWords() + " words; every phrase is pronounceable");
+    }
+
+    /**
+     * Whether non-ASCII phrases survive the trip into the recogniser.
+     *
+     * <p>Only interesting to somebody using a non-English model or a translated phrasebook, which
+     * is exactly the person who cannot tell a broken accent from a broken microphone.
+     */
+    private static Result checkGrammarEncoding() {
+        if (VoskSession.utf8Grammar) {
+            return new Result("Grammar encoding", Status.OK, "UTF-8 at the recogniser boundary");
+        }
+        return new Result("Grammar encoding", Status.WARN,
+            "Not UTF-8 - phrases with accented characters will not reach the recogniser intact");
+    }
 
     private static Result checkVoskModel() {
         // Resolve exactly as loadVosk() does. This used to fall back to
