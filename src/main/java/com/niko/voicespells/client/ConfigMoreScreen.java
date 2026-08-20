@@ -150,9 +150,16 @@ public final class ConfigMoreScreen extends Screen {
         // off-screen entirely.
         // 8px apart for 9px text: the status line and the spell-of-the-day hint below it
         // overlapped by a pixel, so every "Profile copied" landed on top of "Today's spell".
+        // Centred, on the same axis as the title, the button grid and Back.
+        //
+        // These two lines were the only left-aligned things on the screen. Everything else is
+        // symmetric about the centre, so a line starting hard against the left column read as
+        // out of alignment even though it was exactly on the grid's left edge - it was aligned to
+        // an edge nothing else is aligned to. With the separators gone there is no longer any
+        // horizontal chrome to anchor a left edge to either.
         statusLabel = new StringWidget(px, footerY - 12, panelW, 9,
             Component.empty(), font);
-        statusLabel.alignLeft();
+        statusLabel.alignCenter();
         statusLabel.setColor(Theme.C_MUTED);
         addRenderableWidget(statusLabel);
 
@@ -160,8 +167,9 @@ public final class ConfigMoreScreen extends Screen {
         // unfamiliar spells. Sits at the bottom of the panel as a quiet hint.
         String suggestion = spellOfTheDay();
         if (!suggestion.isEmpty()) {
-            StringWidget sotd = new StringWidget(px, footerY - 24, panelW, 9, Component.literal("Today's spell: " + suggestion), font);
-            sotd.alignLeft();
+            StringWidget sotd = new StringWidget(px, footerY - 24, panelW, 9,
+                Component.literal("Today's spell: " + suggestion), font);
+            sotd.alignCenter();
             // C_MUTED, not C_FAINT. This line names a spell and tracks progress toward it, so it
             // is content; the faintest tier is for things whose absence would not be noticed.
             sotd.setColor(Theme.C_MUTED);
