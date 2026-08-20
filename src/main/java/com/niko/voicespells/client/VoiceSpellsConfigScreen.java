@@ -403,7 +403,10 @@ public final class VoiceSpellsConfigScreen extends Screen {
             "Match when a spell name appears inside a longer sentence, so talking normally can "
             + "still cast. Turn off if casual conversation keeps triggering spells.");
 
-        help(slot(new NeonSlider(0, 0, colW, 20, workDedup, 0, 3000,
+        // Same stretch-to-fit as the HUD offsets below: the toml allows up to 5000 and this
+        // slider stopped at 3000, so opening the screen and pressing Done rewrote a 4000ms
+        // gap the player had set by hand down to 3000, silently.
+        help(slot(new NeonSlider(0, 0, colW, 20, workDedup, 0, Math.max(3000, workDedup),
                 v -> "Repeat gap: " + v + " ms", v -> workDedup = v), i++, gridX, colW, y),
             "Ignore the same spell heard again within this long. Stops one drawn-out word from "
             + "casting twice.");
@@ -498,7 +501,9 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 v -> workPauseAfk = v), i++, gridX, colW, y),
             "Stop listening after a spell of no input.");
 
-        help(slot(new NeonSlider(0, 0, colW, 20, workAfkSeconds, 5, 600,
+        // The toml ceiling is 3600. A slider that reached it would move in 24-second steps,
+        // so it stops at 10 minutes and stretches for anyone who set more than that.
+        help(slot(new NeonSlider(0, 0, colW, 20, workAfkSeconds, 5, Math.max(600, workAfkSeconds),
                 v -> "AFK after: " + v + " s", v -> workAfkSeconds = v), i++, gridX, colW, y),
             "How long counts as away.");
 

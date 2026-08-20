@@ -233,6 +233,11 @@ public final class ConfigMoreScreen extends Screen {
         sb.append("afkSeconds=").append(c.afkSeconds.get()).append('\n');
         sb.append("chatRankTag=").append(c.chatRankTag.get()).append('\n');
         sb.append("voiceHotbarSelect=").append(c.voiceHotbarSelect.get()).append('\n');
+        // Both are on a settings tab, so a profile that omitted them handed the importer a
+        // half-applied screen: their own vignette and focus behaviour under someone else's
+        // tuning. Every setting the UI can change now round-trips.
+        sb.append("castVignette=").append(c.castVignette.get()).append('\n');
+        sb.append("suspendWhenUnfocused=").append(c.suspendWhenUnfocused.get()).append('\n');
         // Lists exported with one entry per pipe-separated token so it survives a single line
         // paste cycle. Less elegant than JSON but matches the spirit of the toml.
         sb.append("customPhrases=").append(String.join("|", c.customPhrases.get())).append('\n');
@@ -319,6 +324,8 @@ public final class ConfigMoreScreen extends Screen {
             case "afkSeconds":        c.afkSeconds.set(Integer.parseInt(val.trim())); return true;
             case "chatRankTag":       c.chatRankTag.set(Boolean.parseBoolean(val)); return true;
             case "voiceHotbarSelect": c.voiceHotbarSelect.set(Boolean.parseBoolean(val)); return true;
+            case "castVignette":      c.castVignette.set(Boolean.parseBoolean(val)); return true;
+            case "suspendWhenUnfocused": c.suspendWhenUnfocused.set(Boolean.parseBoolean(val)); return true;
 //? if forge {
 /*            case "customPhrases":     ((net.minecraftforge.common.ForgeConfigSpec.ConfigValue) c.customPhrases).set(splitList(val)); return true;
             case "incantations":      ((net.minecraftforge.common.ForgeConfigSpec.ConfigValue) c.incantations).set(splitList(val)); return true;
