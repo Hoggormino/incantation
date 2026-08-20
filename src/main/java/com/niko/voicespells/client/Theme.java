@@ -249,6 +249,21 @@ public final class Theme {
 
 
 
+    // The header/footer separators are gone.
+    //
+    // They were meant to band a header, a body and a footer the way a vanilla options
+    // screen does. Over a BLURRED backdrop that is not what they did: a 3px light-on-dark
+    // sandwich sitting on a blur reads as two smeared streaks behind the content rather
+    // than as chrome in front of it, and that is what they were reported as, twice.
+    //
+    // Vanilla can draw them because its options screens are not blurred behind their own
+    // list. Ours are. The title and the button rows already establish the bands on their
+    // own through spacing, which is how every 1.20.1 options screen works - that version
+    // has no separators at all.
+    //
+    // headerY / footerY are still passed and still meaningful: screens position content
+    // against them. Nothing is drawn at those rows any more.
+
     /** One of vanilla's header/footer rules: a dark line with a soft highlight under it. */
     /**
      * The standard chrome every screen in the mod wears: vanilla's backdrop, a dim over it, and
@@ -270,7 +285,7 @@ public final class Theme {
         int w = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
         int h = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight();
         g.fill(0, 0, w, h, C_SCRIM);
-        chromeRules(g, headerY, footerY, 0, w);
+        // No separators - see the note above screenChrome.
     }
 
     /**
@@ -294,34 +309,11 @@ public final class Theme {
         int w = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
         int h = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight();
         g.fill(0, 0, w, h, C_SCRIM);
-        chromeRules(g, headerY, footerY, contentX, contentW);
+        // No separators; headerY/footerY remain as LAYOUT anchors for the caller.
     }
 
-    /**
-     * Both rules, widened a little beyond the content so they read as framing it rather than as
-     * underlining it. Eight pixels is the same overhang vanilla's own container art carries past
-     * its inner well, and it is what stops the rule ending flush with a button edge and looking
-     * like part of the button.
-     */
-    private static void chromeRules(GuiGraphics g, int headerY, int footerY, int x, int w) {
-        int screenW = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
-        int rx = Math.max(0, x - 8);
-        int rw = Math.min(screenW - rx, w + 16);
-        rule(g, rx, headerY, rw);
-        rule(g, rx, footerY, rw);
-    }
 
-    /** Public form of the header/footer rule, for screens that place their own. */
-    public static void rule(GuiGraphics g, int x, int y, int w) { separatorRule(g, x, y, w); }
 
-    private static void separatorRule(GuiGraphics g, int x, int y, int w) {
-        // A black line over a blurred night-time world is invisible, which is exactly what the
-        // first attempt produced. Lead with the light line and back it with black, so the rule
-        // reads against both a bright scene and a dark one.
-        g.fill(x, y, x + w, y + 1, 0x60000000);
-        g.fill(x, y + 1, x + w, y + 2, 0x90FFFFFF);
-        g.fill(x, y + 2, x + w, y + 3, 0x60000000);
-    }
 
 
     /**

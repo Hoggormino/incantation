@@ -79,8 +79,6 @@ public final class LiveMonitorScreen extends Screen {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         Theme.background(this, g, mouseX, mouseY, partial);
         g.fill(0, 0, this.width, this.height, Theme.C_SCRIM);
-        Theme.rule(g, 0, 32, width);
-        Theme.rule(g, 0, height - 38, width);
 
         super.render(g, mouseX, mouseY, partial);
 
