@@ -201,8 +201,17 @@ public final class VoiceController {
     private static boolean isInCombat() {
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         if (mc.player == null || mc.player.level() == null) return false;
-        long nowTicks = mc.player.level().getGameTime();
-        long lastHurtTick = mc.player.getLastHurtByMobTimestamp();
+        // Both sides must be the ENTITY's tick count.
+        //
+        // getLastHurtByMobTimestamp() returns an int that vanilla assigns from the entity's own
+        // tickCount, and this compared it against level().getGameTime() - the WORLD's age, which
+        // is millions of ticks in any save that has been played. The difference was therefore
+        // always far greater than 200, isInCombat() always returned false, and combatOnly did not
+        // merely fail to filter: it blocked EVERY cast, silently, for as long as it was on. It
+        // was toml-only until this release, which is presumably why nobody hit it; it is a
+        // one-click toggle on the Behaviour tab now.
+        int nowTicks = mc.player.tickCount;
+        int lastHurtTick = mc.player.getLastHurtByMobTimestamp();
         return lastHurtTick > 0 && (nowTicks - lastHurtTick) < 200; // hurt within ~10s
     }
 
