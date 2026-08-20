@@ -873,8 +873,17 @@ public final class SpellIndex {
             String phrase = e.getKey();
             String respelled = com.niko.voicespells.speech.Lexicon.respell(phrase);
             if (respelled == null) {
-                // Only worth reporting when the model genuinely can't say it as written.
-                if (!sayable(phrase) && unfixable.size() < 10) unfixable.add(phrase);
+                // Report only a spell with NO route to being cast at all.
+                //
+                // "This phrase is unsayable" is not the same as "this spell is unreachable", and
+                // reporting the first sends players chasing a problem they do not have. Every one
+                // of wololo, oakskin, abyssal shroud, sculk tentacles and telekinesis is unsayable
+                // as written AND already has a hand-written alias that works - the first time this
+                // warning ever ran it named all five, which is exactly five false alarms.
+                if (!sayable(phrase) && !hasSayableRoute(existing, e.getValue(), phrase)
+                        && unfixable.size() < 10) {
+                    unfixable.add(phrase);
+                }
                 continue;
             }
             if (merged.putIfAbsent(respelled, e.getValue()) == null) {
@@ -888,11 +897,25 @@ public final class SpellIndex {
                 + "pronounce: {}", added, String.join(", ", examples));
         }
         if (!unfixable.isEmpty()) {
-            VoiceSpells.LOGGER.warn("These spell names are not in the speech model's vocabulary "
-                + "and could not be respelled automatically: {}. Bind an alias for them in "
+            VoiceSpells.LOGGER.warn("These spells cannot be cast by voice on the current speech "
+                + "model: {}. Their names contain words it has no entry for, no automatic "
+                + "respelling was possible, and no alias covers them. Bind one in "
                 + "config/voicespells-client.toml or phrasebook.json.", String.join(", ", unfixable));
         }
         return added;
+    }
+
+    /**
+     * Whether some OTHER phrase for the same spell is sayable - an alias, a respelling, or a
+     * custom phrase. If one is, the spell is castable and the unsayable spelling is harmless.
+     */
+    private static boolean hasSayableRoute(Map<String, ResourceLocation> phrases,
+                                           ResourceLocation id, String except) {
+        for (Map.Entry<String, ResourceLocation> e : phrases.entrySet()) {
+            if (e.getKey().equals(except)) continue;
+            if (e.getValue().equals(id) && sayable(e.getKey())) return true;
+        }
+        return false;
     }
 
     /** Whether every word of a phrase is already in the model's vocabulary. */
