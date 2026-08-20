@@ -60,6 +60,15 @@ public final class SpellIndex {
         // the alias by the full phrase. ("tentacles" is in-vocab; only "sculk" is the OOV word.)
         ALIASES.put("sculk tentacles", List.of("skulk tentacles", "scull tentacles"));
         ALIASES.put("nullflare",    List.of("null flare", "no flare"));
+        // "abyssal" and "telekinesis" are both absent from the shipped small English model's
+        // symbol table (verified by scanning graph/Gr.fst on the installed model), and neither had
+        // an alias - so these two spells have been uncastable for every English player on the
+        // default model since they were indexed, with no error and nothing in the log above DEBUG.
+        // The respelling rescue that should have caught this cannot run either: Lexicon.load reads
+        // graph/words.txt, and the shipped model ships only Gr.fst, HCLr.fst, disambig_tid.int and
+        // phones. "abyss", "abysmal", "tele" and "kinesis" are all in vocabulary.
+        ALIASES.put("abyssal shroud", List.of("abyss shroud", "abysmal shroud"));
+        ALIASES.put("telekinesis",  List.of("tele kinesis", "kinesis"));
     }
 
     private static final AtomicReference<State> STATE = new AtomicReference<>(State.EMPTY);
