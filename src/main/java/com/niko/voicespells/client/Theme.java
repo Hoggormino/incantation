@@ -56,15 +56,10 @@ public final class Theme {
     // ---- Surfaces -----------------------------------------------------------
     public static int C_SCRIM;
     public static int C_PANEL;
-    public static int C_HEADER_T;
-    public static int C_HEADER_B;
     public static int C_INSET;
-    public static int C_INSET_2;
 
     // ---- Lines --------------------------------------------------------------
-    public static int C_BORDER;
     public static int C_DIVIDER;
-    public static int C_SHADOW;
 
     // ---- Text ---------------------------------------------------------------
     // Four tiers, loudest to quietest. All are read against the same surface (the blurred world)
@@ -82,7 +77,6 @@ public final class Theme {
     // against all of them, which is why contrast bugs kept surfacing. One fixed pair, used only
     // by the in-world HUD, cannot clash with anything.
     public static final int C_HL     = 0xFFFFFFFF;   // active / speaking
-    public static final int C_HL_DIM = 0xFFA0A0A0;   // idle / armed
 
     /**
      * The palette. There is exactly one.
@@ -108,8 +102,6 @@ public final class Theme {
         // the world still reads through it.
         C_SCRIM    = 0x99101010;
         C_PANEL    = 0xFF303030;   // only reached by the small-rect fallback in panel()
-        C_HEADER_T = 0xFF303030;
-        C_HEADER_B = 0xFF303030;
         // 0x70000000, not 0x90101010. This one number is why the screens read as empty.
         //
         // RGB 0x101010 at alpha 0.565 contributes a FIXED +9.0 luma floor, so a well's luma is
@@ -124,10 +116,7 @@ public final class Theme {
         // 16x16 with all 256 pixels at #70000000. The mod had the right primitive and the wrong
         // number.
         C_INSET    = 0x70000000;   // wells are translucent black over the world
-        C_INSET_2  = 0x18FFFFFF;   // zebra striping / hover wash
-        C_BORDER   = 0xFF000000;
         C_DIVIDER  = 0x40FFFFFF;
-        C_SHADOW   = 0xFF000000;
         C_TEXT     = 0xFFFFFFFF;
         C_MUTED    = 0xFFA0A0A0;
         C_FAINT    = 0xFF808080;
