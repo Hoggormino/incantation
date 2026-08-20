@@ -61,20 +61,51 @@ public final class Lexicon {
         return words != null;
     }
 
+    /** How many words the loaded vocabulary holds; 0 when none is loaded. For diagnostics. */
+    public static int size() {
+        Set<String> w = words;
+        return w == null ? 0 : w.size();
+    }
+
+    /**
+     * Drop the loaded vocabulary. Must be called before loading a different model, or the old
+     * model's word list would decide what the new one can say - which is the wrong answer in the
+     * one direction that matters, because it would mark phrases sayable that the new model
+     * cannot pronounce.
+     */
+    public static void clear() {
+        words = null;
+    }
+
     public static boolean knows(String word) {
         Set<String> w = words;
         return w != null && w.contains(word);
     }
 
     /**
-     * Read {@code <modelDir>/graph/words.txt}. Best-effort: a model without one simply leaves the
-     * lexicon unavailable, and every caller treats that as "change nothing".
+     * Read the model's vocabulary: {@code graph/words.txt} if it exists, otherwise the symbol
+     * table inside {@code graph/Gr.fst}.
+     *
+     * <p>The fallback is not an edge case, it is the normal path. Of the six models in the
+     * catalogue only {@code en-us-0.22-lgraph} ships a {@code words.txt}; the model the mod
+     * downloads by default does not, so this method used to return at the {@code isRegularFile}
+     * check for essentially every player and {@link #ready()} was never true. Every rescue that
+     * hangs off this - {@link #respell} and the report naming names the model cannot say - has
+     * therefore never run for anybody. See {@link Vocabulary} for the format.
+     *
+     * <p>Still best-effort: a model that yields neither leaves the lexicon unavailable, and every
+     * caller treats that as "change nothing".
      */
     public static void load(Path modelDir) {
         if (modelDir == null) return;
         Path wordsFile = modelDir.resolve("graph").resolve("words.txt");
         if (!Files.isRegularFile(wordsFile)) {
-            VoiceSpells.LOGGER.debug("No words.txt under {}; skipping respelling", modelDir);
+            Set<String> fromFst = Vocabulary.read(modelDir.resolve("graph").resolve("Gr.fst"));
+            if (fromFst != null) {
+                words = Collections.unmodifiableSet(fromFst);
+                VoiceSpells.LOGGER.info("Speech model vocabulary loaded ({} words, from Gr.fst)",
+                    fromFst.size());
+            }
             return;
         }
         try (Stream<String> lines = Files.lines(wordsFile, StandardCharsets.UTF_8)) {

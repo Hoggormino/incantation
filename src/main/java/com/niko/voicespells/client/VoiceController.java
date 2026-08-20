@@ -1549,6 +1549,11 @@ public final class VoiceController {
             // stderr warning, leaving those spells quietly uncastable. This adds a spaced spelling
             // alongside each one. Must happen before currentGrammar() or the additions miss this
             // session's grammar.
+            // clear() first: a previously loaded model's word list must not decide what this one
+            // can say. It is wrong in the direction that matters - it would call phrases sayable
+            // that the new model cannot pronounce, which is the silent failure this whole
+            // mechanism exists to prevent.
+            com.niko.voicespells.speech.Lexicon.clear();
             com.niko.voicespells.speech.Lexicon.load(modelPath);
             SpellIndex.registerRespellings();
 
