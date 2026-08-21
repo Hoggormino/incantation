@@ -11,15 +11,19 @@ import net.minecraft.client.gui.GuiGraphics;
  * right, drop-shadowed text, square corners, and nothing that animates. Matching that grammar
  * is what makes a modded screen feel native instead of pasted in.
  *
- * <p>This used to be the opposite of all of it: saturated lavender-midnight surfaces, a
- * pulsing seven-layer neon rule, 2px "rounded" corners, and unshadowed text. It looked like a
- * web dashboard. The palettes have been moved onto vanilla's neutral grey axis, the chrome
- * helpers now draw vanilla bevels, and text goes through helpers that always shadow.
+ * <p>This used to be the opposite of all of it: saturated lavender-midnight surfaces, a pulsing
+ * seven-layer neon rule, 2px "rounded" corners, and unshadowed text. It looked like a web
+ * dashboard.
  *
+ * <p>The way out was not to tune those numbers but to stop drawing chrome at all. Every hand-drawn
+ * helper this class used to own - the panel, the bevels, the rounded frames, the inset shadows,
+ * the separators, the scrollbar - has been deleted in favour of the real thing: vanilla widgets,
+ * vanilla sprites, and vanilla's own recessed-list tone. "An imitation is what it looks like, and
+ * no amount of tuning the numbers fixes a difference in kind."
  *
- * <p>Screens are expected to call {@link #background} first, {@link #panel} for their surface,
- * and {@link #text} / {@link #title} for copy. The older helpers kept their names and
- * signatures so all existing screens inherit the new look without being rewritten.
+ * <p>What is left is a palette, a few layout constants, and the handful of draws that genuinely
+ * have no vanilla counterpart. Screens call {@link #ground} first, {@link #well} for a recessed
+ * surface, and {@link #text} / {@link #title} for copy.
  */
 public final class Theme {
     private Theme() {}
@@ -30,7 +34,6 @@ public final class Theme {
     public static final int ROW_H     = 24;
     public static final int GAP_SM    = 6;
     public static final int GAP_MD    = 10;
-    public static final int GAP_LG    = 14;
 
     /** Minimum screen margin we keep around a centred panel before it starts overflowing —
      *  picked to match vanilla Minecraft's own screens (the title screen / pause menu use
@@ -101,7 +104,7 @@ public final class Theme {
         // Vanilla's renderTransparentBackground uses ~0xC0101010; this is a little lighter so
         // the world still reads through it.
         C_SCRIM    = 0x99101010;
-        C_PANEL    = 0xFF303030;   // only reached by the small-rect fallback in panel()
+        C_PANEL    = 0xFF303030;   // opaque track behind the Codex's rank bar
         // 0x70000000, not 0x90101010. This one number is why the screens read as empty.
         //
         // RGB 0x101010 at alpha 0.565 contributes a FIXED +9.0 luma floor, so a well's luma is
@@ -125,12 +128,6 @@ public final class Theme {
     }
 
 
-    private static int brighten(int argb, float scale) {
-        int r = Math.min(255, Math.max(0, (int) (((argb >> 16) & 0xFF) * scale)));
-        int g = Math.min(255, Math.max(0, (int) (((argb >> 8)  & 0xFF) * scale)));
-        int b = Math.min(255, Math.max(0, (int) (( argb        & 0xFF) * scale)));
-        return 0xFF000000 | (r << 16) | (g << 8) | b;
-    }
 
     // ---- Status colours ---------------------------------------------------
     //
@@ -194,33 +191,6 @@ public final class Theme {
     // object, and its absence is why a flat coloured rectangle always looks like a web page
     // pasted into the game. Everything below is built from that one idea, so the whole mod
     // inherits it without any screen having to change.
-    //
-    // Drawn with fills rather than a vanilla texture on purpose: the sprite APIs diverge
-    // between the two shipping versions (1.21.1 has blitSprite, 1.20.1 only blitNineSliced),
-    // and the texture paths moved too, so a hardcoded path that is subtly wrong on one loader
-    // renders as missing-texture magenta. Bevels are identical on both and cannot 404.
-    // -----------------------------------------------------------------------
-
-    /** Lighten an ARGB toward white by {@code f} (0..1), preserving alpha. */
-    private static int lighten(int argb, float f) {
-        int a = (argb >>> 24) & 0xFF;
-        int r = (argb >> 16) & 0xFF, gg = (argb >> 8) & 0xFF, b = argb & 0xFF;
-        r = (int) (r + (255 - r) * f);
-        gg = (int) (gg + (255 - gg) * f);
-        b = (int) (b + (255 - b) * f);
-        return (a << 24) | (r << 16) | (gg << 8) | b;
-    }
-
-    /** Darken an ARGB toward black by {@code f} (0..1), preserving alpha. */
-    private static int darken(int argb, float f) {
-        int a = (argb >>> 24) & 0xFF;
-        int r = (int) (((argb >> 16) & 0xFF) * (1 - f));
-        int gg = (int) (((argb >> 8) & 0xFF) * (1 - f));
-        int b = (int) ((argb & 0xFF) * (1 - f));
-        return (a << 24) | (r << 16) | (gg << 8) | b;
-    }
-
-    // ---- The panel, drawn from Minecraft's own container texture ------------------------
     //
     // The comment above used to justify drawing this with fills: "the sprite APIs diverge
     // between the two shipping versions (1.21.1 has blitSprite, 1.20.1 only blitNineSliced),

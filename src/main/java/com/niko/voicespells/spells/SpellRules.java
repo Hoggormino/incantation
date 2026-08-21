@@ -50,17 +50,19 @@ public final class SpellRules {
      */
     private static final long PENDING_TTL_NANOS = 10_000_000_000L;
 
-    /** A voice cast waiting for its cooldown to be applied. */
     /**
-     * @param precastUsed whether the pre-cast gate has already let one cast through on this
-     *                    stamp. The stamp has to outlive the cast for the COOLDOWN hook, which
-     *                    fires when the spell resolves - seconds later for anything with a cast
-     *                    time - but it must authorise exactly ONE cast, or it doubles as a
-     *                    ten-second licence to click-cast the same spell.
-     */
-    /**
-     * @param manaDiscount how much the level bonus inflated this cast's mana cost. Subtracted
-     *                     when Iron's Spells charges for it, so the bonus is free.
+     * A voice cast, and the three things it entitles that cast to.
+     *
+     * <p>The entry has to OUTLIVE the cast, because the cooldown hook fires when the spell
+     * resolves - seconds later for anything with a cast time. But each entitlement must be spent
+     * exactly once, or the stamp stops being "this cast was spoken" and becomes a ten-second
+     * licence covering everything the player does next. All three were that, and all three were
+     * reported or found as bugs.
+     *
+     * @param precastUsed  the pre-cast gate has let its one cast through
+     * @param manaDiscount what the level bonus added to this cast's price, to be taken off again
+     *                     when Iron's Spells charges for it; zeroed once applied
+     * @param cooldownUsed the cooldown scaling has been applied
      */
     private record Pending(String spellId, long atNanos, boolean precastUsed,
                            int manaDiscount, boolean cooldownUsed) {}
@@ -161,10 +163,6 @@ public final class SpellRules {
         return true;
     }
 
-    /** True while this player has a voice cast in flight. */
-    public static boolean isVoiceCasting(UUID player) {
-        return player != null && hasPending(player);
-    }
 
     /** Whether this player has ever voice-cast this spell, for the FIRST_CAST rule. */
     public static boolean hasLearned(UUID player, String spellId) {
