@@ -124,27 +124,32 @@ public final class ModelDownloader {
                 .GET().build();
             HttpResponse<InputStream> resp =
                 client.send(req, HttpResponse.BodyHandlers.ofInputStream());
-            if (resp.statusCode() != 200) {
-                VoiceSpells.LOGGER.error("Model download HTTP {}", resp.statusCode());
-                return false;
-            }
             long total = resp.headers().firstValueAsLong("content-length").orElse(-1L);
 
-            try (InputStream in = resp.body();
-                 OutputStream out = Files.newOutputStream(tmpZip)) {
-                byte[] buf = new byte[1 << 16];
-                long read = 0;
-                int lastPct = -1;
-                int r;
-                while ((r = in.read(buf)) != -1) {
-                    out.write(buf, 0, r);
-                    read += r;
-                    if (total > 0) {
-                        int pct = (int) (read * 100 / total);
-                        if (pct >= lastPct + 5) {
-                            lastPct = pct;
-                            if (onPercent != null) onPercent.accept(pct);
-                            VoiceSpells.LOGGER.info("Vosk model download {}%", pct);
+            // The body is closed on EVERY exit from here, the failure path included. ofInputStream
+            // hands back a body that is still streaming, and the HTTP/2 connection is not released
+            // until it is drained or closed - so the old early "return false" on a non-200 leaked
+            // one held connection per attempt, and a mirror answering 403 leaked one per retry.
+            try (InputStream in = resp.body()) {
+                if (resp.statusCode() != 200) {
+                    VoiceSpells.LOGGER.error("Model download HTTP {}", resp.statusCode());
+                    return false;
+                }
+                try (OutputStream out = Files.newOutputStream(tmpZip)) {
+                    byte[] buf = new byte[1 << 16];
+                    long read = 0;
+                    int lastPct = -1;
+                    int r;
+                    while ((r = in.read(buf)) != -1) {
+                        out.write(buf, 0, r);
+                        read += r;
+                        if (total > 0) {
+                            int pct = (int) (read * 100 / total);
+                            if (pct >= lastPct + 5) {
+                                lastPct = pct;
+                                if (onPercent != null) onPercent.accept(pct);
+                                VoiceSpells.LOGGER.info("Vosk model download {}%", pct);
+                            }
                         }
                     }
                 }

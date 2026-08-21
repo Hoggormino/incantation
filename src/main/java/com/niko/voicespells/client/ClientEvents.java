@@ -773,12 +773,16 @@ public final class ClientEvents {
             }
 
             // Miss toast (showMisses): a muted note one slot outward from the queue chip.
+            //
+            // Only claim the slot if the toast actually DREW. This chip is transient - it exists
+            // for a few seconds after a phrase failed to match, which is almost never - but the
+            // slot was reserved whenever the setting was merely enabled, so everything below it
+            // sat one chip-height further out with a permanent hole where nothing is drawn.
             if (VoiceSpellsConfig.cShowMisses) {
                 int missY = anchorY
                     + (isBottom ? -(CHIP_H + 3) * (slotsUsed + 1)
                                  :  (CHIP_H + 3) * (slotsUsed + 1));
-                drawMissToastIfActive(g, font, anchorX, missY);
-                slotsUsed++;
+                if (drawMissToastIfActive(g, font, anchorX, missY)) slotsUsed++;
             }
 
             // Always-show-heard chip: persistent chip showing the last heard phrase. Lower
@@ -995,12 +999,14 @@ public final class ClientEvents {
             g.drawString(font, Component.literal(text), x + PAD_X, textY, color, true);
         }
 
-        private static void drawMissToastIfActive(GuiGraphics g, Font font, int anchorX, int anchorY) {
+        /** @return true only if a toast was actually drawn, so the caller knows whether the slot
+         *  it reserved is occupied. False for the whole span between misses — nearly always. */
+        private static boolean drawMissToastIfActive(GuiGraphics g, Font font, int anchorX, int anchorY) {
             String heard = VoiceController.lastMissText();
             long t = VoiceController.lastMissNanos();
-            if (heard == null || heard.isEmpty() || t == 0L) return;
+            if (heard == null || heard.isEmpty() || t == 0L) return false;
             long elapsed = System.nanoTime() - t;
-            if (elapsed >= VoiceController.TOAST_DURATION_NANOS) return;
+            if (elapsed >= VoiceController.TOAST_DURATION_NANOS) return false;
 
             float alpha;
             if (elapsed < VoiceController.TOAST_FADE_IN_NANOS) {
@@ -1020,6 +1026,7 @@ public final class ClientEvents {
             int color = withAlpha(VoiceSpellsConfig.cTextMuted, alpha);
             g.drawString(font, Component.literal(text), x + PAD_X,
                 anchorY + (CHIP_H - 8) / 2, color, true);
+            return true;
         }
 
         private static void drawChip(GuiGraphics g, int x, int y, int w, int h, float alpha) {

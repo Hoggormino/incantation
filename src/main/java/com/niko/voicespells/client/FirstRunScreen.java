@@ -396,13 +396,10 @@ public final class FirstRunScreen extends Screen {
             good ? Theme.C_SUCCESS : Theme.C_TEXT, !Theme.lightSurface());
     }
 
-    /** Truncate to {@code room} pixels with an ellipsis, the way the spell list and the device
-     *  picker already do. Returns the string unchanged when it fits. */
+    /** Truncate to {@code room} pixels with an ellipsis. Now just this screen's font bound to
+     *  {@link Theme#fit(net.minecraft.client.gui.Font, String, int)}, which every screen shares. */
     private String fit(String s, int room) {
-        if (room <= 0 || font.width(s) <= room) return s;
-        int ell = font.width("...");
-        if (room <= ell) return "";
-        return font.plainSubstrByWidth(s, room - ell) + "...";
+        return Theme.fit(font, s, room);
     }
 
     /** Big live audio meter — dim background, neon fill that grows with the smoothed RMS

@@ -56,6 +56,28 @@ public final class Theme {
         return Math.min(preferred, max);
     }
 
+    /**
+     * Truncate a string to {@code room} pixels, with an ellipsis when it had to be cut. Returns
+     * the string unchanged when it already fits.
+     *
+     * <p>Here because three screens had grown their own copy — two of them a character-at-a-time
+     * shrink loop that re-measures the whole string on every iteration. This is the single place
+     * that decides what a truncated label looks like, which is the only way the mod's screens end
+     * up cutting text the same way.
+     *
+     * <p>Screens that draw their own text should call this rather than relying on a widget to do
+     * it: {@code StringWidget} only started scrolling overflowing text in 1.21, so on 1.20.1 the
+     * same label that scrolls politely on one loader simply runs off the panel on the other.
+     */
+    public static String fit(net.minecraft.client.gui.Font font, String s, int room) {
+        if (s == null || s.isEmpty()) return s;
+        if (room <= 0) return "";
+        if (font.width(s) <= room) return s;
+        int ell = font.width("...");
+        if (room <= ell) return "";
+        return font.plainSubstrByWidth(s, room - ell) + "...";
+    }
+
     // ---- Surfaces -----------------------------------------------------------
     public static int C_SCRIM;
     public static int C_PANEL;

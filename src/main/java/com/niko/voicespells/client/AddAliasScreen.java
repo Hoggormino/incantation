@@ -74,9 +74,13 @@ public final class AddAliasScreen extends Screen {
         int y = py + Theme.HEADER_H + Theme.GAP_MD;
 
         // "For: <spell_id>" label so the user knows what they're aliasing.
-        StringWidget forLabel = new StringWidget(px + Theme.PAD, y,
-            panelW - Theme.PAD * 2, 9,
-            Component.literal("For:  " + spellId), font);
+        //
+        // Fitted here rather than left to the widget. StringWidget only scrolls overflowing text
+        // from 1.21 on; the 1.20.1 one draws it at full length wherever it lands, so a long
+        // namespaced id ran straight out of the panel on Forge and stayed inside it on NeoForge.
+        int labelW = panelW - Theme.PAD * 2;
+        StringWidget forLabel = new StringWidget(px + Theme.PAD, y, labelW, 9,
+            Component.literal(Theme.fit(font, "For:  " + spellId, labelW)), font);
         forLabel.alignLeft();
         forLabel.setColor(Theme.C_MUTED);
         addRenderableWidget(forLabel);
@@ -136,10 +140,12 @@ public final class AddAliasScreen extends Screen {
             for (int i = 0; i < shown; i++) {
                 String entry = aliasRows.get(i);
                 String phrase = entry.substring(0, entry.indexOf('='));
-                // Phrase label on the left.
-                StringWidget row = new StringWidget(px + Theme.PAD, y + 4,
-                    panelW - Theme.PAD * 2 - 24, 9,
-                    Component.literal("•  " + phrase), font);
+                // Phrase label on the left, fitted so it stops before the × button rather than
+                // being drawn under it (see the "For:" label above for why the widget will not
+                // do this itself on 1.20.1).
+                int rowW = panelW - Theme.PAD * 2 - 24;
+                StringWidget row = new StringWidget(px + Theme.PAD, y + 4, rowW, 9,
+                    Component.literal(Theme.fit(font, "•  " + phrase, rowW)), font);
                 row.alignLeft();
                 row.setColor(Theme.C_TEXT);
                 addRenderableWidget(row);

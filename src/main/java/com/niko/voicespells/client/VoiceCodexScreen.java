@@ -242,14 +242,7 @@ public final class VoiceCodexScreen extends Screen {
         // Trim the LABEL to whatever the value leaves, rather than letting the two overlap.
         // "Speak to cast (session)" against "after 1st cast" needs more than the column has, and
         // the two strings were drawn straight through each other.
-        String shown = label;
-        int room = colW - vw - 6;
-        if (font.width(shown) > room && room > 8) {
-            while (shown.length() > 1 && font.width(shown + "...") > room) {
-                shown = shown.substring(0, shown.length() - 1);
-            }
-            shown = shown + "...";
-        }
+        String shown = Theme.fit(font, label, colW - vw - 6);
         g.drawString(font, Component.literal(shown), x, y, Theme.C_MUTED, !Theme.lightSurface());
         g.drawString(font, Component.literal(value), x + colW - vw, y, Theme.C_TEXT, !Theme.lightSurface());
     }
@@ -289,14 +282,7 @@ public final class VoiceCodexScreen extends Screen {
                 int cw = font.width(countStr);
                 // Trim to what the count leaves. Long names ("Pillar of the Resounding Earth")
                 // were drawn full-length straight through the right-aligned "x 22".
-                int nameRoom = w - 18 - cw - 12;
-                String shown = name;
-                if (font.width(shown) > nameRoom && nameRoom > 12) {
-                    while (shown.length() > 1 && font.width(shown + "...") > nameRoom) {
-                        shown = shown.substring(0, shown.length() - 1);
-                    }
-                    shown = shown + "...";
-                }
+                String shown = Theme.fit(font, name, w - 18 - cw - 12);
                 g.drawString(font, Component.literal(shown), x + 18, ry, Theme.C_TEXT, !Theme.lightSurface());
                 g.drawString(font, Component.literal(countStr), x + w - cw - 6, ry,
                     Theme.C_HEADING, !Theme.lightSurface());

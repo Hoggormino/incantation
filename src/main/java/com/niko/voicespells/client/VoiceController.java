@@ -415,6 +415,15 @@ public final class VoiceController {
     private static final long[] LATENCY_BUF  = new long[LATENCY_WINDOW];
     private static int  latencyIdx = 0;
     private static int  latencySize = 0;
+    /** Guards the three fields above, and nothing else.
+     *
+     *  <p>They used to be guarded by the VoiceController class monitor, via {@code static
+     *  synchronized}. So did {@link #syncCapture()}, which closes the old microphone while
+     *  holding it — and closing joins the capture thread, for up to half a second. Two unrelated
+     *  concerns on one lock meant that picking a device in the audio settings blocked the audio
+     *  thread inside {@link #recordLatencyNanos} and stalled any frame that drew the Voice Codex.
+     *  Both of these are a handful of array writes; they should never wait on hardware. */
+    private static final Object LATENCY_LOCK = new Object();
     /** Tracks the nanos at which the current utterance's first matching event arrived. Cleared
      *  on utterance boundary. */
     private static volatile long utteranceFirstHeardNanos = 0L;
@@ -424,21 +433,26 @@ public final class VoiceController {
      *  utterance — if you hesitate or say filler before the spell, that time counts. A few
      *  long utterances would skew an arithmetic mean badly; the median gives the typical
      *  cast time you actually feel. Returns -1 when no casts have happened yet. */
-    public static synchronized double averageLatencyMs() {
-        if (latencySize == 0) return -1;
-        long[] sorted = new long[latencySize];
-        System.arraycopy(LATENCY_BUF, 0, sorted, 0, latencySize);
-        java.util.Arrays.sort(sorted);
+    public static double averageLatencyMs() {
+        long[] sorted;
+        synchronized (LATENCY_LOCK) {
+            if (latencySize == 0) return -1;
+            sorted = new long[latencySize];
+            System.arraycopy(LATENCY_BUF, 0, sorted, 0, latencySize);
+        }
+        java.util.Arrays.sort(sorted);   // the copy is ours; sort it outside the lock
         long median = sorted.length % 2 == 1
             ? sorted[sorted.length / 2]
             : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
         return median / 1_000_000.0;
     }
 
-    private static synchronized void recordLatencyNanos(long deltaNanos) {
-        LATENCY_BUF[latencyIdx] = deltaNanos;
-        latencyIdx = (latencyIdx + 1) % LATENCY_WINDOW;
-        if (latencySize < LATENCY_WINDOW) latencySize++;
+    private static void recordLatencyNanos(long deltaNanos) {
+        synchronized (LATENCY_LOCK) {
+            LATENCY_BUF[latencyIdx] = deltaNanos;
+            latencyIdx = (latencyIdx + 1) % LATENCY_WINDOW;
+            if (latencySize < LATENCY_WINDOW) latencySize++;
+        }
     }
 
     /** Re-dispatch the last spell we cast via voice. Bound to the quick-recast keybind so the
@@ -1566,7 +1580,12 @@ public final class VoiceController {
             activeDevice = null;
         }
         resetDeadDeviceWatch();
-        // Outside the monitor: the join below must not block anyone else.
+        // The field swap is done; the join happens with the fields already detached, so anything
+        // that only reads `capture` proceeds immediately. Note that syncCapture() calls this while
+        // holding the same (reentrant) monitor, so the join is NOT actually outside it on that
+        // path - which is correct, since a device swap must not overlap another one. What must
+        // not wait on this join is anything unrelated, which is why the latency window has its
+        // own lock rather than sharing this one.
         if (c != null) c.close();
         // Zero the level with the device. It was only cleared in tickCaptureSuspension(), which
         // does not run on every path that closes the mic — so a screen could keep reporting
