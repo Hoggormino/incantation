@@ -66,7 +66,7 @@ public final class ConfigMoreScreen extends Screen {
 
         StringWidget titleW = new StringWidget(0, 14, width, 9, title, font);
         titleW.alignCenter();
-        titleW.setColor(0xFFFFFF);
+        titleW.setColor(Theme.C_TEXT);
         addRenderableWidget(titleW);
 
         // Back is registered BEFORE the button stack so it wins hit-testing. Widgets are probed
@@ -117,7 +117,7 @@ public final class ConfigMoreScreen extends Screen {
         grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Reload grammar"),
             b -> {
                 VoiceController.onConfigChanged();
-                flashStatus("Grammar reload requested", Theme.F_MATCH);
+                flashStatus("Grammar reload requested", Theme.C_SUCCESS);
             }));
         calibBtn = NeonButton.of(0, 0, colW, 20,
             Component.literal("Calibrate mic (5s)"),
@@ -212,7 +212,7 @@ public final class ConfigMoreScreen extends Screen {
         String suggestion = spellOfTheDay();
         if (!suggestion.isEmpty()) {
             StringWidget sotd = new StringWidget(px, footerY - 24, panelW, 9,
-                Component.literal("Today's spell: " + suggestion), font);
+                Component.literal(Theme.fit(font, "Today's spell: " + suggestion, panelW)), font);
             sotd.alignLeft();
             // C_MUTED, not C_FAINT. This line names a spell and tracks progress toward it, so it
             // is content; the faintest tier is for things whose absence would not be noticed.
@@ -285,7 +285,7 @@ public final class ConfigMoreScreen extends Screen {
 
         if (minecraft != null) {
             minecraft.keyboardHandler.setClipboard(sb.toString());
-            flashStatus("Profile copied to clipboard", Theme.F_MATCH);
+            flashStatus("Profile copied to clipboard", Theme.C_SUCCESS);
         }
     }
 
@@ -298,7 +298,8 @@ public final class ConfigMoreScreen extends Screen {
         }
         String[] lines = raw.split("\\r?\\n");
         if (lines.length == 0 || !lines[0].trim().equals(PROFILE_HEADER)) {
-            flashStatus("Not a VoiceSpells profile (need '" + PROFILE_HEADER + "' header)", Theme.C_DANGER);
+            flashStatus(Theme.fit(font, "Not a VoiceSpells profile (need '"
+            + PROFILE_HEADER + "' header)", panelW), Theme.C_DANGER);
             return;
         }
         VoiceSpellsConfig.Client c = VoiceSpellsConfig.CLIENT;
@@ -319,7 +320,7 @@ public final class ConfigMoreScreen extends Screen {
         VoiceSpellsConfig.saveToDisk();
         VoiceSpellsConfig.refreshCache();
         VoiceController.onConfigChanged();
-        flashStatus("Applied " + applied + " setting(s)", Theme.F_MATCH);
+        flashStatus("Applied " + applied + " setting(s)", Theme.C_SUCCESS);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

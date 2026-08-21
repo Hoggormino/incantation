@@ -129,7 +129,7 @@ public final class DiagnosticsScreen extends Screen {
             flashUntil = 0L;
         } else if (flashUntil > 0) {
             summaryLabel.setMessage(Component.literal("Report copied to clipboard."));
-            summaryLabel.setColor(Theme.F_MATCH);
+            summaryLabel.setColor(Theme.C_SUCCESS);
         }
         // Vanilla backdrop first (blurred world in-game, dirt on the title screen, and it
         // honours the player's Menu Background Blur setting), then our own dim on top so

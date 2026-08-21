@@ -382,7 +382,6 @@ public final class AudioDevicesScreen extends Screen {
         int maxScroll = Math.max(0, total - rowsVisible);
         if (scroll > maxScroll) scroll = maxScroll;
 
-        boolean light = Theme.lightSurface();
         for (int row = 0; row < rowsVisible; row++) {
             int idx = row + scroll;
             if (idx >= total) break;
@@ -407,7 +406,7 @@ public final class AudioDevicesScreen extends Screen {
             if (selected) {
                 Theme.rowSelection(g, listX + 1, ry, listW - 9, ROW, false);
             }
-            if (hovered) Theme.rowHover(g, listX + 1, ry, listW - 10, ROW);
+            if (hovered) Theme.rowHover(g, listX + 1, ry, listW - 9, ROW);
 
             // Everything in a row stops short of the scrollbar's gutter. Vanilla's scroller is
             // 6px and sits at listX + listW - 7, while the verdict was drawn flush to the list's
@@ -421,38 +420,50 @@ public final class AudioDevicesScreen extends Screen {
                     verdictColor(isDefaultRow ? defaultRaw() : raw));
             }
 
-            String label = isDefaultRow
-                ? "System default" + defaultSuffix()
-                : MicCapture.prettyName(raw);
             String mark = selected ? "▸ " : "  ";
             int nameMax = listW - 8 - gutter - verdictW - font.width(mark);
-            Theme.text(g, font, mark + trim(label, nameMax),
-                listX + 4, ry + (ROW - 8) / 2,
-                selected ? Theme.C_HEADING : Theme.C_TEXT);
+            // Truncate the SUFFIX, never the words "System default".
+            //
+            // trim() drops characters from the front, which is right for a device name - the
+            // distinguishing part of "Microphone (2- High Definition Audio Device)" is the tail.
+            // It is exactly wrong for this row, because the front is the only part that says
+            // which row this is. A stock Windows default name overflows nameMax, so the row read
+            // "...gy for Digital Microphones))" with the label itself eaten.
+            String label;
+            if (isDefaultRow) {
+                String suffix = defaultSuffix();
+                int room = nameMax - font.width("System default");
+                label = "System default" + (suffix.isEmpty() ? "" : trim(suffix, room));
+            } else {
+                label = trim(MicCapture.prettyName(raw), nameMax);
+            }
+            Theme.text(g, font, mark + label,
+                listX + 4, ry + (ROW - 8) / 2, Theme.C_TEXT);
 
         }
 
         Theme.listScrollbar(g, listX + listW - 7, listY, listH, total, rowsVisible, scroll);
 
         // Live meter for the mic tab only — there is nothing to measure on the output side.
-        if (!showingOutputs) renderMeter(g, listY + listH + 5, light);
+        if (!showingOutputs) renderMeter(g, listY + listH + 5);
     }
 
     /** The bottom row: either the scan progress, the silence warning, or a live level bar. */
-    private void renderMeter(GuiGraphics g, int y, boolean light) {
+    private void renderMeter(GuiGraphics g, int y) {
         int barX = listX;
         int barW = listW - 116;
         int barH = 8;
 
         if (scanning) {
             String now = scanningNow;
-            Theme.text(g, font, "Testing " + trim(now.isEmpty() ? "devices" : now, barW + 100) + "...",
+            int room = listW - font.width("Testing ") - font.width("...");
+            Theme.text(g, font, "Testing " + trim(now.isEmpty() ? "devices" : now, room) + "...",
                 barX, y, Theme.C_WARN);
             return;
         }
 
         // Track, then fill. Same construction as the HUD meter.
-        g.fill(barX, y, barX + barW, y + barH, light ? 0xFF8B8B8B : 0xFF101010);
+        Theme.well(g, barX, y, barW, barH);
         float level = Math.max(0f, Math.min(1f, VoiceController.audioLevel()));
         int fillW = (int) ((barW - 2) * level);
         if (fillW > 0) {

@@ -46,7 +46,7 @@ public final class LiveMonitorScreen extends Screen {
 
         StringWidget titleW = new StringWidget(0, 14, width, 9, title, font);
         titleW.alignCenter();
-        titleW.setColor(0xFFFFFF);
+        titleW.setColor(Theme.C_TEXT);
         addRenderableWidget(titleW);
 
         // Fills the window, with vanilla's footer button parked at the bottom.
@@ -139,7 +139,7 @@ public final class LiveMonitorScreen extends Screen {
             if (font.width(line) > room) {
                 line = font.plainSubstrByWidth(line, room - font.width("...")) + "...";
             }
-            g.drawString(font, Component.literal(line), listX + 6, rowY, color, true);
+            g.drawString(font, Component.literal(line), listX + 6, rowY, color, !Theme.lightSurface());
             rowY += LINE_H;
         }
     }

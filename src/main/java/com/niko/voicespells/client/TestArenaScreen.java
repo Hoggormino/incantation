@@ -105,12 +105,12 @@ public final class TestArenaScreen extends Screen {
         // cast" because they didn't read the intro. Promote it to a bordered banner with a
         // distinct color so it's hard to miss.
         int discW = panelW - Theme.PAD * 2;
-        int discH = 22;
+        int discH = 24;
         Theme.rowFace(g, x, y, discW, discH);
         g.drawString(font, Component.literal("PRACTICE MODE — spells will NOT actually cast."),
-            x + 8, y + 3, Theme.C_TEXT, !Theme.lightSurface());
+            x + 6, y + 3, Theme.C_TEXT, !Theme.lightSurface());
         g.drawString(font, Component.literal("Close this screen to cast for real."),
-            x + 8, y + 13, Theme.C_MUTED, !Theme.lightSurface());
+            x + 6, y + 13, Theme.C_MUTED, !Theme.lightSurface());
         y += discH + 6;
 
         // Hard-warn if the player isn't in a world: capture is paused there, so nothing on
@@ -120,11 +120,11 @@ public final class TestArenaScreen extends Screen {
             int bannerW = panelW - Theme.PAD * 2;
             int bannerH = 24;
             Theme.rowFace(g, x, y, bannerW, bannerH);
-            g.drawString(font, Component.literal("⚠ Open a world first."), x + 6, y + 4,
+            g.drawString(font, Component.literal("⚠ Open a world first."), x + 6, y + 3,
                 Theme.C_DANGER, !Theme.lightSurface());
             g.drawString(font,
                 Component.literal("Recognition only runs in-game, so nothing fires here."),
-                x + 6, y + 14, Theme.C_MUTED, !Theme.lightSurface());
+                x + 6, y + 13, Theme.C_MUTED, !Theme.lightSurface());
             y += bannerH + 8;
         }
 
@@ -143,10 +143,11 @@ public final class TestArenaScreen extends Screen {
         // to attempt something specific rather than just stare at the meter.
         String suggestion = sessionSuggestion();
         if (!suggestion.isEmpty()) {
-            g.drawString(font, Component.literal("Try saying: "), x, y, Theme.C_FAINT, !Theme.lightSurface());
             int prefixW = font.width("Try saying: ");
-            g.drawString(font, Component.literal(suggestion), x + prefixW, y,
-                Theme.C_TEXT, !Theme.lightSurface());
+            g.drawString(font, Component.literal("Try saying: "), x, y, Theme.C_MUTED, !Theme.lightSurface());
+            g.drawString(font,
+                Component.literal(Theme.fit(font, suggestion, panelW - Theme.PAD * 2 - prefixW)),
+                x + prefixW, y, Theme.C_TEXT, !Theme.lightSurface());
             y += 14;
         }
 
@@ -161,7 +162,7 @@ public final class TestArenaScreen extends Screen {
         // On a vanilla button face, like a setting on the config screen. These two lines are the
         // screen's live readouts and were bare text sitting on the backdrop.
         Theme.rowFace(g, x, y - 3, meterW, 15);
-        g.drawString(font, Component.literal("Last heard:  "), x + 4, y, Theme.C_FAINT, !Theme.lightSurface());
+        g.drawString(font, Component.literal("Last heard:  "), x + 6, y, Theme.C_MUTED, !Theme.lightSurface());
         g.drawString(font, Component.literal(last),
             x + 4 + labelW, y, Theme.C_TEXT, !Theme.lightSurface());
         y += 17;
@@ -173,7 +174,7 @@ public final class TestArenaScreen extends Screen {
             + "    Mic: " + mic;
         Theme.rowFace(g, x, y - 3, meterW, 15);
         g.drawString(font, Component.literal(Theme.fit(font, statusLine, meterW - 8)), x + 4, y,
-            Theme.C_FAINT, !Theme.lightSurface());
+            Theme.C_TEXT, !Theme.lightSurface());
         y += 18;
 
         // Recent recognition list — same source as the Live Monitor, narrower view. Entries

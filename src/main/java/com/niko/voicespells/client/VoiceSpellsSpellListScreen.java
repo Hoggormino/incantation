@@ -83,7 +83,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
 
         StringWidget titleW = new StringWidget(0, 14, width, 9, title, font);
         titleW.alignCenter();
-        titleW.setColor(0xFFFFFF);
+        titleW.setColor(Theme.C_TEXT);
         addRenderableWidget(titleW);
 
         int controlsY = py;
@@ -345,12 +345,17 @@ public final class VoiceSpellsSpellListScreen extends Screen {
                 // else-if, hovering a selected row erased the very indicator that says it is
                 // selected; vanilla draws the two independently.
                 if (hov) {
-                    g.fill(x + 1, ry, contentRight, ry + ROW_H, 0x40FFFFFF);
+                    // Outline, not a translucent white wash. The wash lifted rowSelection's
+                    // opaque black interior to a muddy grey and computed differently over a
+                    // bright sky than in a cave - the argument written up on Theme.rowSelection.
+                    // Skipped when selected, because this list passes isFocused() to
+                    // rowSelection and a grey outline would overwrite the white focus one.
+                    if (!sel) Theme.rowHover(g, x + 1, ry, contentRight - (x + 1), ROW_H);
                     hoveredRow = i;
                 }
                 String id = r.id();
                 int idW = font.width(id);
-                int textColor = (hov || sel) ? 0xFFFFFFFF : Theme.C_TEXT;
+                int textColor = Theme.C_TEXT;   // hover and selection are carried by the row, not the text
                 g.drawString(font, Component.literal(id), x + 6, ry + 2, textColor, !Theme.lightSurface());
                 int avail = (contentRight - x) - idW - 14;
                 if (avail > 30) {

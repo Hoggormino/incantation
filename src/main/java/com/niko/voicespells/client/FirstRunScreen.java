@@ -383,7 +383,6 @@ public final class FirstRunScreen extends Screen {
         int h = 24;
         g.fill(x, y, x + w, y + h, Theme.C_INSET);
         // Left-edge state bar: neon when good, faint otherwise.
-        g.fill(x + 1, y + 1, x + 3, y + h - 1, good ? Theme.F_MATCH : Theme.C_FAINT);
         // Both strings are fitted to the pill. The value used to be drawn unclipped, and
         // VoiceController.statusLine() can return "ERROR no Vosk model - see chat", which is
         // roughly twice a pill wide at any window size - so it painted straight across the

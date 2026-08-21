@@ -168,7 +168,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         titleW.alignCenter();
         // On a panelless screen the backdrop is the blurred world, so the title has to be white
         // and shadowed like vanilla's; on a container panel it is the panel's dark text tone.
-        titleW.setColor(0xFFFFFF);   // white over the blurred world, like vanilla's
+        titleW.setColor(Theme.C_TEXT);   // white over the blurred world, like vanilla's
         addRenderableWidget(titleW);
 
         // --- Tab bar ---
@@ -702,7 +702,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             Theme.tab(g, getX(), getY(), width, height, sel, isHoveredOrFocused());
             int ty = getY() + (height - 8) / 2 + (sel ? 0 : 3) - 1;
             g.drawCenteredString(net.minecraft.client.Minecraft.getInstance().font, getMessage(),
-                getX() + width / 2, ty, sel ? 0xFFFFFFFF : 0xFFA0A0A0);
+                getX() + width / 2, ty, sel ? Theme.C_TEXT : Theme.C_MUTED);
         }
     }
 

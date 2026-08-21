@@ -112,22 +112,25 @@ public final class VoiceCodexScreen extends Screen {
         int cardH = 70;
         Theme.well(g, x, y, colW, cardH);
 
-        // Row 1: section header + tier
-        g.drawString(font, Component.literal("VOICE CASTING"), x + 8, y + 5,
-            Theme.C_FAINT, !Theme.lightSurface());
+        // Row 1: section header + tier. The right-hand value is measured FIRST so the left-hand
+        // label can be trimmed to what it leaves. Below about a 400px window these two ran
+        // straight through each other and the row read "VOICE CASTIier: Adept" - the same
+        // collision the stat rows below already solve.
         String tierLabel = "Tier: " + currentTier;
         int tierW = font.width(tierLabel);
+        g.drawString(font, Component.literal(Theme.fit(font, "VOICE CASTING", colW - tierW - 14)),
+            x + 8, y + 5, Theme.C_MUTED, !Theme.lightSurface());
         g.drawString(font, Component.literal(tierLabel),
             x + colW - tierW - 8, y + 5, Theme.C_TEXT, !Theme.lightSurface());
 
-        // Row 2: count + next
-        g.drawString(font, Component.literal(total + " casts"),
-            x + 8, y + 18, Theme.C_TEXT, !Theme.lightSurface());
+        // Row 2: count + next, same rule.
         String nextLabel = (total >= 1000) ? "max tier reached"
             : "next: " + mileNames[nextIdx] + " (" + next + ")";
         int nextW = font.width(nextLabel);
+        g.drawString(font, Component.literal(Theme.fit(font, total + " casts", colW - nextW - 14)),
+            x + 8, y + 18, Theme.C_TEXT, !Theme.lightSurface());
         g.drawString(font, Component.literal(nextLabel),
-            x + colW - nextW - 8, y + 18, Theme.C_FAINT, !Theme.lightSurface());
+            x + colW - nextW - 8, y + 18, Theme.C_MUTED, !Theme.lightSurface());
 
         // Row 3: progress bar
         int barX = x + 8;
@@ -138,10 +141,6 @@ public final class VoiceCodexScreen extends Screen {
         int fillW = (int) ((double) progress / next * (barW - 2));
         if (fillW > 0) {
             g.fill(barX + 1, barY + 1, barX + 1 + fillW, barY + barH - 1, Theme.C_SUCCESS);
-            if (fillW > 1) {
-                g.fill(barX + fillW, barY + 1, barX + 1 + fillW, barY + barH - 1,
-                    Theme.C_TEXT);
-            }
         }
 
         // Row 4: milestone badges — green ✓ for earned, accent ▶ for next, muted ○ for upcoming.
@@ -152,7 +151,7 @@ public final class VoiceCodexScreen extends Screen {
             boolean reached = total >= mileVals[i];
             boolean isNext  = (i == nextIdx) && !reached;
             String mark  = reached ? "✓" : (isNext ? "▶" : "○");
-            int color    = reached ? Theme.F_MATCH
+            int color    = reached ? Theme.C_SUCCESS
                          : isNext  ? Theme.C_TEXT
                                    : Theme.C_FAINT;
             g.drawString(font, Component.literal(mark + " " + mileVals[i]), bx, badgeY,
@@ -246,7 +245,7 @@ public final class VoiceCodexScreen extends Screen {
         if (y + 8 > rowsFloor) return;
         // The rows are drawn inset inside the stats well, so the column they share is narrower
         // than the well by that inset on both sides.
-        int colW = panelW / 2 - Theme.PAD - 6 - 16;
+        int colW = rowWidth;
 
         // The row sits on a vanilla button face, the same surface the config screen's settings
         // use. That screen is built from real widgets and these rows were bare drawString onto a
@@ -279,16 +278,18 @@ public final class VoiceCodexScreen extends Screen {
             Theme.well(g, x, y, w, h);
 
             // Header drawn inside the widget so it's clear of the accent rule glow up top.
-            g.drawString(font, Component.literal("MOST CAST"), x + 4, y + 4,
-                Theme.C_FAINT, !Theme.lightSurface());
-            g.fill(x + 4, y + 14, x + w - 4, y + 15, Theme.C_DIVIDER);
+            // No rule under it. It was the only horizontal separator in twelve screens, and the
+            // 18px headerOffset below already supplies the gap it was drawing. x+8/y+5 matches
+            // "VOICE CASTING" in the card to its left, which sat 4px further in and 1px lower.
+            g.drawString(font, Component.literal("MOST CAST"), x + 8, y + 5,
+                Theme.C_MUTED, !Theme.lightSurface());
 
             int headerOffset = 18;
             int rowsArea = h - 4 - headerOffset;
             List<Map.Entry<String, Integer>> top = VoiceStats.topSpells(Math.max(1, rowsArea / ROW_H));
             if (top.isEmpty()) {
                 g.drawString(font, Component.literal("(no casts yet — speak a spell!)"),
-                    x + 6, y + headerOffset + 2, Theme.C_FAINT, !Theme.lightSurface());
+                    x + 8, y + headerOffset + 2, Theme.C_FAINT, !Theme.lightSurface());
                 return;
             }
             int ry = y + headerOffset;
@@ -298,15 +299,15 @@ public final class VoiceCodexScreen extends Screen {
                 String name = (info.name == null || info.name.isEmpty())
                     ? shortId(e.getKey()) : info.name;
                 String countStr = "× " + e.getValue();
-                g.drawString(font, Component.literal(rank + "."), x + 4, ry,
-                    Theme.C_FAINT, !Theme.lightSurface());
+                g.drawString(font, Component.literal(rank + "."), x + 8, ry,
+                    Theme.C_MUTED, !Theme.lightSurface());
                 int cw = font.width(countStr);
                 // Trim to what the count leaves. Long names ("Pillar of the Resounding Earth")
                 // were drawn full-length straight through the right-aligned "x 22".
-                String shown = Theme.fit(font, name, w - 18 - cw - 12);
-                g.drawString(font, Component.literal(shown), x + 18, ry, Theme.C_TEXT, !Theme.lightSurface());
-                g.drawString(font, Component.literal(countStr), x + w - cw - 6, ry,
-                    Theme.C_HEADING, !Theme.lightSurface());
+                String shown = Theme.fit(font, name, w - 22 - cw - 14);
+                g.drawString(font, Component.literal(shown), x + 22, ry, Theme.C_TEXT, !Theme.lightSurface());
+                g.drawString(font, Component.literal(countStr), x + w - cw - 8, ry,
+                    Theme.C_TEXT, !Theme.lightSurface());
                 ry += ROW_H;
                 rank++;
             }

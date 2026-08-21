@@ -160,7 +160,9 @@ public final class HelpScreen extends Screen {
         // bare text on the backdrop - the guide is the screen a confused player is sent to, and
         // it was the one that looked least like part of the mod.
         int bodyTop = py + Theme.HEADER_H + 18;
-        Theme.well(g, px + 8, bodyTop, panelW - 16, (py + panelH - 24) - bodyTop);
+        // Inset PAD, matching the copy inside it, and stopping at btnY - GAP_SM so the frame does
+        // not run under the Prev/Next/Back row - it was crossing 4px into the button tops.
+        Theme.well(g, px + Theme.PAD, bodyTop, panelW - Theme.PAD * 2, (py + panelH - 34) - bodyTop);
 
         super.render(g, mouseX, mouseY, partial);
 
@@ -186,7 +188,7 @@ public final class HelpScreen extends Screen {
         // to draw a line that would still collide — losing the tail of a page is bad, but drawing
         // it on top of the navigation is worse, because that is how the player leaves.
         String[] lines = PAGES[page];
-        int x = px + Theme.PAD;
+        int x = px + Theme.PAD + 8;
         int y = py + Theme.HEADER_H + 24;
         int bodyLimit = py + panelH - 28 - 4;          // top of the button row, minus breathing room
         int bodyCount = Math.max(1, lines.length - 1);

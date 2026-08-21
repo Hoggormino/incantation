@@ -168,7 +168,9 @@ public final class CreditsScreen extends Screen {
         // Same well the guide uses - these two are the mod's only pages of flat prose and they
         // should read as one pair.
         int bodyTop = py + Theme.HEADER_H + 18;
-        Theme.well(g, px + 8, bodyTop, panelW - 16, (py + panelH - 24) - bodyTop);
+        // Inset PAD, matching the copy inside it, and stopping at btnY - GAP_SM so the frame does
+        // not run under the Prev/Next/Back row - it was crossing 4px into the button tops.
+        Theme.well(g, px + Theme.PAD, bodyTop, panelW - Theme.PAD * 2, (py + panelH - 34) - bodyTop);
 
         super.render(g, mouseX, mouseY, partial);
 
@@ -181,7 +183,7 @@ public final class CreditsScreen extends Screen {
         g.drawCenteredString(font, "Page " + (idx + 1) + " of " + pages.size(),
             px + panelW / 2, py + Theme.HEADER_H + 8, Theme.C_MUTED);
 
-        int x = px + Theme.PAD;
+        int x = px + Theme.PAD + 8;
         int y = py + Theme.HEADER_H + 24;
         int bodyLimit = py + panelH - 28 - 4;          // top of the button row, minus breathing room
 
@@ -194,7 +196,7 @@ public final class CreditsScreen extends Screen {
         int rows = Math.max(1, current.rows().size());
         int lineH = Math.max(8, Math.min(11, (bodyLimit - y) / rows));
 
-        int innerW = panelW - Theme.PAD * 2;
+        int innerW = panelW - Theme.PAD * 2 - 16;
         for (int i = 0; i < current.rows().size(); i++) {
             int ly = y + i * lineH;
             if (ly + 8 > bodyLimit) break;
