@@ -259,47 +259,10 @@ public final class Theme {
     // headerY / footerY are still passed and still meaningful: screens position content
     // against them. Nothing is drawn at those rows any more.
 
-    /** One of vanilla's header/footer rules: a dark line with a soft highlight under it. */
-    /**
-     * The standard chrome every screen in the mod wears: vanilla's backdrop, a dim over it, and
-     * the header / footer rules.
-     *
-     * <p>Screens used to call {@code panel()} with their old panel bounds, and in the panelless
-     * style that drew the two rules wherever a notional panel would have been — which on a screen
-     * whose content is a centred block put them at apparently random heights, reading as two
-     * blurry lines floating in the background. Passing the header and footer positions the screen
-     * actually uses ties the rules to the content.
-     *
-     * @param headerY y of the rule under the title
-     * @param footerY y of the rule above the button row
-     */
-    public static void screenChrome(net.minecraft.client.gui.screens.Screen screen, GuiGraphics g,
-                                    int mouseX, int mouseY, float partialTick,
-                                    int headerY, int footerY) {
-        ground(screen, g, mouseX, mouseY, partialTick);
-        // No separators - see the note above screenChrome.
-    }
-
-    /**
-     * The same, with the rules spanning the CONTENT rather than the window.
-     *
-     * <p>A separator exists to band a header, a body and a footer. Drawn edge to edge across a
-     * screen whose content is a narrow centred column, it bands nothing - it just draws two lines
-     * through empty scenery, which is the "floating lines" this chrome was rewritten to stop. It
-     * is also what this file already says it is for: chrome tied to the screen's content and not
-     * to a notional panel.
-     *
-     * <p>Vanilla's own options screens do run their separators edge to edge, but their content is
-     * edge to edge too. The rule that transfers is "the separator matches the content", not "the
-     * separator is 100% wide". A screen whose content really does fill the window passes its own
-     * full width here and gets the vanilla result.
-     */
-    public static void screenChrome(net.minecraft.client.gui.screens.Screen screen, GuiGraphics g,
-                                    int mouseX, int mouseY, float partialTick,
-                                    int headerY, int footerY, int contentX, int contentW) {
-        ground(screen, g, mouseX, mouseY, partialTick);
-        // No separators; headerY/footerY remain as LAYOUT anchors for the caller.
-    }
+    // screenChrome() went with the separators. Once nothing was drawn at headerY or footerY it
+    // was a wrapper around ground() that ignored four of its six parameters, so every screen
+    // calls ground() directly. Screens still compute those rows; they are layout anchors now,
+    // not chrome.
 
 
 

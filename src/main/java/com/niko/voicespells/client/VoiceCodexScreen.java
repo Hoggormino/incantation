@@ -82,8 +82,7 @@ public final class VoiceCodexScreen extends Screen {
         // landed well above the title and well below the last button, reading as two blurry lines
         // floating in the background. Anchoring them just under the title and just above the
         // button row makes them frame the content, which is what a rule is for.
-        Theme.screenChrome(this, g, mouseX, mouseY, partial,
-            py + 22, py + panelH - 34, px, panelW);
+        Theme.ground(this, g, mouseX, mouseY, partial);
 
         super.render(g, mouseX, mouseY, partial);
 

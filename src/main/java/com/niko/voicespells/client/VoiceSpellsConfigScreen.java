@@ -187,7 +187,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // sparse is the same thing: with only eight controls on screen, a five-pixel disagreement
         // is the most visible feature of the layout. One metric, one alignment.
         // Three tabs share the grid width, on the same gutter as everything else.
-        tabRowY = tabsY; tabRowX = gridX; tabRowW = gridW;
         // The last tab absorbs the division remainder, exactly as the "More..." button does in
         // the footer. Three equal thirds of 310 leave 2px over, so the right edge of "Behaviour"
         // stopped 2px short of the grid it is supposed to span - visible as a notch against the
@@ -327,8 +326,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private int rowPitch = GRID_ROW;
     private int placed;
 
-    /** Tab row geometry, kept so render() can draw the selection rule under it. */
-    private int tabRowY, tabRowX, tabRowW, tabColW;
+    /** Tab width. The rest of the row geometry died with the selection veil that read it. */
+    private int tabColW;
 
     /** Place a control at grid slot {@code i}, left column for even, right for odd.
      *

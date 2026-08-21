@@ -255,7 +255,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         // honours the player's Menu Background Blur setting), then our own dim on top so
         // the panel still reads. Painting only a flat scrim, as this did before, opted out
         // of all of that and was a large part of why the screens felt foreign.
-        Theme.screenChrome(this, g, mouseX, mouseY, partial, headerRuleY, footerRuleY, px, panelW);
+        Theme.ground(this, g, mouseX, mouseY, partial);
         tooltipId = null;
         super.render(g, mouseX, mouseY, partial);
 
