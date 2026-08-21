@@ -135,10 +135,7 @@ public final class LiveMonitorScreen extends Screen {
             // the heard phrase at 24 chars; the outcome appended after it carries a spell's
             // display name, which is now localised and can be far longer than the English one -
             // so the assembled row ran off the well and off the screen with nothing clipping it.
-            int room = listW - 12;
-            if (font.width(line) > room) {
-                line = font.plainSubstrByWidth(line, room - font.width("...")) + "...";
-            }
+            line = Theme.fit(font, line, listW - 12);
             g.drawString(font, Component.literal(line), listX + 6, rowY, color, !Theme.lightSurface());
             rowY += LINE_H;
         }
@@ -158,7 +155,7 @@ public final class LiveMonitorScreen extends Screen {
             int barH = Math.max(1, (int) (data[i] * (h - 4)));
             int barY = y + h - 2 - barH;
             g.fill(barX, barY, Math.max(barX + 1, barNextX - 1), y + h - 2,
-                i > bars * 3 / 4 ? 0xFFFFFFFF : 0xFFA0A0A0);
+                i > bars * 3 / 4 ? Theme.C_TEXT : Theme.C_MUTED);
         }
     }
 

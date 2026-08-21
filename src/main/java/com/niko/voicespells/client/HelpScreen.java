@@ -162,7 +162,8 @@ public final class HelpScreen extends Screen {
         int bodyTop = py + Theme.HEADER_H + 18;
         // Inset PAD, matching the copy inside it, and stopping at btnY - GAP_SM so the frame does
         // not run under the Prev/Next/Back row - it was crossing 4px into the button tops.
-        Theme.well(g, px + Theme.PAD, bodyTop, panelW - Theme.PAD * 2, (py + panelH - 34) - bodyTop);
+        int wellBottom = py + panelH - 34;
+        Theme.well(g, px + Theme.PAD, bodyTop, panelW - Theme.PAD * 2, wellBottom - bodyTop);
 
         super.render(g, mouseX, mouseY, partial);
 
@@ -190,7 +191,7 @@ public final class HelpScreen extends Screen {
         String[] lines = PAGES[page];
         int x = px + Theme.PAD + 8;
         int y = py + Theme.HEADER_H + 24;
-        int bodyLimit = py + panelH - 28 - 4;          // top of the button row, minus breathing room
+        int bodyLimit = wellBottom;   // the frame's own inner edge - these must not drift apart
         int bodyCount = Math.max(1, lines.length - 1);
         int avail = bodyLimit - (y + 14);
         int lineH = Math.max(8, Math.min(11, avail / bodyCount));

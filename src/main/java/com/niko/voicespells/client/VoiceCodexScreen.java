@@ -118,7 +118,7 @@ public final class VoiceCodexScreen extends Screen {
         // collision the stat rows below already solve.
         String tierLabel = "Tier: " + currentTier;
         int tierW = font.width(tierLabel);
-        g.drawString(font, Component.literal(Theme.fit(font, "VOICE CASTING", colW - tierW - 14)),
+        g.drawString(font, Component.literal(Theme.fit(font, "VOICE CASTING", colW - tierW - 22)),
             x + 8, y + 5, Theme.C_MUTED, !Theme.lightSurface());
         g.drawString(font, Component.literal(tierLabel),
             x + colW - tierW - 8, y + 5, Theme.C_TEXT, !Theme.lightSurface());
@@ -127,7 +127,7 @@ public final class VoiceCodexScreen extends Screen {
         String nextLabel = (total >= 1000) ? "max tier reached"
             : "next: " + mileNames[nextIdx] + " (" + next + ")";
         int nextW = font.width(nextLabel);
-        g.drawString(font, Component.literal(Theme.fit(font, total + " casts", colW - nextW - 14)),
+        g.drawString(font, Component.literal(Theme.fit(font, total + " casts", colW - nextW - 22)),
             x + 8, y + 18, Theme.C_TEXT, !Theme.lightSurface());
         g.drawString(font, Component.literal(nextLabel),
             x + colW - nextW - 8, y + 18, Theme.C_MUTED, !Theme.lightSurface());

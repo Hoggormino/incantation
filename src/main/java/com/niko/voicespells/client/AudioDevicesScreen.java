@@ -456,8 +456,11 @@ public final class AudioDevicesScreen extends Screen {
 
         if (scanning) {
             String now = scanningNow;
-            int room = listW - font.width("Testing ") - font.width("...");
-            Theme.text(g, font, "Testing " + trim(now.isEmpty() ? "devices" : now, room) + "...",
+            // Theme.fit, not trim(): trim() keeps the TAIL and prepends its own ellipsis,
+            // which is right for a device row and wrong here - "Testing " + trim(..) + "..."
+            // rendered as "Testing ...Audio Device)...", ellipsised at both ends.
+            int room = listW - font.width("Testing ");
+            Theme.text(g, font, "Testing " + Theme.fit(font, now.isEmpty() ? "devices" : now, room),
                 barX, y, Theme.C_WARN);
             return;
         }

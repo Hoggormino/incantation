@@ -157,14 +157,14 @@ public final class TestArenaScreen extends Screen {
         String last = VoiceController.lastHeard();
         if (last == null || last.isEmpty()) last = "(say something)";
         int labelW = font.width("Last heard:  ");
-        int availW = panelW - Theme.PAD * 2 - labelW;
+        int availW = meterW - labelW - 12;   // 6px inset each side of the face
         last = fitToWidth(last, availW);
         // On a vanilla button face, like a setting on the config screen. These two lines are the
         // screen's live readouts and were bare text sitting on the backdrop.
         Theme.rowFace(g, x, y - 3, meterW, 15);
         g.drawString(font, Component.literal("Last heard:  "), x + 6, y, Theme.C_MUTED, !Theme.lightSurface());
         g.drawString(font, Component.literal(last),
-            x + 4 + labelW, y, Theme.C_TEXT, !Theme.lightSurface());
+            x + 6 + labelW, y, Theme.C_TEXT, !Theme.lightSurface());
         y += 17;
 
         // Status + transmission badges.
@@ -173,7 +173,7 @@ public final class TestArenaScreen extends Screen {
         String statusLine = "Status: " + (status.isEmpty() ? "warming up" : status)
             + "    Mic: " + mic;
         Theme.rowFace(g, x, y - 3, meterW, 15);
-        g.drawString(font, Component.literal(Theme.fit(font, statusLine, meterW - 8)), x + 4, y,
+        g.drawString(font, Component.literal(Theme.fit(font, statusLine, meterW - 12)), x + 6, y,
             Theme.C_TEXT, !Theme.lightSurface());
         y += 18;
 
@@ -238,10 +238,7 @@ public final class TestArenaScreen extends Screen {
                 // the outcome appended after it carries a spell's display name, which is localised
                 // now and can be far longer than the English it was sized against - so a long name
                 // ran out of the well and off the screen with nothing clipping it.
-                int room = meterW - 8;
-                if (font.width(line) > room) {
-                    line = font.plainSubstrByWidth(line, room - font.width("...")) + "...";
-                }
+                line = Theme.fit(font, line, meterW - 8);
                 g.drawString(font, Component.literal(line), x + 4, rowY, color, !Theme.lightSurface());
                 rowY += ROW_H;
                 shown++;

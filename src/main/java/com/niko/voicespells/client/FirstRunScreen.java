@@ -378,11 +378,10 @@ public final class FirstRunScreen extends Screen {
         return Math.max(8, Math.min(11, (limit - y) / Math.max(1, n))) * n;
     }
 
-    /** Status pill: label + value + a left-edge bar that goes neon green when good. */
+    /** Status pill: label above, value below, on a vanilla button face. */
     private void drawPill(GuiGraphics g, int x, int y, int w, String label, String value, boolean good) {
         int h = 24;
-        g.fill(x, y, x + w, y + h, Theme.C_INSET);
-        // Left-edge state bar: neon when good, faint otherwise.
+        Theme.rowFace(g, x, y, w, h);
         // Both strings are fitted to the pill. The value used to be drawn unclipped, and
         // VoiceController.statusLine() can return "ERROR no Vosk model - see chat", which is
         // roughly twice a pill wide at any window size - so it painted straight across the
@@ -404,7 +403,7 @@ public final class FirstRunScreen extends Screen {
     /** Big live audio meter — dim background, neon fill that grows with the smoothed RMS
      *  level. Same algorithm as the config-screen meter, just bigger. */
     private static void drawAudioMeter(GuiGraphics g, int x, int y, int w, int h) {
-        g.fill(x, y, x + w, y + h, Theme.C_INSET);
+        Theme.well(g, x, y, w, h);
         float level = Math.max(0f, Math.min(1f, VoiceController.audioLevel()));
         int fillW = (int) (level * (w - 4));
         if (fillW > 0) {
