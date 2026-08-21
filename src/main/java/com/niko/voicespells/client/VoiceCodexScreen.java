@@ -296,8 +296,9 @@ public final class VoiceCodexScreen extends Screen {
             int rank = 1;
             for (Map.Entry<String, Integer> e : top) {
                 SpellInfo info = SpellInfo.of(e.getKey());
-                String name = (info.name == null || info.name.isEmpty())
-                    ? shortId(e.getKey()) : info.name;
+                // displayName(), not name - the localised spell name, not the registry path.
+                String dn = info.displayName().getString();
+                String name = (dn == null || dn.isEmpty()) ? shortId(e.getKey()) : dn;
                 String countStr = "× " + e.getValue();
                 g.drawString(font, Component.literal(rank + "."), x + 8, ry,
                     Theme.C_MUTED, !Theme.lightSurface());

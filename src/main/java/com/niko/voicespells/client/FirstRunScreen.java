@@ -283,7 +283,7 @@ public final class FirstRunScreen extends Screen {
         boolean empty = (last == null || last.isEmpty());
         String prefix = "Last heard: ";
         int availW = panelW - Theme.PAD * 2 - font.width(prefix) - font.width("\"\"");
-        String shown = empty ? "(nothing yet)" : "\"" + fitFromRight(last, availW) + "\"";
+        String shown = empty ? "(nothing yet)" : "\"" + Theme.fitFromRight(font, last, availW) + "\"";
         g.drawString(font, Component.literal(prefix + shown), x, y,
             empty ? Theme.C_FAINT : Theme.C_TEXT, !Theme.lightSurface());
     }
@@ -413,15 +413,6 @@ public final class FirstRunScreen extends Screen {
         }
     }
 
-    private String fitFromRight(String s, int maxW) {
-        if (s == null) return "";
-        if (font.width(s) <= maxW) return s;
-        String trimmed = s;
-        while (!trimmed.isEmpty() && font.width("…" + trimmed) > maxW) {
-            trimmed = trimmed.substring(1);
-        }
-        return "…" + trimmed;
-    }
 
     private static String shortId(String id) {
         if (id == null) return "";

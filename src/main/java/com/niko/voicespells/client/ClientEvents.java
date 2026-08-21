@@ -441,7 +441,8 @@ public final class ClientEvents {
             percent = Math.min(1f, percent);
             int w = mc.getWindow().getGuiScaledWidth();
             int h = mc.getWindow().getGuiScaledHeight();
-            String name = com.niko.voicespells.spells.SpellInfo.of(spellId).name;
+            // displayName(), not name - resolved in the player's own language.
+            String name = com.niko.voicespells.spells.SpellInfo.of(spellId).displayName().getString();
             if (name == null || name.isEmpty()) {
                 int colon = spellId.indexOf(':');
                 name = (colon >= 0 ? spellId.substring(colon + 1) : spellId).replace('_', ' ');

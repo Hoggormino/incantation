@@ -522,7 +522,7 @@ public final class AudioDevicesScreen extends Screen {
     private String trim(String s, int maxWidth) {
         if (maxWidth <= 0) return "";
         if (font.width(s) <= maxWidth) return s;
-        String ell = "...";
+        String ell = Theme.ELLIPSIS;
         int budget = maxWidth - font.width(ell);
         if (budget <= 0) return "";
         int lo = 0;

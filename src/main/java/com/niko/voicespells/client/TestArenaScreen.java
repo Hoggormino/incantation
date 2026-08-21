@@ -32,7 +32,9 @@ public final class TestArenaScreen extends Screen {
     // fields, not these constants.
     private static final int PANEL_W_PREF = 460;
     private static final int PANEL_H_PREF = 308;
-    private static final int ROW_H   = 12;
+    /** Matches LiveMonitorScreen.LINE_H. The two screens render the same recognition feed and
+     *  were 1px apart, which reads as two different lists of the same thing. */
+    private static final int ROW_H   = 11;
 
     private final Screen parent;
     /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
@@ -158,7 +160,7 @@ public final class TestArenaScreen extends Screen {
         if (last == null || last.isEmpty()) last = "(say something)";
         int labelW = font.width("Last heard:  ");
         int availW = meterW - labelW - 12;   // 6px inset each side of the face
-        last = fitToWidth(last, availW);
+        last = Theme.fitFromRight(font, last, availW);
         // On a vanilla button face, like a setting on the config screen. These two lines are the
         // screen's live readouts and were bare text sitting on the backdrop.
         Theme.rowFace(g, x, y - 3, meterW, 15);
@@ -220,8 +222,10 @@ public final class TestArenaScreen extends Screen {
                     String spellId = sp > 0 ? raw.substring(0, sp) : raw;
                     String reason  = sp > 0 ? raw.substring(sp + 1) : "";
                     SpellInfo info = SpellInfo.of(spellId);
-                    String name = (info.name != null && !info.name.isEmpty())
-                        ? info.name : prettyId(spellId);
+                    // displayName(), not name: the first resolves Iron's Spells' own translation key in
+                    // the player's language, the second is only a prettified registry path.
+                    String dn = info.displayName().getString();
+                    String name = (dn != null && !dn.isEmpty()) ? dn : prettyId(spellId);
                     if (reason.isEmpty()) {
                         outcome = "→ " + name + "  CAST";
                         color = Theme.F_MATCH;
@@ -257,7 +261,8 @@ public final class TestArenaScreen extends Screen {
         int idx = (int) (openedAtNanos & 0x7FFFFFFF) % all.size();
         SpellIndex.SpellRow row = all.get(idx);
         SpellInfo info = SpellInfo.of(row.id());
-        return info.name == null || info.name.isEmpty() ? prettyId(row.id()) : info.name;
+        String dn = info.displayName().getString();
+        return (dn == null || dn.isEmpty()) ? prettyId(row.id()) : dn;
     }
 
     private static String prettyId(String id) {
@@ -269,16 +274,4 @@ public final class TestArenaScreen extends Screen {
         return s == null ? "" : (s.length() <= max ? s : s.substring(0, max - 1) + "…");
     }
 
-    /** Trim {@code s} (from the LEFT, preserving the most recent words) so it renders in
-     *  {@code maxW} pixels. Most recent text is what the player cares about — when Vosk
-     *  keeps appending words to a long utterance, the tail is the live feedback. */
-    private String fitToWidth(String s, int maxW) {
-        if (s == null) return "";
-        if (font.width(s) <= maxW) return s;
-        String trimmed = s;
-        while (!trimmed.isEmpty() && font.width("…" + trimmed) > maxW) {
-            trimmed = trimmed.substring(1);
-        }
-        return "…" + trimmed;
-    }
 }

@@ -63,7 +63,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
     /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
     private int px, py, panelW;
     /** Header / footer rule positions for the shared chrome. */
-    private int headerRuleY, footerRuleY;
+    private int footerRuleY;
 
     public VoiceSpellsSpellListScreen(Screen parent) {
         super(Component.translatable("voicespells.spelllist.title"));
@@ -79,7 +79,6 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         panelW = Math.min(560, width - 40);
         px = (width - panelW) / 2;
         py = 46;
-        headerRuleY = 32;
 
         StringWidget titleW = new StringWidget(0, 14, width, 9, title, font);
         titleW.alignCenter();

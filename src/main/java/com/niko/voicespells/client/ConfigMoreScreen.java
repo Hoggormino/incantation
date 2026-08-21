@@ -33,8 +33,9 @@ public final class ConfigMoreScreen extends Screen {
     private boolean wasCalibrating = false;
     /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
     private int px, py, panelW;
-    /** Header / footer rule positions for the shared chrome. */
-    private int headerY, footerY;
+    /** Y of the footer row. There is no header rule any more - the title sits straight on the
+     *  backdrop, the way a vanilla options screen does. */
+    private int footerY;
     /** Breathing room between the button grid and the well drawn around it. */
     private static final int GRID_PAD = 6;
     /** The well behind the action grid, computed in {@link #init()} from the grid that was
@@ -58,10 +59,9 @@ public final class ConfigMoreScreen extends Screen {
         px = (width - gridW) / 2;
         panelW = gridW;
         // 42, not 46. Four pixels reclaimed for the button grid - see the stride note below.
-        // The title occupies 14..23 and nothing is drawn at headerY any more, so there is no
-        // chrome between them to clear.
+        // The title occupies 14..23 and nothing is drawn between it and the grid, so there is
+        // no chrome to clear.
         py = 42;
-        headerY = 32;
         footerY = height - 40;
 
         StringWidget titleW = new StringWidget(0, 14, width, 9, title, font);
@@ -388,7 +388,9 @@ public final class ConfigMoreScreen extends Screen {
         String id = VoiceStats.spellOfTheDayId();
         if (id == null || id.isEmpty()) return "";
         com.niko.voicespells.spells.SpellInfo info = com.niko.voicespells.spells.SpellInfo.of(id);
-        String name = info.name == null || info.name.isEmpty() ? id : info.name;
+        // displayName(), not name - the localised spell name, not the registry path.
+        String dn = info.displayName().getString();
+        String name = (dn == null || dn.isEmpty()) ? id : dn;
         int casts = VoiceStats.spellOfTheDayCasts();
         if (casts >= VoiceStats.SOTD_TARGET) {
             return name + "  (✓ challenge complete)";

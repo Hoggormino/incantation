@@ -79,13 +79,17 @@ public final class DiagnosticsScreen extends Screen {
         int btnY = py + panelH - 28;
         int gap  = 6;
         int avail = panelW - Theme.PAD * 2;
-        int btnW = Math.min(96, (avail - gap * 2) / 3);
+        // Share the row, do not cap at 96. The list above spans the full panel, so a capped
+        // footer ended 148px short of it and read as a different screen's button bar. Same
+        // construction the config screen's footer uses.
+        int btnW = (avail - gap * 2) / 3;
         int x0 = px + Theme.PAD;
         addRenderableWidget(NeonButton.of(x0, btnY, btnW, 20,
             Component.literal("Re-run"), b -> rerun()));
         addRenderableWidget(NeonButton.of(x0 + btnW + gap, btnY, btnW, 20,
             Component.literal("Copy report"), b -> copyReport()));
-        addRenderableWidget(NeonButton.of(x0 + (btnW + gap) * 2, btnY, btnW, 20,
+        // The last button absorbs the division remainder so the row ends flush.
+        addRenderableWidget(NeonButton.of(x0 + (btnW + gap) * 2, btnY, avail - (btnW + gap) * 2, 20,
             CommonComponents.GUI_BACK, b -> onClose()));
     }
 
@@ -171,15 +175,12 @@ public final class DiagnosticsScreen extends Screen {
             String pill = "[" + r.status() + "]";
             int pillW = font.width(pill);
             g.drawString(font, Component.literal(pill), x, y + 1, statusColor, !Theme.lightSurface());
-            // Left-edge accent bar in the status colour for quick scan.
-            // Name in main text colour.
-            g.drawString(font, Component.literal(r.name()),
+            // Both lines fitted. The caller passes w so the row stops clear of the scrollbar,
+            // but only the detail was ever clamped - the name was drawn unclipped, so a longer
+            // or localised check name slid straight under the bar.
+            g.drawString(font, Component.literal(Theme.fit(font, r.name(), w - pillW - 10)),
                 x + pillW + 6, y + 1, Theme.C_TEXT, !Theme.lightSurface());
-            // Detail in muted, on the next line.
-            String detail = r.detail();
-            if (font.width(detail) > w - 12) {
-                detail = font.plainSubstrByWidth(detail, w - 16) + "…";
-            }
+            String detail = Theme.fit(font, r.detail(), w - 12);
             g.drawString(font, Component.literal(detail),
                 x + 4, y + 12, Theme.C_MUTED, !Theme.lightSurface());
         }

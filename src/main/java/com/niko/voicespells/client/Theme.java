@@ -23,7 +23,7 @@ import net.minecraft.client.gui.GuiGraphics;
  *
  * <p>What is left is a palette, a few layout constants, and the handful of draws that genuinely
  * have no vanilla counterpart. Screens call {@link #ground} first, {@link #well} for a recessed
- * surface, and {@link #text} / {@link #title} for copy.
+ * surface, and {@link #text} for copy.
  */
 public final class Theme {
     private Theme() {}
@@ -31,7 +31,6 @@ public final class Theme {
     // ---- Layout ------------------------------------------------------------
     public static final int PAD       = 16;
     public static final int HEADER_H  = 32;
-    public static final int ROW_H     = 24;
     public static final int GAP_SM    = 6;
     public static final int GAP_MD    = 10;
 
@@ -56,14 +55,40 @@ public final class Theme {
         return Math.min(preferred, max);
     }
 
+    /** The one ellipsis in the mod. A single glyph, not three periods: it is narrower, which
+     *  matters in precisely the cramped rows that need truncating, and it was already what most
+     *  of the code used - the two spellings were appearing 17px apart on one screen. */
+    public static final String ELLIPSIS = "…";
+
+    /**
+     * Truncate from the LEFT, keeping the tail.
+     *
+     * <p>The twin of {@link #fit}, and the right rule when the newest text is the useful text -
+     * a Vosk partial that keeps growing, or a device name whose distinguishing part is the end.
+     * It lived as a private method in two screens under two different names with byte-identical
+     * bodies, so the left-trim rule had no home beside the right-trim one.
+     */
+    public static String fitFromRight(net.minecraft.client.gui.Font font, String s, int room) {
+        if (s == null || s.isEmpty()) return "";
+        if (room <= 0) return "";
+        if (font.width(s) <= room) return s;
+        int ell = font.width(ELLIPSIS);
+        if (room <= ell) return "";
+        String trimmed = s;
+        while (!trimmed.isEmpty() && font.width(ELLIPSIS + trimmed) > room) {
+            trimmed = trimmed.substring(1);
+        }
+        return ELLIPSIS + trimmed;
+    }
+
     /**
      * Truncate a string to {@code room} pixels, with an ellipsis when it had to be cut. Returns
      * the string unchanged when it already fits.
      *
-     * <p>Here because three screens had grown their own copy — two of them a character-at-a-time
-     * shrink loop that re-measures the whole string on every iteration. This is the single place
-     * that decides what a truncated label looks like, which is the only way the mod's screens end
-     * up cutting text the same way.
+     * <p>Here because several screens had grown their own copy — some of them a
+     * character-at-a-time shrink loop that re-measures the whole string on every iteration. This
+     * is the single place that decides what a truncated label looks like, which is the only way
+     * the mod's screens end up cutting text the same way.
      *
      * <p>Screens that draw their own text should call this rather than relying on a widget to do
      * it: {@code StringWidget} only started scrolling overflowing text in 1.21, so on 1.20.1 the
@@ -73,9 +98,9 @@ public final class Theme {
         if (s == null || s.isEmpty()) return s;
         if (room <= 0) return "";
         if (font.width(s) <= room) return s;
-        int ell = font.width("...");
+        int ell = font.width(ELLIPSIS);
         if (room <= ell) return "";
-        return font.plainSubstrByWidth(s, room - ell) + "...";
+        return font.plainSubstrByWidth(s, room - ell) + ELLIPSIS;
     }
 
     // ---- Surfaces -----------------------------------------------------------
@@ -274,7 +299,7 @@ public final class Theme {
      * 1.21.1 takes (graphics, mouseX, mouseY, partialTick); 1.20.1 takes just (graphics).
      * Verified with javap against neoforge-21.1.219-merged and forge-1.20.1-47.4.10-merged.
      */
-    public static void background(net.minecraft.client.gui.screens.Screen screen, GuiGraphics g,
+    private static void background(net.minecraft.client.gui.screens.Screen screen, GuiGraphics g,
                                   int mouseX, int mouseY, float partialTick) {
 //? if forge {
 /*        screen.renderBackground(g);
@@ -362,10 +387,6 @@ public final class Theme {
     }
 
     /** Centred, shadowed — vanilla's own title treatment. */
-    public static void title(GuiGraphics g, net.minecraft.client.gui.Font font, String s,
-                             int cx, int y, int color) {
-        g.drawCenteredString(font, s, cx, y, color);
-    }
 
     /**
      * A selected list row, exactly as {@code AbstractSelectionList.renderSelection} draws one:
@@ -389,8 +410,8 @@ public final class Theme {
      *
      * <p>Replaces a translucent white wash. {@link #rowSelection} already carries the argument
      * against that treatment — it computes differently over a bright sky than over a cave, and
-     * fades out exactly when the backdrop is busiest — and the wash had survived in the device
-     * picker as the last instance of it. An outline reads the same on any ground, and leaving the
+     * fades out exactly when the backdrop is busiest. The device picker was converted first; the
+     * spell list held the last instance of it. An outline reads the same on any ground, and leaving the
      * interior alone keeps hover and selection distinguishable.
      */
     public static void rowHover(GuiGraphics g, int x, int y, int w, int h) {
