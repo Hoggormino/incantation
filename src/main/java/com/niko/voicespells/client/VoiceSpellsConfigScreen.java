@@ -326,7 +326,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
      *  tabs and both button rows moved onto the shared 10px metric, so the right-hand OPTION
      *  column ended up 6px left of the tab above it and of the buttons below it. One constant,
      *  or the columns drift again the next time one of them is touched. */
-    private <T extends net.minecraft.client.gui.components.AbstractWidget> T slot(
+    private <T extends AbstractWidget> T slot(
             T w, int i, int gridX, int colW, int y) {
         w.setX(gridX + (i % 2) * (colW + COL_GAP));
         w.setY(y + (i / 2) * rowPitch);
@@ -334,7 +334,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         return addRenderableWidget(w);
     }
 
-    private static void help(net.minecraft.client.gui.components.AbstractWidget w, String text) {
+    private static void help(AbstractWidget w, String text) {
         w.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(text)));
     }
 

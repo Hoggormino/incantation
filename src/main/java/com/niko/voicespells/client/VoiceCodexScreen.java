@@ -212,7 +212,7 @@ public final class VoiceCodexScreen extends Screen {
         // still says what to do about it rather than showing a bare dash.
         line(g, x, y, "Speak to cast",
             avgMs < 0 ? "after 1st cast"
-                      : String.format(java.util.Locale.ROOT, "%.0fms this session", avgMs)); y += rowH;
+                      : String.format(Locale.ROOT, "%.0fms this session", avgMs)); y += rowH;
         int streak = VoiceStats.sotdStreak();
         // This counts consecutive days of completing the SPELL-OF-THE-DAY challenge, not days
         // the mod was used — "Daily streak" invited the second reading and then showed "—" to a
