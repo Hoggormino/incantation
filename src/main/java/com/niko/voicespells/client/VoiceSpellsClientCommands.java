@@ -83,9 +83,16 @@ public final class VoiceSpellsClientCommands {
             ctx.getSource().sendSuccess(() -> Component
                 .literal("Active grammar — " + active.size() + " phrases, floor " + floor)
                 .withStyle(ChatFormatting.GOLD), false);
+            // Only claim there are decoys when the grammar is actually the narrowed one. With no
+            // usable owned-spell scan the recognizer listens for every phrase and all of them can
+            // cast, and saying "0 spell(s) equipped, the rest are decoys" about a full grammar is
+            // both wrong and alarming.
+            boolean narrowed = VoiceController.grammarIsNarrowed();
             ctx.getSource().sendSuccess(() -> Component
-                .literal("  " + owned.size() + " spell(s) equipped; anything beyond that is a "
-                       + "decoy that cannot cast")
+                .literal(narrowed
+                    ? "  " + owned.size() + " spell(s) equipped; anything beyond that is a "
+                      + "decoy that cannot cast"
+                    : "  Not narrowed to equipped spells, so every phrase here can cast")
                 .withStyle(ChatFormatting.DARK_GRAY), false);
 
             // Sort so the phrases you can actually cast are listed first and marked — the whole

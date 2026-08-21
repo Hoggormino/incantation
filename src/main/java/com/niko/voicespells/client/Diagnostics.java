@@ -70,7 +70,7 @@ public final class Diagnostics {
             all.addAll(VoiceSpellsConfig.CLIENT.customPhrases.get());
             all.addAll(VoiceSpellsConfig.CLIENT.incantations.get());
         } catch (Throwable ignored) {
-            return new Result("Phrase conflicts", Status.INFO, "Config not loaded");
+            return new Result("Custom phrase duplicates", Status.INFO, "Config not loaded");
         }
         for (String entry : all) {
             if (entry == null) continue;
@@ -84,10 +84,10 @@ public final class Diagnostics {
             seen.put(phrase, id);
         }
         if (conflicts.isEmpty()) {
-            return new Result("Phrase conflicts", Status.OK,
+            return new Result("Custom phrase duplicates", Status.OK,
                 seen.size() + " custom/incantation phrase(s), no duplicates");
         }
-        return new Result("Phrase conflicts", Status.WARN,
+        return new Result("Custom phrase duplicates", Status.WARN,
             conflicts.size() + " duplicate(s): " + conflicts.get(0)
             + (conflicts.size() > 1 ? " (+" + (conflicts.size() - 1) + " more)" : ""));
     }
@@ -138,10 +138,10 @@ public final class Diagnostics {
     private static Result checkPhraseCollisions() {
         java.util.List<String> clashes = com.niko.voicespells.spells.SpellIndex.phraseCollisions();
         if (clashes.isEmpty()) {
-            return new Result("Phrase conflicts", Status.OK, "Every phrase maps to one spell");
+            return new Result("Phrases claimed twice", Status.OK, "Every phrase maps to one spell");
         }
         String first = clashes.get(0);
-        return new Result("Phrase conflicts", Status.WARN,
+        return new Result("Phrases claimed twice", Status.WARN,
             clashes.size() + " phrase(s) claimed twice — one spell each is unreachable. e.g. "
             + first + " (see the log, or phrasebook.json)");
     }

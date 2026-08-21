@@ -670,15 +670,30 @@ public final class SpellIndex {
         // Build the Soundex bucket map for the phonetic fallback. Done last so it sees the
         // final phrase set (including custom phrases, incantations, loadout names) and skips
         // anything the blocklist has just removed.
+        rebuildSoundex(phraseToId);
+
+        return new State(phraseToId);
+    }
+
+    /**
+     * Rebuild the phonetic fallback's bucket map from a phrase set.
+     *
+     * <p>Must be called for every phrase set that reaches {@link #STATE}, not just the one the
+     * config produces. {@link #registerRespellings()} publishes a second, larger phrase set after
+     * this one, and it used to leave these buckets built from the smaller map — so an auto-
+     * respelling was in the grammar but had no Soundex entry. That is backwards: a respelled form
+     * exists precisely because the model cannot say the original, which makes it the form the
+     * player will actually be heard saying, and therefore the one the near-miss rescue most needs
+     * to recognise.
+     */
+    private static void rebuildSoundex(Map<String, ResourceLocation> phrases) {
         Map<String, List<ResourceLocation>> sx = new HashMap<>();
-        for (Map.Entry<String, ResourceLocation> e : phraseToId.entrySet()) {
+        for (Map.Entry<String, ResourceLocation> e : phrases.entrySet()) {
             String code = soundexPhrase(e.getKey());
             if (code.isEmpty()) continue;
             sx.computeIfAbsent(code, k -> new ArrayList<>()).add(e.getValue());
         }
         phraseSoundex = sx;
-
-        return new State(phraseToId);
     }
 
     /**
@@ -893,6 +908,7 @@ public final class SpellIndex {
         }
         if (added > 0) {
             STATE.set(new State(Collections.unmodifiableMap(merged)));
+            rebuildSoundex(merged);   // or the new spellings stay out of the near-miss rescue
             VoiceSpells.LOGGER.info("Added {} spoken spelling(s) for spell names the model cannot "
                 + "pronounce: {}", added, String.join(", ", examples));
         }

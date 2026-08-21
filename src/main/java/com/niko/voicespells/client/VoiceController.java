@@ -1229,14 +1229,25 @@ public final class VoiceController {
         // so the fuzzy/phonetic tiers would only add false positives to the listing.
         var hit = SpellIndex.lookupExactWithTier(phrase);
         if (hit.isEmpty()) return false;
+        // Decoys only exist in a NARROWED grammar. When the scan is unreliable or found nothing,
+        // currentGrammar() hands back the full phrase set and nothing in it is padding - so
+        // testing membership of an empty owned set marked every real phrase as a decoy, and
+        // /voicespells grammar printed the entire list in decoy grey. Fail open, the same way
+        // the dispatch gate does when the scan cannot be trusted.
+        if (!grammarIsNarrowed()) return true;
+        return ownedSpellIds.contains(hit.get().id().toString());
+    }
+
+    /** Whether the live grammar is the owned-narrowed one rather than every known phrase.
+     *  Same condition {@link #currentGrammar()} branches on - kept together deliberately. */
+    public static boolean grammarIsNarrowed() {
         java.util.Set<String> owned = ownedSpellIds;
-        return owned != null && owned.contains(hit.get().id().toString());
+        return ownedScanReliable && owned != null && !owned.isEmpty();
     }
 
     private static java.util.List<String> currentGrammar() {
-        java.util.Set<String> owned = ownedSpellIds;
-        if (!ownedScanReliable || owned == null || owned.isEmpty()) return SpellIndex.getPhrases();
-        return SpellIndex.phrasesFor(owned, VoiceSpellsConfig.cGrammarFloor);
+        if (!grammarIsNarrowed()) return SpellIndex.getPhrases();
+        return SpellIndex.phrasesFor(ownedSpellIds, VoiceSpellsConfig.cGrammarFloor);
     }
 
     /**
