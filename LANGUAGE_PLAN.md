@@ -45,6 +45,7 @@ carries a spell id. So the player's language is available exactly where phrases 
 ## Four live bugs found on the way here
 
 These are independent of the design and each ships on its own.
+**Bugs 1-3 are fixed and verified (commit `565838a`); bug 4 is deliberately still open.**
 
 1. **`modelId` is inert on any install with a legacy model directory.**
    `ModelCatalog.resolveModelDir` returns `legacyDir()` whenever it looks like a model, *before*
@@ -135,9 +136,13 @@ Steps 1-3 are standalone bug fixes and can ship before any of the design lands.
 
 0. **Find and commit NeoTargetStudios' Spanish file.** It is not in the repo. Nothing else matters
    if it is lost.
-1. Language-tag normalization, and the `legacyDir` precedence fix.
-2. Control words → lang keys, and guard them against the lexicon. Fixes bug 3 above.
-3. `ModelDownloader` reads the resolved directory instead of `cModelId`. Fixes bug 2.
+1. ~~The `legacyDir` precedence fix.~~ **Done** (`565838a`). Language-tag normalization is
+   deliberately NOT done: nothing reads the game language yet, so `normalizeTag` would be a helper
+   with no caller. It belongs in step 4, with the code that first needs it.
+2. ~~Guard the control words against the lexicon.~~ **Done** (`565838a`). Moving them to lang keys
+   is left for the design, because the key names are part of it — the guard is the half that fixes
+   the silent failure, and it stands alone.
+3. ~~`ModelDownloader` reads the resolved directory instead of `cModelId`.~~ **Done** (`565838a`).
 4. Merge `modelPath` + `modelId` → `language`, **with** the migration in the same commit: read the
    old TOML as plain text in the mod constructor, before the config spec registers and deletes
    unknown keys.
