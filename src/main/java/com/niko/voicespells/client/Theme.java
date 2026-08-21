@@ -397,11 +397,28 @@ public final class Theme {
      */
     public static void tab(GuiGraphics g, int x, int y, int w, int h,
                            boolean selected, boolean hovered) {
+        if (w <= 0 || h <= 0) return;   // nothing to draw, and a zero dimension is a divisor below
 //? if forge {
 /*        // TabButton.getTextureY(): 0 selected, 1 selected+hovered, 2 plain, 3 hovered.
         int row = selected ? (hovered ? 1 : 0) : (hovered ? 3 : 2);
+        // The last border is 1, where vanilla's own TabButton passes 0.
+        //
+        // Copying vanilla's arguments is right; copying them without its height was not. Vanilla
+        // tabs are exactly 24 tall, which equals the sprite's vHeight, and blitNineSliced
+        // short-circuits on that - it blits three pieces and never looks at the bottom border.
+        // Our tabs are TAB_H = 20, so it takes the full nine-slice path instead, where the bottom
+        // border IS the source height of a strip. blitRepeating then divides the destination
+        // height by it, and Mth.positiveCeilDiv(_, 0) throws ArithmeticException - on every frame,
+        // as soon as the config screen draws a single tab. The screen was unopenable on Forge.
+        //
+        // 1.20.1 only: 1.21's blitSprite reads nine-slice metadata from the sprite and handles a
+        // zero border, which is why the branch below never had this problem and why it went
+        // unnoticed - the config screen was only ever opened on NeoForge.
+        //
+        // 1px rather than 0 costs nothing visually: it is the bottom row of a tab sprite, which is
+        // the open edge where the tab meets the panel, and it is transparent.
         g.blitNineSliced(new net.minecraft.resources.ResourceLocation("textures/gui/tab_button.png"),
-            x, y, w, h, 2, 2, 2, 0, 130, 24, 0, row * 24);
+            x, y, w, h, 2, 2, 2, 1, 130, 24, 0, row * 24);
 *///?} else {
         com.mojang.blaze3d.systems.RenderSystem.enableBlend();
         g.blitSprite(net.minecraft.resources.ResourceLocation.withDefaultNamespace(
