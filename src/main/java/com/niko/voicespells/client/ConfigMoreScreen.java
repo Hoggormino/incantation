@@ -100,6 +100,10 @@ public final class ConfigMoreScreen extends Screen {
             b -> { if (minecraft != null) minecraft.setScreen(new LiveMonitorScreen(this)); }));
         grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Help / Guide"),
             b -> { if (minecraft != null) minecraft.setScreen(new HelpScreen(this)); }));
+        // Next to Help because it is the other read-only, text-only screen, and because the
+        // licences it carries should be findable without reading the jar.
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Credits"),
+            b -> { if (minecraft != null) minecraft.setScreen(new CreditsScreen(this)); }));
         NeonButton arenaBtn = NeonButton.of(0, 0, colW, 20,
             Component.literal(inWorld ? "Test Arena" : "Test Arena (in-world)"),
             b -> { if (minecraft != null) minecraft.setScreen(new TestArenaScreen(this)); });

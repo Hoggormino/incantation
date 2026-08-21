@@ -79,9 +79,14 @@ public final class Phrasebook {
 
     private Phrasebook() {}
 
-    /** Read the phrasebook from disk into the in-memory map. Creates an empty placeholder file
-     *  if one doesn't exist yet. Called from {@link SpellIndex#initialize()} and again after
-     *  index rebuilds so external edits take effect without a game restart. */
+    /** Read the phrasebook from disk into the in-memory map. Does NOT create the file — a missing
+     *  one just leaves the maps empty, and {@link #rewrite} is what puts a populated file on disk
+     *  once indexing knows which spells are installed. (The javadoc claimed otherwise for a long
+     *  time, which makes the no-file path look like a bug when it is the normal first run.)
+     *
+     *  <p>Called at the top of every index build, before phrases are derived, so per-spell
+     *  overrides apply from the first pass and an external edit takes effect on the next rebuild
+     *  rather than needing a game restart. */
     public static synchronized void load() {
         loaded = true;
         if (!Files.exists(FILE)) {
