@@ -186,10 +186,16 @@ public final class VoiceCodexScreen extends Screen {
         // contain it. rowsBottom is now the well's own inner edge, and the count is clamped to
         // what actually fits, so the block can never draw outside itself. At Minecraft's 240
         // minimum all eight still fit.
+        // Pitch tops out at 16, not 13, because each row now carries a vanilla button face and a
+        // face wants room to read as one. It still compresses, and below 12 it stops drawing the
+        // face at all rather than squashing it - see line(). Losing the face on a tiny window is
+        // a much smaller loss than losing a row.
         final int ROWS = 8;
         int rowsBottom = statsBottom - 4;
-        int rowH = Math.max(9, Math.min(ROW_H, (rowsBottom - y) / ROWS));
+        int rowH = Math.max(9, Math.min(16, (rowsBottom - y) / ROWS));
         this.rowsFloor = rowsBottom;  // line() drops any row that would land past this
+        this.rowPitch  = rowH;
+        this.rowWidth  = colW - 16;   // the well minus the 8px inset applied to x on both sides
 
         // Stat rows
         line(g, x, y, "Total casts",       String.valueOf(VoiceStats.totalCasts())); y += rowH;
@@ -229,6 +235,9 @@ public final class VoiceCodexScreen extends Screen {
      * well it lives in ends.
      */
     private int rowsFloor = Integer.MAX_VALUE;
+    /** Row pitch and inner width for this frame, set by the layout pass. */
+    private int rowPitch = ROW_H;
+    private int rowWidth = 0;
 
     private void line(GuiGraphics g, int x, int y, String label, String value) {
         // A row that would draw below the well is dropped, not clipped. The pitch above already
@@ -238,6 +247,18 @@ public final class VoiceCodexScreen extends Screen {
         // The rows are drawn inset inside the stats well, so the column they share is narrower
         // than the well by that inset on both sides.
         int colW = panelW / 2 - Theme.PAD - 6 - 16;
+
+        // The row sits on a vanilla button face, the same surface the config screen's settings
+        // use. That screen is built from real widgets and these rows were bare drawString onto a
+        // flat panel, which is why the two halves of the mod did not look like the same mod.
+        //
+        // Below a 12px pitch the face is dropped rather than squashed: its nine-slice is 4px of
+        // border top and bottom, so under 12 there is nothing left of the middle and it reads as
+        // a smear rather than a control.
+        if (rowPitch >= 12 && rowWidth > 0) {
+            Theme.rowFace(g, x - 4, y - 2, rowWidth + 8, rowPitch - 1);
+        }
+
         int vw = font.width(value);
         // Trim the LABEL to whatever the value leaves, rather than letting the two overlap.
         // "Speak to cast (session)" against "after 1st cast" needs more than the column has, and

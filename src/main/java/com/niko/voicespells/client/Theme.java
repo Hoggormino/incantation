@@ -384,6 +384,43 @@ public final class Theme {
     }
 
     /**
+     * A vanilla button face with nothing behind it — the surface an options row is drawn on.
+     *
+     * <p>For read-only rows that should look like the config screen's controls. That screen is
+     * built almost entirely from real widgets, while the screens behind "More..." drew their
+     * content with {@code drawString} onto flat rectangles, so the two halves of the mod did not
+     * look related. This gives a stat readout the same face a setting has, without pretending to
+     * be clickable.
+     *
+     * <p>Uses the DISABLED variant deliberately. It is the one vanilla state that means "this is
+     * a surface, not a control", so a row that does nothing when clicked does not look broken.
+     *
+     * <p>The size guard is not paranoia. 1.20.1's {@code blitNineSliced} clamps each border to
+     * half the destination, and a border of zero becomes a zero-height or zero-width source strip
+     * that {@code blitRepeating} then divides by — an ArithmeticException, which is exactly how
+     * the config screen's tabs crashed the game on Forge. Below the size where every border
+     * survives the clamp, fill instead.
+     */
+    public static void rowFace(GuiGraphics g, int x, int y, int w, int h) {
+        if (w <= 0 || h <= 0) return;
+        if (w < 8 || h < 8) {           // borders would clamp toward zero; see the note above
+            g.fill(x, y, x + w, y + h, C_INSET);
+            return;
+        }
+//? if forge {
+/*        // widgets.png rows: 46 disabled, 66 normal, 86 hovered. Borders 20/4 against a 200x20
+        // sprite leave source strips of 160 and 12 - no zero anywhere.
+        g.blitNineSliced(new net.minecraft.resources.ResourceLocation("textures/gui/widgets.png"),
+            x, y, w, h, 20, 4, 200, 20, 0, 46);
+*///?} else {
+        com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+        g.blitSprite(net.minecraft.resources.ResourceLocation.withDefaultNamespace(
+            "widget/button_disabled"), x, y, w, h);
+        com.mojang.blaze3d.systems.RenderSystem.disableBlend();
+//?}
+    }
+
+    /**
      * A tab, drawn with Minecraft's own tab art.
      *
      * <p>The config screen painted a black rectangle plus a 1px rule OVER a real vanilla Button
