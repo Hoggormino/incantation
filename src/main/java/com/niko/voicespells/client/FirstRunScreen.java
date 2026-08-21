@@ -332,6 +332,11 @@ public final class FirstRunScreen extends Screen {
                     String text = String.format(java.util.Locale.ROOT, "%2ds  \"%s\"  %s",
                         ageSec, e.heard(),
                         e.matched() == null ? "— no match" : "→ " + shortId(e.matched()));
+                    // The heard string is whatever the recogniser produced and was drawn entirely
+                    // unclipped - no truncation of any kind - so a long utterance ran straight out
+                    // of the feed and across the wizard. This is the step whose Next button is
+                    // gated on the player seeing this feed work, so it is a bad place to overflow.
+                    text = fit(text, feedW - 8);
                     g.drawString(font, Component.literal(text), feedX + 4, rowY, color, !Theme.lightSurface());
                     rowY += lineH;
                 }

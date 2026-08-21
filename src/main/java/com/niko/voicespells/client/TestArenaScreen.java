@@ -228,6 +228,14 @@ public final class TestArenaScreen extends Screen {
                 String tier = e.tier() == ' ' ? " " : String.valueOf(e.tier());
                 String line = String.format(Locale.ROOT, "%2ds [%s] c%.2f  \"%s\"  %s",
                     ageSec, tier, e.confidence(), truncate(e.heard(), 16), outcome);
+                // Fitted by WIDTH. truncate() bounds only the heard phrase, at a character count;
+                // the outcome appended after it carries a spell's display name, which is localised
+                // now and can be far longer than the English it was sized against - so a long name
+                // ran out of the well and off the screen with nothing clipping it.
+                int room = meterW - 8;
+                if (font.width(line) > room) {
+                    line = font.plainSubstrByWidth(line, room - font.width("...")) + "...";
+                }
                 g.drawString(font, Component.literal(line), x + 4, rowY, color, !Theme.lightSurface());
                 rowY += ROW_H;
                 shown++;

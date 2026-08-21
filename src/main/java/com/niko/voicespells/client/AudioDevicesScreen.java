@@ -409,11 +409,15 @@ public final class AudioDevicesScreen extends Screen {
             }
             if (hovered) g.fill(listX + 1, ry, listX + listW - 9, ry + ROW, 0x30FFFFFF);
 
+            // Everything in a row stops short of the scrollbar's gutter. Vanilla's scroller is
+            // 6px and sits at listX + listW - 7, while the verdict was drawn flush to the list's
+            // right edge and the name was sized against it - so both ran underneath the bar.
+            final int gutter = 8;
             // Verdict chip on the right, so the name can use the full remaining width.
             String verdict = isDefaultRow ? verdictFor(defaultRaw()) : verdictFor(raw);
             int verdictW = verdict.isEmpty() ? 0 : font.width(verdict) + 8;
             if (!verdict.isEmpty()) {
-                Theme.text(g, font, verdict, listX + listW - verdictW, ry + (ROW - 8) / 2,
+                Theme.text(g, font, verdict, listX + listW - gutter - verdictW, ry + (ROW - 8) / 2,
                     verdictColor(isDefaultRow ? defaultRaw() : raw));
             }
 
@@ -421,7 +425,7 @@ public final class AudioDevicesScreen extends Screen {
                 ? "System default" + defaultSuffix()
                 : MicCapture.prettyName(raw);
             String mark = selected ? "▸ " : "  ";
-            int nameMax = listW - 8 - verdictW - font.width(mark);
+            int nameMax = listW - 8 - gutter - verdictW - font.width(mark);
             Theme.text(g, font, mark + trim(label, nameMax),
                 listX + 4, ry + (ROW - 8) / 2,
                 selected ? Theme.C_HEADING : Theme.C_TEXT);
