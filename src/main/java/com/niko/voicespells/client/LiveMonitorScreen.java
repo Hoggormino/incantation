@@ -147,7 +147,7 @@ public final class LiveMonitorScreen extends Screen {
     /** Rolling waveform of recent audio levels — alive when you speak, flat when quiet. */
     private static void drawWaveform(GuiGraphics g, int x, int y, int w, int h) {
         if (w < 12) return;
-        g.fill(x, y, x + w, y + h, Theme.C_INSET);
+        Theme.well(g, x, y, w, h);   // the same recessed surface every list sits on
         float[] data = VoiceController.waveformSnapshot();
         int bars = data.length;
         if (bars == 0) return;

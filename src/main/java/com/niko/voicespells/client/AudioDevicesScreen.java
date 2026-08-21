@@ -407,7 +407,7 @@ public final class AudioDevicesScreen extends Screen {
             if (selected) {
                 Theme.rowSelection(g, listX + 1, ry, listW - 9, ROW, false);
             }
-            if (hovered) g.fill(listX + 1, ry, listX + listW - 9, ry + ROW, 0x30FFFFFF);
+            if (hovered) Theme.rowHover(g, listX + 1, ry, listW - 10, ROW);
 
             // Everything in a row stops short of the scrollbar's gutter. Vanilla's scroller is
             // 6px and sits at listX + listW - 7, while the verdict was drawn flush to the list's

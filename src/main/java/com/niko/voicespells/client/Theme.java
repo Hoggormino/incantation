@@ -384,6 +384,24 @@ public final class Theme {
     }
 
     /**
+     * A hovered but unselected list row: vanilla's outline, without the opaque interior that
+     * marks the selected one.
+     *
+     * <p>Replaces a translucent white wash. {@link #rowSelection} already carries the argument
+     * against that treatment — it computes differently over a bright sky than over a cave, and
+     * fades out exactly when the backdrop is busiest — and the wash had survived in the device
+     * picker as the last instance of it. An outline reads the same on any ground, and leaving the
+     * interior alone keeps hover and selection distinguishable.
+     */
+    public static void rowHover(GuiGraphics g, int x, int y, int w, int h) {
+        if (w <= 0 || h <= 0) return;
+        g.fill(x, y, x + w, y + 1, 0xFF808080);
+        g.fill(x, y + h - 1, x + w, y + h, 0xFF808080);
+        g.fill(x, y, x + 1, y + h, 0xFF808080);
+        g.fill(x + w - 1, y, x + w, y + h, 0xFF808080);
+    }
+
+    /**
      * A vanilla button face with nothing behind it — the surface an options row is drawn on.
      *
      * <p>For read-only rows that should look like the config screen's controls. That screen is

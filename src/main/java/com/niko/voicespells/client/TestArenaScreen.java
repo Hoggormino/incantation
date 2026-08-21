@@ -106,7 +106,7 @@ public final class TestArenaScreen extends Screen {
         // distinct color so it's hard to miss.
         int discW = panelW - Theme.PAD * 2;
         int discH = 22;
-        g.fill(x, y, x + discW, y + discH, Theme.C_INSET);
+        Theme.rowFace(g, x, y, discW, discH);
         g.drawString(font, Component.literal("PRACTICE MODE — spells will NOT actually cast."),
             x + 8, y + 3, Theme.C_TEXT, !Theme.lightSurface());
         g.drawString(font, Component.literal("Close this screen to cast for real."),
@@ -119,7 +119,7 @@ public final class TestArenaScreen extends Screen {
         if (mc.player == null) {
             int bannerW = panelW - Theme.PAD * 2;
             int bannerH = 24;
-            g.fill(x, y, x + bannerW, y + bannerH, Theme.C_INSET);
+            Theme.rowFace(g, x, y, bannerW, bannerH);
             g.drawString(font, Component.literal("⚠ Open a world first."), x + 6, y + 4,
                 Theme.C_DANGER, !Theme.lightSurface());
             g.drawString(font,
@@ -131,7 +131,7 @@ public final class TestArenaScreen extends Screen {
         // Big audio meter so the player can confirm their mic is being heard.
         int meterW = panelW - Theme.PAD * 2;
         int meterH = 12;
-        g.fill(x, y, x + meterW, y + meterH, Theme.C_INSET);
+        Theme.well(g, x, y, meterW, meterH);
         float level = Math.max(0f, Math.min(1f, VoiceController.audioLevel()));
         int fillW = (int) (level * (meterW - 4));
         if (fillW > 0) {
@@ -158,18 +158,23 @@ public final class TestArenaScreen extends Screen {
         int labelW = font.width("Last heard:  ");
         int availW = panelW - Theme.PAD * 2 - labelW;
         last = fitToWidth(last, availW);
-        g.drawString(font, Component.literal("Last heard:  "), x, y, Theme.C_FAINT, !Theme.lightSurface());
+        // On a vanilla button face, like a setting on the config screen. These two lines are the
+        // screen's live readouts and were bare text sitting on the backdrop.
+        Theme.rowFace(g, x, y - 3, meterW, 15);
+        g.drawString(font, Component.literal("Last heard:  "), x + 4, y, Theme.C_FAINT, !Theme.lightSurface());
         g.drawString(font, Component.literal(last),
-            x + labelW, y, Theme.C_TEXT, !Theme.lightSurface());
-        y += 14;
+            x + 4 + labelW, y, Theme.C_TEXT, !Theme.lightSurface());
+        y += 17;
 
         // Status + transmission badges.
         String status = VoiceController.statusLine();
         String mic = VoiceController.isHearingNow() ? "transmitting" : "idle";
         String statusLine = "Status: " + (status.isEmpty() ? "warming up" : status)
             + "    Mic: " + mic;
-        g.drawString(font, Component.literal(statusLine), x, y, Theme.C_FAINT, !Theme.lightSurface());
-        y += 16;
+        Theme.rowFace(g, x, y - 3, meterW, 15);
+        g.drawString(font, Component.literal(Theme.fit(font, statusLine, meterW - 8)), x + 4, y,
+            Theme.C_FAINT, !Theme.lightSurface());
+        y += 18;
 
         // Recent recognition list — same source as the Live Monitor, narrower view. Entries
         // with the "(menu)" suffix are what *would have* cast; perfect for practice mode.
