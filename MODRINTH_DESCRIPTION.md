@@ -153,3 +153,5 @@ MIT.
 
 - **Vosk** — [Alpha Cephei](https://alphacephei.com/vosk/) (Apache 2.0)
 - **Iron's Spells 'n Spellbooks** — iron431
+- **Spanish phrasebook** — NeoTargetStudios (Spidercat0926), who translated close to 300 spell
+  names across nine spell mods and helped with the mod itself

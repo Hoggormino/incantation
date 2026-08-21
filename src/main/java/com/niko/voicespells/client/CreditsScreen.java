@@ -26,9 +26,8 @@ import java.util.List;
  * window, so a single long scroll would need its own scrollbar to say anything a page count does
  * not already say.
  *
- * <p>The THANKS page is deliberately empty. Naming a real person in a shipped mod is the author's
- * call, not the code's — see the comment on {@link #THANKS}. An empty list drops the page rather
- * than shipping a heading with nothing under it.
+ * <p>The THANKS page names contributors, and only ones Hoggormino has asked for by name — see the
+ * comment on {@link #THANKS}.
  */
 public final class CreditsScreen extends Screen {
 
@@ -54,15 +53,17 @@ public final class CreditsScreen extends Screen {
     private record Page(String heading, List<Row> rows) {}
 
     /**
-     * People to thank, in the author's own words.
-     *
-     * <p>Left empty on purpose. Testers, translators and the players whose bug reports shaped
-     * releases are all real people, and putting a name in a published mod is a decision for
-     * Hoggormino to make, not something to be filled in from a comment thread. Add entries as
-     * {@code Row.of("Name", "what they did")} and the page appears; leave it empty and it does
-     * not.
+     * People to thank. Named with Hoggormino's say-so, one at a time — a real person's handle in
+     * a published mod is not something to fill in from a comment thread. Empty list drops the
+     * page entirely rather than shipping a heading with nothing under it.
      */
-    private static final List<Row> THANKS = List.of();
+    private static final List<Row> THANKS = List.of(
+        Row.of("NeoTargetStudios", "Spidercat0926"),
+        Row.gap(),
+        Row.note("Spanish phrasebook - close to 300 spell"),
+        Row.note("names across nine spell mods, and a hand"),
+        Row.note("with the mod itself.")
+    );
 
     private static List<Page> pages() {
         List<Page> out = new ArrayList<>();
