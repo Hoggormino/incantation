@@ -280,12 +280,23 @@ public final class SpellRules {
      *
      * @param spellId the spell being cast, as {@code namespace:path}
      */
+    /**
+     * Claim the stamp for the mod's own cast, if this is it. {@code true} means allow, and the
+     * authorisation is now spent.
+     *
+     * <p>Split out of {@link #blockClickedCast} and called BEFORE the cast-source filter, because
+     * that filter exempts {@code COMMAND} - and under {@code castMode = FREE} the mod's own voice
+     * cast IS a COMMAND cast. So the filter returned before anything claimed the stamp, and the
+     * next clicked cast of that spell inside the ten-second window found it unclaimed and was let
+     * through. Exactly the hole the claim was added to close, reopened by a filter added for a
+     * different reason.
+     */
+    public static boolean claimOwnCast(Player player, String spellId) {
+        return player != null && claimPrecast(player.getUUID(), spellId);
+    }
+
     public static boolean blockClickedCast(Player player, String spellId) {
         if (player == null) return false;
-        // Our own cast, always allowed - once. claimPrecast, not hasPendingFor: the stamp
-        // authorises the single cast it was created for, and any later cast of the same spell
-        // inside the TTL is judged on its own merits like anything else.
-        if (claimPrecast(player.getUUID(), spellId)) return false;
         VoiceSpellsServerConfig.IncantationRule rule;
         try {
             rule = VoiceSpellsServerConfig.SERVER.incantationOnly.get();

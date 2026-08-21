@@ -152,6 +152,14 @@ public final class SpellRuleEvents {
             if (!(caster instanceof Player p)) return;
             Object id = call(e, "getSpellId");
             if (!(id instanceof String spellId)) return;
+            // The mod's own cast is claimed FIRST, before the source filter below.
+            //
+            // That order is load bearing. Under castMode = FREE this mod casts with
+            // CastSource.COMMAND, which the filter exempts - so the filter returned before
+            // anything claimed the stamp, and the next clicked cast of that spell inside the
+            // ten-second window found it unclaimed and went through.
+            if (SpellRules.claimOwnCast(p, spellId)) return;
+
             // Only a cast the PLAYER initiated can be required to have been spoken. A command
             // block, a datapack function or /cast produces a SpellPreCastEvent whose entity is
             // the targeted player, and cancelling those makes map mechanics stop working for

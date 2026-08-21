@@ -528,7 +528,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 workRestrictToOwned = true;
                 workGating       = VoiceSpellsConfig.GatingMode.HOLD_ITEM;
                 workMinConfPct   = 55;
-                workRequireSneak = false;
                 workEchoLockout  = 1500;
             }
             case HUD -> {
@@ -549,7 +548,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 workHandsFree        = false;
                 workCastQueue        = 3;
                 workHotbarSelect     = false;
-                workRestrictToOwned  = true;
+                workRequireSneak     = false;
             }
         }
         rebuildWidgets();
