@@ -109,9 +109,16 @@ public final class SpellCaster {
      *               legitimate cast and a way to bypass the rule entirely - speak once, then
      *               hold the key. The server cannot infer it, so the client says so, in the sign
      *               of {@code volumeScale}.
+     *
+     * <p>Deliberately does NOT take the packet's totalCasts or streak. Both are the client's own
+     * counters, both were once trusted, and both had to be replaced with numbers the server
+     * counts itself - the total for the leaderboard, the streak for the advancement trigger. The
+     * fields still cross the wire so older clients keep working, and the handlers now discard
+     * them at the boundary instead of threading them down to where something might believe them
+     * again.
      */
     public static boolean cast(ServerPlayer player, ResourceLocation spellId,
-                                float volumeScale, int totalCasts, int streak, boolean spoken) {
+                                float volumeScale, boolean spoken) {
         if (!spoken && SpellRules.requiresSpeechEveryCast(player)) {
             feedback(player, "voicespells.cast.recast_blocked",
                 SpellInfo.of(spellId.toString()).displayName());
@@ -392,9 +399,13 @@ public final class SpellCaster {
                 // advancement trigger was still being handed the raw client values, so a crafted
                 // packet could claim any milestone it liked. Using the value the server just
                 // recorded closes that without changing anything for an honest client.
+                //
+                // The same was true of the streak, which was still the number in the packet
+                // after the total had been fixed. It is counted here now too.
                 int serverTotal = recordPlayerTotal(
-                    player.getUUID(), player.getName().getString(), totalCasts);
-                fireVoiceCastTrigger(player, spell, spellClass, serverTotal, streak);
+                    player.getUUID(), player.getName().getString());
+                int serverStreak = recordPlayerStreak(player.getUUID());
+                fireVoiceCastTrigger(player, spell, spellClass, serverTotal, serverStreak);
             }
             return ok;
         } catch (ClassNotFoundException missing) {
@@ -1070,7 +1081,7 @@ public final class SpellCaster {
         }
     }
 
-    static int recordPlayerTotal(java.util.UUID uuid, String name, int clientTotal) {
+    static int recordPlayerTotal(java.util.UUID uuid, String name) {
         // Count server-side rather than believing the number in the packet.
         //
         // This used to be merge(uuid, clientTotal, Math::max) on a value the client supplies,
@@ -1085,6 +1096,37 @@ public final class SpellCaster {
         // Returned so the advancement trigger can award from the same trusted number rather
         // than from the one in the packet.
         return serverTotal;
+    }
+
+    /** Server-side consecutive-cast streaks, and when each one was last extended. */
+    private static final java.util.Map<java.util.UUID, Integer> PLAYER_STREAKS =
+        new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<java.util.UUID, Long> PLAYER_STREAK_AT =
+        new java.util.concurrent.ConcurrentHashMap<>();
+    /** Matches VoiceController.STREAK_TIMEOUT_NANOS: 30s of silence ends a streak. Kept in ms
+     *  here because the server side has no reason to work in nanos. */
+    private static final long STREAK_TIMEOUT_MS = 30_000L;
+
+    /**
+     * Count a player's consecutive-cast streak from casts this server actually authorised.
+     *
+     * <p>The streak in the packet is the client's own counter, and it was being handed straight
+     * to the advancement trigger — so a crafted packet could claim any streak milestone without
+     * casting anything twice. {@link #recordPlayerTotal} had already been hardened for exactly
+     * this reason and this was the value it left behind.
+     *
+     * <p>The rule is the client's rule: a cast within the timeout extends the streak, a longer
+     * gap starts a new one at 1. An honest client sees no difference, because both sides are
+     * counting the same casts under the same rule.
+     */
+    private static int recordPlayerStreak(java.util.UUID uuid) {
+        long now = System.currentTimeMillis();
+        Long last = PLAYER_STREAK_AT.put(uuid, now);
+        int streak = (last == null || now - last > STREAK_TIMEOUT_MS)
+            ? 1
+            : PLAYER_STREAKS.getOrDefault(uuid, 0) + 1;
+        PLAYER_STREAKS.put(uuid, streak);
+        return streak;
     }
     public static java.util.List<java.util.Map.Entry<String, Integer>> topPlayers(int limit) {
         java.util.List<java.util.Map.Entry<java.util.UUID, Integer>> entries =

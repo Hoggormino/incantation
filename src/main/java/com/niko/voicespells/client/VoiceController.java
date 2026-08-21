@@ -396,11 +396,25 @@ public final class VoiceController {
 
     /** Vosk partials accumulate across a long utterance — if the player streams words without
      *  a pause we can end up with a multi-line string. Keep a tail-clamped copy so any screen
-     *  that displays this without its own clamping still renders sanely. */
+     *  that displays this without its own clamping still renders sanely.
+     *
+     *  <p>The TAIL is the right end to keep: this is a partial that is still growing, and the
+     *  newest words are the ones the player is watching for. But cutting at a fixed character
+     *  count opened the line mid-word with nothing to say it had been cut, so a long utterance
+     *  read as a mangled first word — and every consumer then ellipsises the far end, leaving a
+     *  fragment truncated at both ends with a marker at only one. It now snaps forward to a word
+     *  boundary and carries a leading ellipsis, so it reads as continuing text.
+     *
+     *  <p>Display only — three screens draw it and nothing matches on it. */
     private static String clampHeard(String raw) {
         if (raw == null) return "";
         if (raw.length() <= 80) return raw;
-        return raw.substring(raw.length() - 80);
+        String tail = raw.substring(raw.length() - 80);
+        int space = tail.indexOf(' ');
+        // Only snap if the partial word is short; otherwise one very long word would eat the
+        // whole clamp and leave nothing to read.
+        if (space >= 0 && space < 20) tail = tail.substring(space + 1);
+        return "..." + tail;
     }
     public static boolean isHudVisible() { return hudVisible; }
     public static float   audioLevel() { return audioLevel; }
@@ -873,7 +887,7 @@ public final class VoiceController {
         SpellIndex.registerRespellings();
         SpellInfo.clearCache(); // drop cached display names so spell renames / aliases re-resolve
         resetLoadBackoff();     // they may have just corrected modelId or enabled autoDownload
-        rebuildRecognizer("VoiceSpells-Grammar-Reload", VoiceController::currentGrammar);
+        rebuildRecognizer(VoiceController::currentGrammar);
     }
 
     // Resolved once at class init — looked up every tick via tryDrainCastQueue, and once per
@@ -1076,7 +1090,7 @@ public final class VoiceController {
                 // "Only owned spells" OFF still refused to hear anything outside the spells
                 // that happened to be equipped when it was last on — the opposite of what the
                 // option says, and it persisted until something else forced a rebuild.
-                rebuildRecognizer("VoiceSpells-Grammar", VoiceController::currentGrammar);
+                rebuildRecognizer(VoiceController::currentGrammar);
             }
             // The scan still runs, on the same interval, purely to keep the inscribed-level map
             // fresh - the owned SET is discarded here, and no grammar or gate is touched.
@@ -1271,8 +1285,7 @@ public final class VoiceController {
      */
     private static void rebuildGrammarForOwned(java.util.Set<String> owned) {
         java.util.Set<String> snapshot = java.util.Set.copyOf(owned);
-        rebuildRecognizer("VoiceSpells-Grammar",
-            () -> SpellIndex.phrasesFor(snapshot, VoiceSpellsConfig.cGrammarFloor));
+        rebuildRecognizer(() -> SpellIndex.phrasesFor(snapshot, VoiceSpellsConfig.cGrammarFloor));
     }
 
     /**
@@ -1288,17 +1301,38 @@ public final class VoiceController {
      *
      * <p>Off-thread because constructing a Recognizer blocks and these are called from the
      * client tick. The grammar is supplied lazily so it is computed on that thread too.
+     *
+     * <p>One thread, not a fresh one per call. Every rebuild used to start its own, and rebuilds
+     * arrive in bursts — the periodic owned-spell rescan, a config save and a spellbook change
+     * can land within a tick of each other. VoskSession is synchronised so they could not corrupt
+     * anything, but they could finish out of order: whichever thread won the monitor LAST decided
+     * the live grammar, and nothing said that was the one carrying the newest spell set. Each
+     * rebuild also blocks feed16k for its duration, so running three meant stalling the audio
+     * thread three times to reach a result two of them were going to overwrite.
+     *
+     * <p>A generation stamp makes the queue coalescing rather than merely ordered: a rebuild that
+     * is already superseded by the time its turn comes does not run at all.
      */
-    private static void rebuildRecognizer(String threadName,
-                                          java.util.function.Supplier<java.util.List<String>> grammar) {
-        VoskSession s = session;
-        if (s == null) return;
-        Thread t = new Thread(() -> {
-            if (transcription) s.rebuildUnconstrained();
-            else               s.rebuildGrammar(grammar.get());
-        }, threadName);
-        t.setDaemon(true);
-        t.start();
+    private static final java.util.concurrent.ExecutorService REBUILD_EXEC =
+        java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "VoiceSpells-Grammar");
+            t.setDaemon(true);
+            return t;
+        });
+    private static final java.util.concurrent.atomic.AtomicLong REBUILD_GEN =
+        new java.util.concurrent.atomic.AtomicLong();
+
+    private static void rebuildRecognizer(java.util.function.Supplier<java.util.List<String>> grammar) {
+        if (session == null) return;
+        final long gen = REBUILD_GEN.incrementAndGet();
+        REBUILD_EXEC.execute(() -> {
+            if (gen != REBUILD_GEN.get()) return;      // a newer request is already queued
+            // Re-read: the session can be closed and replaced between queueing and running.
+            VoskSession live = session;
+            if (live == null) return;
+            if (transcription) live.rebuildUnconstrained();
+            else               live.rebuildGrammar(grammar.get());
+        });
     }
 
     /**

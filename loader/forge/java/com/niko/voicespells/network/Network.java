@@ -81,11 +81,11 @@ public final class Network {
                 // setPacketHandled(true) for us.
                 ServerPlayer sp = ctx.get().getSender();
                 if (sp != null) {
+                    // totalCasts and streak are on the wire but stop here: they are the client's
+                    // own counters and the server keeps its own. See SpellCaster.cast.
                     SpellCaster.cast(sp,
                         payload.spellId(),
                         payload.volumeScale(),
-                        payload.totalCasts(),
-                        payload.streak(),
                         payload.spoken());
                 }
             })

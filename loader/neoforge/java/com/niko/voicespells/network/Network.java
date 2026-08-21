@@ -50,11 +50,11 @@ public final class Network {
         PayloadRegistrar r = event.registrar("1").optional();
         r.playToServer(CastSpellPayload.TYPE, CastSpellPayload.CODEC, (payload, ctx) -> {
             if (ctx.player() instanceof ServerPlayer sp) {
+                // totalCasts and streak are on the wire but stop here: they are the client's own
+                // counters and the server keeps its own. See SpellCaster.cast.
                 ctx.enqueueWork(() -> SpellCaster.cast(sp,
                     payload.spellId(),
                     payload.volumeScale(),
-                    payload.totalCasts(),
-                    payload.streak(),
                     payload.spoken()));
             }
         });
