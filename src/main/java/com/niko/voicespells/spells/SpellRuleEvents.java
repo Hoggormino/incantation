@@ -211,8 +211,12 @@ public final class SpellRuleEvents {
 
     private static void warnOnce(String hook, Throwable t) {
         if (WARNED.add(hook)) {
-            VoiceSpells.LOGGER.warn("Voice-advantage {} hook is not working against this build of "
-                + "Iron's Spells and has been disabled for this session: {}", hook, t.toString());
+            // "Reported once" - nothing is disabled. The hook keeps firing and keeps failing; only
+            // the logging is latched, so a broken reflective contract is loud once instead of
+            // silent forever or spamming per cast.
+            VoiceSpells.LOGGER.warn("Voice-advantage {} hook is failing against this build of "
+                + "Iron's Spells; it will keep retrying and this is reported once: {}",
+                hook, t.toString());
         }
     }
 

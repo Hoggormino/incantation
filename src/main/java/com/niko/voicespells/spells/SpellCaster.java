@@ -331,21 +331,22 @@ public final class SpellCaster {
             // for spoken casts to be stronger than clicked ones. Clamped only against absurd
             // values.
             //
-            // The bonus is FREE: the extra levels are refunded in mana after the cast, so a
-            // spoken spell hits like a higher-level one without costing like one. Iron's Spells
-            // derives mana cost from the level it is handed, so without the refund
-            // voiceLevelBonus = 5 roughly doubles what a cast costs - "voice casts hit harder,
-            // and drain you twice as fast" is not the advantage the host who asked for this
-            // wanted, and nothing in the game would have told the player it was happening.
+            // The bonus is FREE: the spell hits like a higher-level one without costing like one.
+            // Iron's Spells derives mana cost from the level it is handed, so untouched,
+            // voiceLevelBonus = 5 roughly doubles what a cast costs - "voice casts hit harder, and
+            // drain you twice as fast" is not the advantage the host who asked for this wanted,
+            // and nothing in the game would have told the player it was happening.
             int baseLevel  = castLevel;
             int levelBonus = SpellRules.configuredLevelBonus();
             if (levelBonus > 0) castLevel = Math.min(castLevel + levelBonus, 10);
             // How much the bonus inflated the price. Carried on the voice stamp and subtracted by
-            // the SpellOnCastEvent hook at the moment Iron's Spells charges for it.
+            // the SpellOnCastEvent hook at the instant Iron's Spells charges for it - not credited
+            // back afterwards, which is what this did first and was exploitable: mana is deducted
+            // when the spell RESOLVES, so a credit issued at initiation arrived before the charge
+            // and an interrupted cast kept it.
             int manaDiscount = manaDelta(spell, spellClass, player, baseLevel, castLevel);
-            // The preflight below still checks against the BOOSTED level, so a player can never
-            // start a cast they could not have afforded outright - the refund lands after, not
-            // instead. That keeps mana honest under any failure path.
+            // The preflight below still checks against the BOOSTED level, so nobody can start a
+            // cast they could not have afforded outright; the discount applies at the till.
 
             // Pre-flight: in spellbook modes the cast costs mana and triggers a cooldown.
             // attemptInitiateCast itself will silently fail when either's not satisfied; rather
@@ -983,22 +984,21 @@ public final class SpellCaster {
         SUBSCRIBERS.add(uuid);
         return true;
     }
-    /** Highest total-cast count we've seen reported per player, used by /voicespells top. The
-     *  count is sent by the client in {@link com.niko.voicespells.network.CastSpellPayload}
-     *  and reflects the player's lifetime stats from their local {@code VoiceStats}. */
     /**
-     * Players the server has actually heard from over the mod's channel.
+     * Players whose live connection carries the mod's channel.
      *
      * <p>Ground truth for "this player has Incantation installed": the payload is registered as
-     * OPTIONAL, so a client without the mod simply never negotiates the channel and can never
-     * send one. It matters for the incantation rule - locking spells behind speech would
-     * otherwise permanently brick anyone playing without the mod, who has no way to comply and
-     * may not even have the translation string to be told why.
+     * OPTIONAL, so a client without the mod never negotiates the channel. It matters for the
+     * incantation rule - locking spells behind speech would otherwise permanently brick anyone
+     * playing without the mod, who has no way to comply and may not even have the translation
+     * string to be told why.
      *
-     * <p>Populated on receipt rather than by a handshake because the mod has no handshake, and
-     * adding one to a released network protocol is a compatibility break for a check that this
-     * answers exactly. The consequence is honest and documented in the config: the ALWAYS rule
-     * only constrains players the server has heard speak at least once.
+     * <p>Filled at LOGIN by asking the connection, not by waiting for a cast packet. The old
+     * inference - "we have heard from them at some point since the server booted" - was wrong in
+     * both directions and inverted the rule it fed: a player who never spoke was never recorded,
+     * so ALWAYS never constrained them, and speaking once was what armed the lock on yourself.
+     * It was also sticky within a run, so removing the mod or losing a microphone left the flag
+     * set and every spell uncastable. Cleared on logout, so it means "right now".
      */
     private static final java.util.Set<java.util.UUID> VOICE_CLIENTS =
         java.util.concurrent.ConcurrentHashMap.newKeySet();

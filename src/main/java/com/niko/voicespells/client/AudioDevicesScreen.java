@@ -368,13 +368,6 @@ public final class AudioDevicesScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
-        // Chrome tied to THIS screen's content, not to a notional panel.
-        //
-        // panel() in the panelless style draws the header/footer rules at the bounds it is given,
-        // and these screens were handing it their old centred-panel rectangle - so the rules
-        // landed well above the title and well below the last button, reading as two blurry lines
-        // floating in the background. Anchoring them just under the title and just above the
-        // button row makes them frame the content, which is what a rule is for.
         Theme.ground(this, g, mouseX, mouseY, partial);
 
         super.render(g, mouseX, mouseY, partial);
