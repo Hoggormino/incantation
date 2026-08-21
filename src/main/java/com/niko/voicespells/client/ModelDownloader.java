@@ -55,11 +55,25 @@ public final class ModelDownloader {
     public static boolean ensureModel(Path modelDir, IntConsumer onPercent) {
         if (looksLikeModel(modelDir)) return true;
 
-        String id = VoiceSpellsConfig.cModelId;
+        // Which model to fetch is decided by the DIRECTORY we were asked to fill, not by re-reading
+        // the config. ModelCatalog.dirFor(id) is models/<id>, so the folder name is the id.
+        //
+        // Reading VoiceSpellsConfig.cModelId here made this a second source of truth about a
+        // decision resolveModelDir had already made, and the two disagreed in a way that fetched
+        // the wrong file: a player with modelPath pointed at an empty directory got whatever
+        // modelId said - by default the ENGLISH archive - unpacked into the directory they had set
+        // aside for a different model. It then looked like a real model and loaded, so the mod
+        // listened in the wrong language and nothing anywhere said why.
+        String id = modelDir.getFileName() == null ? "" : modelDir.getFileName().toString();
         ModelCatalog.Entry entry = ModelCatalog.byId(id);
         if (entry == null) {
-            VoiceSpells.LOGGER.error("Unknown modelId \"{}\" - cannot download it. Known ids: {}",
-                id, ModelCatalog.all().stream().map(ModelCatalog.Entry::id).toList());
+            // A directory we cannot name is a directory we must not guess about. This is the
+            // modelPath case: the player chose the location, so the model in it is their choice
+            // too, and the only safe thing is to say what is missing.
+            VoiceSpells.LOGGER.error("No Vosk model in \"{}\", and that folder is not a catalogue "
+                + "model id, so there is nothing to download for it. Install a model there by "
+                + "hand, or clear modelPath to use a catalogued one. Known ids: {}",
+                modelDir, ModelCatalog.all().stream().map(ModelCatalog.Entry::id).toList());
             explainManualInstall(modelDir, null);
             return false;
         }

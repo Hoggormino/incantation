@@ -108,16 +108,28 @@ public final class ModelCatalog {
      * Resolve which model directory to actually load, in priority order:
      * <ol>
      *   <li>an explicit {@code modelPath} in the config — absolute control, never overridden</li>
-     *   <li>the legacy {@code model/} directory, if it holds a real model</li>
+     *   <li>the legacy {@code model/} directory, but <b>only</b> when the requested model is the
+     *       default one</li>
      *   <li>{@code models/&lt;modelId&gt;/}, which is where downloads land</li>
      * </ol>
+     *
+     * <p>The legacy check used to come first unconditionally, and that made {@code modelId} inert
+     * for a large group of players. Every install that predates the catalogue has a populated
+     * {@code config/voicespells/model/}, so for all of them {@code looksLikeModel(legacy)} was true
+     * and this returned before {@code modelId} was ever read — setting it did nothing at all, with
+     * nothing logged to say so. Anyone following the README's advice to run a non-English model
+     * that way was quietly kept on English.
+     *
+     * <p>Legacy still wins for the DEFAULT id, which is the case it exists to serve: an existing
+     * player must not be pushed into re-downloading a model they already have. Asking for a
+     * different one is now an instruction rather than a suggestion.
      */
     public static Path resolveModelDir(String explicitPath, String modelId) {
         if (explicitPath != null && !explicitPath.isBlank()) {
             return Path.of(explicitPath.trim());
         }
-        Path legacy = legacyDir();
-        if (looksLikeModel(legacy)) return legacy;
-        return dirFor(modelId == null || modelId.isBlank() ? DEFAULT_ID : modelId.trim());
+        String id = (modelId == null || modelId.isBlank()) ? DEFAULT_ID : modelId.trim();
+        if (DEFAULT_ID.equals(id) && looksLikeModel(legacyDir())) return legacyDir();
+        return dirFor(id);
     }
 }

@@ -281,21 +281,65 @@ public final class SpellIndex {
         // disabled voice casting entirely, with no log line and no HUD miss. Adding them as
         // standalone entries is enough: the decoder is free to emit "<trigger> <spell>" as two
         // consecutive entries, exactly as it already does for "yes"/"no".
+        List<String> dropped = new java.util.ArrayList<>();
         for (String tw : triggers) {
-            if (!tw.isEmpty() && !out.contains(tw)) out.add(tw);
+            if (!tw.isEmpty()) addControl(out, tw, dropped);
         }
         if (needsHF) {
-            if (!out.contains("yes")) out.add("yes");
-            if (!out.contains("no"))  out.add("no");
+            addControl(out, "yes", dropped);
+            addControl(out, "no",  dropped);
         }
         if (needsHotbar) {
             String[] ordinals = { "one","two","three","four","five","six","seven","eight","nine" };
             for (String o : ordinals) {
-                String p1 = "spell " + o;
-                if (!out.contains(p1)) out.add(p1);
+                addControl(out, "spell " + o, dropped);
             }
         }
+        reportDroppedControls(dropped);
         return out;
+    }
+
+    /**
+     * Add a control phrase, but only if the loaded model can actually say it.
+     *
+     * <p>These words are hardcoded English. Vosk runs in grammar mode and silently discards any
+     * grammar entry containing a word its lexicon has no entry for, so on a non-English model they
+     * do not merely fail — they vanish with nothing said anywhere. Measured against the Spanish
+     * model's own symbol table (100,006 words): {@code spell} is absent, so every
+     * {@code spell one}..{@code spell nine} hotbar phrase is dropped, while {@code yes} and
+     * {@code no} survive only because Spanish borrowed them. That is exactly the failure the
+     * trigger-word comment above describes, in a second place.
+     *
+     * <p>Filtering does not make the feature work in another language - only translated control
+     * words would - but it stops the mod claiming a grammar entry that was never really there,
+     * and it makes the reason visible in the log instead of invisible everywhere.
+     *
+     * <p>Fails OPEN: {@link Lexicon#knows} answers false for everything when no vocabulary has
+     * been read, so without the {@code ready()} check this would strip every control word on the
+     * normal startup path before the model is loaded.
+     */
+    private static void addControl(List<String> out, String phrase, List<String> dropped) {
+        if (out.contains(phrase)) return;
+        if (com.niko.voicespells.speech.Lexicon.ready() && !sayable(phrase)) {
+            dropped.add(phrase);
+            return;
+        }
+        out.add(phrase);
+    }
+
+    /** Last set of dropped control words we logged, so a grammar rebuild - which happens on every
+     *  spellbook change and every config save - does not reprint the same warning forever. */
+    private static volatile String lastDroppedControls = "";
+
+    private static void reportDroppedControls(List<String> dropped) {
+        String key = String.join(",", dropped);
+        if (key.equals(lastDroppedControls)) return;
+        lastDroppedControls = key;
+        if (dropped.isEmpty()) return;
+        VoiceSpells.LOGGER.warn("These control words are not in the loaded speech model's "
+            + "vocabulary and have been left out of the grammar: {}. They are English, and the "
+            + "model is not - the recognizer would have discarded them without a word either way.",
+            String.join(", ", dropped));
     }
 
     /** If the phrase is a "spell N" hotbar-select command and hotbar select is enabled,
