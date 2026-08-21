@@ -1262,20 +1262,28 @@ public final class VoiceController {
         // testing membership of an empty owned set marked every real phrase as a decoy, and
         // /voicespells grammar printed the entire list in decoy grey. Fail open, the same way
         // the dispatch gate does when the scan cannot be trusted.
-        if (!grammarIsNarrowed()) return true;
-        return ownedSpellIds.contains(hit.get().id().toString());
+        java.util.Set<String> owned = ownedSpellIds;
+        if (!narrowed(owned)) return true;
+        return owned.contains(hit.get().id().toString());
     }
 
     /** Whether the live grammar is the owned-narrowed one rather than every known phrase.
      *  Same condition {@link #currentGrammar()} branches on - kept together deliberately. */
     public static boolean grammarIsNarrowed() {
-        java.util.Set<String> owned = ownedSpellIds;
+        return narrowed(ownedSpellIds);
+    }
+
+    /** Takes the set rather than reading the field, so a caller that then USES the set tests and
+     *  uses the same snapshot. The field is volatile and swapped wholesale by the owned-spell
+     *  rescan; reading it twice around a decision is how a check and its follow-up disagree. */
+    private static boolean narrowed(java.util.Set<String> owned) {
         return ownedScanReliable && owned != null && !owned.isEmpty();
     }
 
     private static java.util.List<String> currentGrammar() {
-        if (!grammarIsNarrowed()) return SpellIndex.getPhrases();
-        return SpellIndex.phrasesFor(ownedSpellIds, VoiceSpellsConfig.cGrammarFloor);
+        java.util.Set<String> owned = ownedSpellIds;
+        if (!narrowed(owned)) return SpellIndex.getPhrases();
+        return SpellIndex.phrasesFor(owned, VoiceSpellsConfig.cGrammarFloor);
     }
 
     /**

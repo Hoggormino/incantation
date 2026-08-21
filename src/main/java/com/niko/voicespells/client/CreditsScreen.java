@@ -38,6 +38,10 @@ public final class CreditsScreen extends Screen {
     private final Screen parent;
     private int page = 0;
     private int px, py, panelW, panelH;
+    /** Built once in {@link #init()}. render() runs 60+ times a second and the content never
+     *  changes while the screen is open, so building the page list there would have re-allocated
+     *  every row and re-queried the mod container on every frame. */
+    private List<Page> pages = List.of();
 
     /** One credit line: a name on the left, what it is on the right. A blank name draws the value
      *  as a full-width note instead, which is how the disclaimers and licence lines are set. */
@@ -100,15 +104,22 @@ public final class CreditsScreen extends Screen {
         return out;
     }
 
-    /** Read at runtime rather than baked in, so it cannot drift from the jar it is printed on. */
+    /** Read at runtime rather than baked in, so it cannot drift from the jar it is printed on.
+     *  Resolved once per game session — it cannot change while the game is running. */
+    private static String cachedVersion;
+
     private static String modVersion() {
+        if (cachedVersion != null) return cachedVersion;
+        String v;
         try {
-            return ModList.get().getModContainerById("voicespells")
+            v = ModList.get().getModContainerById("voicespells")
                 .map(c -> c.getModInfo().getVersion().toString())
                 .orElse("?");
         } catch (Throwable t) {
-            return "?";
+            v = "?";
         }
+        cachedVersion = v;
+        return v;
     }
 
     public CreditsScreen(Screen parent) {
@@ -118,6 +129,7 @@ public final class CreditsScreen extends Screen {
 
     @Override
     protected void init() {
+        pages = pages();
         panelW = Theme.fit(PANEL_W_PREF, width);
         panelH = Theme.fit(PANEL_H_PREF, height);
         px = (width - panelW) / 2;
@@ -129,7 +141,7 @@ public final class CreditsScreen extends Screen {
         titleW.setColor(Theme.C_TEXT);
         addRenderableWidget(titleW);
 
-        int total = pages().size();
+        int total = pages.size();
         int btnY = py + panelH - 28;
         int btnW = 90;
 
@@ -153,7 +165,8 @@ public final class CreditsScreen extends Screen {
         Theme.ground(this, g, mouseX, mouseY, partial);
         super.render(g, mouseX, mouseY, partial);
 
-        List<Page> pages = pages();
+
+        if (pages.isEmpty()) return;   // nothing to draw before init() has run
         // The page index survives a resize that shortens the list; clamp rather than crash.
         int idx = Math.max(0, Math.min(page, pages.size() - 1));
         Page current = pages.get(idx);
