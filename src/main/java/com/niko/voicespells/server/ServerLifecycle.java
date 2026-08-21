@@ -94,6 +94,7 @@ public final class ServerLifecycle {
         try {
             if (event.getEntity() != null) SpellCaster.forgetPlayer(event.getEntity().getUUID());
             com.niko.voicespells.spells.SpellRules.saveStore();
+            SpellCaster.saveTotals();
         } catch (Throwable t) {
             // Cleanup must never take the server down with it.
             VoiceSpells.LOGGER.debug("Logout cleanup failed: {}", t.toString());
@@ -109,10 +110,14 @@ public final class ServerLifecycle {
      */
     private static void onServerStarted(ServerStartedEvent event) {
         try {
-            com.niko.voicespells.spells.SpellRules.openStore(
-                event.getServer()
-                     .getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
-                     .resolve("voicespells"));
+            java.nio.file.Path dir = event.getServer()
+                .getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
+                .resolve("voicespells");
+            com.niko.voicespells.spells.SpellRules.openStore(dir);
+            // Same directory, same reason: the cast totals drive both /voicespells top and the
+            // mod's own advancements, and a total that restarts with the server makes the
+            // 200-cast and 1000-cast ones unreachable on any host that restarts nightly.
+            SpellCaster.openTotals(dir);
         } catch (Throwable t) {
             VoiceSpells.LOGGER.debug("Could not open the learned-incantation store: {}", t.toString());
         }

@@ -954,13 +954,16 @@ public final class SpellCaster {
      * real and is why this is wired to ServerStopped rather than left to process exit.
      */
     public static void clearServerState() {
-        // Learned incantations and any in-flight stamp are per server run, like the totals below.
+        // Flush before clearing, or a clean /stop throws away every cast since the last logout -
+        // which is the same mistake the learned-incantation store made.
+        saveTotals();
         SpellRules.forgetAll();
         RECENT_CASTS.clear();
         SUBSCRIBERS.clear();
         PLAYER_TOTALS.clear();
         VOICE_CLIENTS.clear();
         PLAYER_NAMES.clear();
+        totalsFile = null;
         synchronized (RECENT_LOG) { RECENT_LOG.clear(); }
     }
 
@@ -1014,6 +1017,63 @@ public final class SpellCaster {
         new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.Map<java.util.UUID, String>  PLAYER_NAMES  =
         new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Where the per-world cast totals live. Null until a server tells us its world directory. */
+    private static volatile java.nio.file.Path totalsFile;
+    private static volatile boolean totalsDirty = false;
+
+    /**
+     * Load the per-world cast totals.
+     *
+     * <p>These were memory-only and cleared at server stop, which quietly made the mod's own
+     * advancements unwinnable. The trigger counts server-side on purpose - the number in the
+     * packet is the client's and a crafted one used to pin a player at the top of
+     * /voicespells top forever - but counting server-side without persisting means the total
+     * restarts from zero with the server. voice_archmage needs 1000 casts and voice_magus 200,
+     * so on any host that restarts nightly those are unreachable, and /voicespells top forgets
+     * everyone every morning.
+     */
+    public static void openTotals(java.nio.file.Path worldDir) {
+        try {
+            totalsFile = worldDir.resolve("totals.txt");
+            PLAYER_TOTALS.clear();
+            PLAYER_NAMES.clear();
+            if (!java.nio.file.Files.exists(totalsFile)) return;
+            for (String line : java.nio.file.Files.readAllLines(totalsFile)) {
+                // uuid<TAB>count<TAB>name
+                String[] parts = line.split("\t", 3);
+                if (parts.length < 2) continue;
+                try {
+                    java.util.UUID id = java.util.UUID.fromString(parts[0]);
+                    int n = Integer.parseInt(parts[1].trim());
+                    if (n > 0) PLAYER_TOTALS.put(id, n);
+                    if (parts.length == 3 && !parts[2].isBlank()) PLAYER_NAMES.put(id, parts[2]);
+                } catch (Throwable badLine) { /* skip it, keep the rest */ }
+            }
+            VoiceSpells.LOGGER.info("Loaded voice-cast totals for {} player(s)", PLAYER_TOTALS.size());
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.warn("Could not read totals.txt: {}", t.toString());
+        }
+    }
+
+    /** Write the totals if anything changed. Dirty-guarded, so a quiet logout does no I/O. */
+    public static void saveTotals() {
+        java.nio.file.Path f = totalsFile;
+        if (f == null || !totalsDirty) return;
+        try {
+            StringBuilder sb = new StringBuilder();
+            PLAYER_TOTALS.forEach((id, n) -> sb.append(id).append('\t').append(n).append('\t')
+                .append(PLAYER_NAMES.getOrDefault(id, "")).append(System.lineSeparator()));
+            java.nio.file.Files.createDirectories(f.getParent());
+            java.nio.file.Path tmp = f.resolveSibling("totals.txt.tmp");
+            java.nio.file.Files.writeString(tmp, sb.toString());
+            java.nio.file.Files.move(tmp, f, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            totalsDirty = false;
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.warn("Could not write totals.txt: {}", t.toString());
+        }
+    }
+
     static int recordPlayerTotal(java.util.UUID uuid, String name, int clientTotal) {
         // Count server-side rather than believing the number in the packet.
         //
@@ -1025,6 +1085,7 @@ public final class SpellCaster {
         // to "who has voice-cast the most on this server".
         int serverTotal = PLAYER_TOTALS.merge(uuid, 1, Integer::sum);
         PLAYER_NAMES.put(uuid, name);
+        totalsDirty = true;
         // Returned so the advancement trigger can award from the same trusted number rather
         // than from the one in the packet.
         return serverTotal;
