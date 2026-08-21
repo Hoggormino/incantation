@@ -81,15 +81,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private int panelW;
     /** Y of the header and footer separator lines in panelless mode. */
     private int headerY, footerY;
-    /** Theme and palette as they were when the screen opened, plus whether Save ran.
-     *
-     *  <p>Cycling the theme or palette applies it immediately so the player can see the change
-     *  on the panel in front of them. That preview is a live global mutation of {@link Theme},
-     *  not screen-local state, so leaving via Cancel or Escape used to walk away with the
-     *  previewed look still applied while the config on disk said something else — the whole
-     *  UI stayed the wrong colour until something happened to reload the config. Restoring
-     *  these in {@link #onClose()} makes Cancel mean cancel. */
-    private boolean saved = false;
 
     public VoiceSpellsConfigScreen(Screen parent) {
         super(Component.translatable("voicespells.config.title"));
@@ -588,7 +579,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // grammar live so customPhrase / index changes apply without a restart.
         VoiceSpellsConfig.refreshCache();
         VoiceController.onConfigChanged();
-        saved = true;
         onClose();
     }
 

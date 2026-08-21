@@ -17,9 +17,6 @@ import java.util.function.Function;
  * <p>Left-click advances, right-click steps back, matching vanilla's own cycle buttons so the
  * muscle memory carries over. The current value IS the label, so every change updates the message.
  *
- * <p>Locked values stay in the cycle and are marked in the label rather than by colour, so the
- * state survives on any palette and for colour-blind players. Callers are expected to no-op when
- * the player lands on one — the point is to let them SEE what they have not unlocked yet.
  */
 public final class NeonCycle<T> extends Button {
 
@@ -27,18 +24,15 @@ public final class NeonCycle<T> extends Button {
     private final String name;
     private final T[] values;
     private final Function<T, String> labeller;
-    private final Function<T, Boolean> isLocked;
     private final Consumer<T> onChange;
     private int idx;
 
     private NeonCycle(int x, int y, int w, int h, String name, T[] values, T initial,
-                      Function<T, String> labeller, Function<T, Boolean> isLocked,
-                      Consumer<T> onChange) {
+                      Function<T, String> labeller, Consumer<T> onChange) {
         super(x, y, w, h, Component.empty(), b -> {}, Button.DEFAULT_NARRATION);
         this.name = name;
         this.values = values;
         this.labeller = labeller;
-        this.isLocked = isLocked;
         this.onChange = onChange;
         int start = 0;
         for (int i = 0; i < values.length; i++) {
@@ -48,49 +42,22 @@ public final class NeonCycle<T> extends Button {
         refreshLabel();
     }
 
-    public static <T> NeonCycle<T> of(int x, int y, int w, int h, T[] values, T initial,
-                                       Function<T, String> labeller, Consumer<T> onChange) {
-        return new NeonCycle<>(x, y, w, h, "", values, initial, labeller, null, onChange);
-    }
-
-    /** Variant with an "isLocked" predicate — locked values still appear in the cycle but are
-     *  marked, and the surrounding code is expected to no-op when the user lands on one. */
-    public static <T> NeonCycle<T> withLocks(int x, int y, int w, int h, T[] values, T initial,
-                                              Function<T, String> labeller,
-                                              Function<T, Boolean> isLocked,
-                                              Consumer<T> onChange) {
-        return new NeonCycle<>(x, y, w, h, "", values, initial, labeller, isLocked, onChange);
-    }
-
     /** Self-labelling: reads "Corner: Bottom Right", the way every vanilla cycle option does. */
     public static <T> NeonCycle<T> named(int x, int y, int w, int h, String name, T[] values,
                                           T initial, Function<T, String> labeller,
                                           Consumer<T> onChange) {
-        return new NeonCycle<>(x, y, w, h, name, values, initial, labeller, null, onChange);
-    }
-
-    /** Self-labelling variant with locks. */
-    public static <T> NeonCycle<T> namedWithLocks(int x, int y, int w, int h, String name,
-                                                   T[] values, T initial,
-                                                   Function<T, String> labeller,
-                                                   Function<T, Boolean> isLocked,
-                                                   Consumer<T> onChange) {
-        return new NeonCycle<>(x, y, w, h, name, values, initial, labeller, isLocked, onChange);
+        return new NeonCycle<>(x, y, w, h, name, values, initial, labeller, onChange);
     }
 
     public T value() { return values[idx]; }
 
-    /** The label carries both the value and whether it is locked. */
+    /** The value IS the label, so every change goes through here. */
     private void refreshLabel() {
         if (values.length == 0) { setMessage(Component.empty()); return; }
-        T v = values[idx];
-        boolean locked = isLocked != null && Boolean.TRUE.equals(isLocked.apply(v));
-        String text = labeller.apply(v);
         // Same rule as NeonToggle: the NAME is plain and the VALUE carries the colour, so a row
         // of these can be skimmed for what is set rather than read word by word.
-        Component value = Component.literal(locked ? "✗ " + text : text)
-            .withStyle(locked ? net.minecraft.ChatFormatting.DARK_GRAY
-                              : net.minecraft.ChatFormatting.AQUA);
+        Component value = Component.literal(labeller.apply(values[idx]))
+            .withStyle(net.minecraft.ChatFormatting.AQUA);
         setMessage(name.isEmpty() ? value : Component.literal(name + ": ").append(value));
     }
 

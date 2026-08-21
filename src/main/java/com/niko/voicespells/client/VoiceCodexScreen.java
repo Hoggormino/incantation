@@ -159,7 +159,9 @@ public final class VoiceCodexScreen extends Screen {
                 color, !Theme.lightSurface());
         }
 
-        y += cardH + 6;
+        // 2, not 6. Those four pixels are the difference between the eight rows fitting inside
+        // the well and the last one drawing below it - see the pitch note below.
+        y += cardH + 2;
 
         // The stat block gets the same well the card above and the list beside it have.
         // Unframed, it was the only bare element on a screen with two framed panels, so it read
@@ -174,15 +176,20 @@ public final class VoiceCodexScreen extends Screen {
 
         // Row pitch derived from the room that exists, not a fixed 13.
         //
-        // Eight rows at ROW_H put the last one 217px below the panel top, but the footer rule
-        // sits at panelH - 34, so anything under a 251px panel pushed "Speak to cast" and
-        // "Daily challenge" through the rule and down beside the Back button. That is a 720p
-        // window at GUI Scale 3 - not an edge case - and the two rows it loses are the two a
-        // returning player is most likely to be checking. Compressing to a 9px pitch is worse
-        // typography than dropping them would be, and much better than dropping them.
+        // Eight rows at ROW_H need a 251px panel, and the panel is min(280, height - 16). On a
+        // 720p window at GUI Scale 3 - not an edge case - that is 224, so the pitch compresses.
+        // Compressing is the right answer: losing "Speak to cast" and "Daily challenge" entirely
+        // would be worse, and those are the two a returning player checks.
+        //
+        // But the 9px floor is a floor, so at the smallest panel the rows stopped compressing and
+        // started overflowing instead - the last one drew 3px BELOW the well that is supposed to
+        // contain it. rowsBottom is now the well's own inner edge, and the count is clamped to
+        // what actually fits, so the block can never draw outside itself. At Minecraft's 240
+        // minimum all eight still fit.
         final int ROWS = 8;
-        int rowsBottom = py + panelH - 36 - 6;
+        int rowsBottom = statsBottom - 4;
         int rowH = Math.max(9, Math.min(ROW_H, (rowsBottom - y) / ROWS));
+        this.rowsFloor = rowsBottom;  // line() drops any row that would land past this
 
         // Stat rows
         line(g, x, y, "Total casts",       String.valueOf(VoiceStats.totalCasts())); y += rowH;
@@ -216,7 +223,18 @@ public final class VoiceCodexScreen extends Screen {
         //  accent rule glow instead of overlapping it.)
     }
 
+    /**
+     * Bottom edge the stat rows may not cross, set by the layout pass each frame. The rows are
+     * drawn as a flat sequence rather than a loop, so this is how the sequence learns where the
+     * well it lives in ends.
+     */
+    private int rowsFloor = Integer.MAX_VALUE;
+
     private void line(GuiGraphics g, int x, int y, String label, String value) {
+        // A row that would draw below the well is dropped, not clipped. The pitch above already
+        // compresses to fit, and at every window size Minecraft allows all eight rows survive -
+        // this is the guard for the size that does not exist yet.
+        if (y + 8 > rowsFloor) return;
         // The rows are drawn inset inside the stats well, so the column they share is narrower
         // than the well by that inset on both sides.
         int colW = panelW / 2 - Theme.PAD - 6 - 16;

@@ -1,6 +1,5 @@
 package com.niko.voicespells.client;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 
