@@ -81,6 +81,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private int panelW;
     /** Y of the header and footer separator lines in panelless mode. */
     private int headerY, footerY;
+    /** The panel under the tab row, computed in {@link #init()} and drawn beneath the controls. */
+    private int contentWellX, contentWellY, contentWellW, contentWellH;
 
     public VoiceSpellsConfigScreen(Screen parent) {
         super(Component.translatable("voicespells.config.title"));
@@ -194,6 +196,17 @@ public final class VoiceSpellsConfigScreen extends Screen {
             "HUD", Tab.HUD));
         addRenderableWidget(new TabButton(lastTabX, tabsY, lastTabW, TAB_H,
             "Behaviour", Tab.BEHAVIOUR));
+
+        // The panel the tabs sit on. Its top edge is the tab row's bottom edge, deliberately:
+        // the sprite's nine-slice border is bottom:0 so a selected tab has an OPEN bottom and is
+        // supposed to merge into the surface beneath it. There was no surface, so the whole
+        // idiom was doing nothing - three tabs with open bottoms opening onto the backdrop, and
+        // the options below them floating unframed while every other screen in the mod put its
+        // content in a well.
+        contentWellX = gridX;
+        contentWellY = tabsY + TAB_H;
+        contentWellW = gridW;
+        contentWellH = footerY - contentWellY;
 
         // --- Tab content: a two-column option grid ---
         //
@@ -613,6 +626,10 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // reads a header band, a content band and a footer band instead of one soup. Drawn
         // rather than blitted because the sprites for them only exist from 1.20.5 on, and
         // this has to look the same on 1.20.1.
+
+        // Drawn before the widgets so the tab row overlaps its top edge and the controls sit on
+        // its face, which is the order vanilla draws a tabbed screen in.
+        if (contentWellH > 0) Theme.well(g, contentWellX, contentWellY, contentWellW, contentWellH);
 
         super.render(g, mouseX, mouseY, partial);
 

@@ -35,6 +35,11 @@ public final class ConfigMoreScreen extends Screen {
     private int px, py, panelW;
     /** Header / footer rule positions for the shared chrome. */
     private int headerY, footerY;
+    /** Breathing room between the button grid and the well drawn around it. */
+    private static final int GRID_PAD = 6;
+    /** The well behind the action grid, computed in {@link #init()} from the grid that was
+     *  actually laid out, and drawn in {@link #render} underneath the buttons. */
+    private int gridWellX, gridWellY, gridWellW, gridWellH;
 
     public ConfigMoreScreen(Screen parent) {
         super(Component.literal("More"));
@@ -157,6 +162,25 @@ public final class ConfigMoreScreen extends Screen {
             addRenderableWidget(btn);
             slot++;
         }
+
+        // The well behind the grid, measured from the grid that was actually laid out.
+        //
+        // This screen had none. Every other content screen in the mod frames its content - the
+        // Codex has three wells, the spell list and device picker one each - and this one, the hub
+        // they are all reached from, drew its render() as ground() plus super.render() and nothing
+        // else. Twelve buttons floating on the backdrop with no surface under them, which is
+        // exactly what it looked like.
+        //
+        // Derived from the real stride and row count rather than a guessed height, because the
+        // stride compresses on short windows; a fixed rect would have drifted off the buttons at
+        // precisely the sizes where the layout is already tight. The last row is a button height,
+        // not a stride, since there is no gap to reserve after it.
+        int lastRowH = Math.min(20, stride - 2);
+        gridWellX = colX1 - GRID_PAD;
+        gridWellY = py - GRID_PAD;
+        gridWellW = (colX2 + colW) - colX1 + GRID_PAD * 2;
+        gridWellH = ((gridRows - 1) * stride + lastRowH) + GRID_PAD * 2;
+
         y += gridRows * stride + 4;
 
         // Anchored just above the Back row rather than to the accumulated y. The button stack
@@ -418,6 +442,9 @@ public final class ConfigMoreScreen extends Screen {
         // the panel still reads. Painting only a flat scrim, as this did before, opted out
         // of all of that and was a large part of why the screens felt foreign.
         Theme.ground(this, g, mouseX, mouseY, partial);
+        // Under the widgets, so the buttons keep their own vanilla faces and the well only
+        // provides the surface they sit on.
+        if (gridWellH > 0) Theme.well(g, gridWellX, gridWellY, gridWellW, gridWellH);
         super.render(g, mouseX, mouseY, partial);
     }
 }

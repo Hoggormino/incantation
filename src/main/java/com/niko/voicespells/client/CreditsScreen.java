@@ -164,6 +164,12 @@ public final class CreditsScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         Theme.ground(this, g, mouseX, mouseY, partial);
+
+        // Same well the guide uses - these two are the mod's only pages of flat prose and they
+        // should read as one pair.
+        int bodyTop = py + Theme.HEADER_H + 18;
+        Theme.well(g, px + 8, bodyTop, panelW - 16, (py + panelH - 24) - bodyTop);
+
         super.render(g, mouseX, mouseY, partial);
 
 

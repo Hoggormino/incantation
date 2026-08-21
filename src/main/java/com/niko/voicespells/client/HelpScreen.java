@@ -156,6 +156,12 @@ public final class HelpScreen extends Screen {
         // of all of that and was a large part of why the screens felt foreign.
         Theme.ground(this, g, mouseX, mouseY, partial);
 
+        // The body sits in a well, like every other content screen. Without one this page was
+        // bare text on the backdrop - the guide is the screen a confused player is sent to, and
+        // it was the one that looked least like part of the mod.
+        int bodyTop = py + Theme.HEADER_H + 18;
+        Theme.well(g, px + 8, bodyTop, panelW - 16, (py + panelH - 24) - bodyTop);
+
         super.render(g, mouseX, mouseY, partial);
 
 

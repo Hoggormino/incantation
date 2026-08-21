@@ -43,6 +43,10 @@ public final class AddAliasScreen extends Screen {
 
     /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
     private int px, py, panelW, panelH;
+    /** Top of the existing-alias list, captured in {@link #init()} so {@link #render} can draw a
+     *  well behind it. The rows themselves are widgets, so the surface has to be drawn separately
+     *  and underneath them. */
+    private int listWellTop;
 
     public AddAliasScreen(Screen parent, String spellId) {
         this(parent, spellId, null);
@@ -113,6 +117,8 @@ public final class AddAliasScreen extends Screen {
         sectionLabel.setColor(Theme.C_MUTED);
         addRenderableWidget(sectionLabel);
         y += 12;
+
+        listWellTop = y - 4;
 
         // List existing alias rows from BOTH customPhrases and incantations that point at this
         // spell. Each row has a phrase label + an X button that removes it.
@@ -281,6 +287,13 @@ public final class AddAliasScreen extends Screen {
         // the panel still reads. Painting only a flat scrim, as this did before, opted out
         // of all of that and was a large part of why the screens felt foreign.
         Theme.ground(this, g, mouseX, mouseY, partial);
+        // Well behind the existing-alias list, so the rows read as a list rather than as loose
+        // text under a heading. Drawn before super.render so the row labels and their remove
+        // buttons stay on top of it.
+        if (listWellTop > 0) {
+            Theme.well(g, px + Theme.PAD - 6, listWellTop,
+                panelW - (Theme.PAD - 6) * 2, (py + panelH - 34) - listWellTop);
+        }
         super.render(g, mouseX, mouseY, partial);
     }
 }
