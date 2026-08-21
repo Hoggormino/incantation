@@ -179,7 +179,11 @@ public final class ConfigMoreScreen extends Screen {
         gridWellX = colX1 - GRID_PAD;
         gridWellY = py - GRID_PAD;
         gridWellW = (colX2 + colW) - colX1 + GRID_PAD * 2;
-        gridWellH = ((gridRows - 1) * stride + lastRowH) + GRID_PAD * 2;
+        // Clamped to the boundary the grid was allotted. At Minecraft's 240px minimum the stride
+        // lands on 22 while the last row keeps its full 20, so the padded well came out 2px taller
+        // than the space reserved for it and its bottom edge crossed the "Today's spell" line.
+        gridWellH = Math.min(((gridRows - 1) * stride + lastRowH) + GRID_PAD * 2,
+                             gridBottom - gridWellY);
 
         y += gridRows * stride + 4;
 
