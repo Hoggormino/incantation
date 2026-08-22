@@ -152,17 +152,6 @@ public final class SpellRules {
         return true;
     }
 
-    /** True if this player has a live, unconsumed voice cast. */
-    private static boolean hasPending(UUID player) {
-        Pending p = pending.get(player);
-        if (p == null) return false;
-        if (System.nanoTime() - p.atNanos() > PENDING_TTL_NANOS) {
-            pending.remove(player);
-            return false;
-        }
-        return true;
-    }
-
 
     /** Whether this player has ever voice-cast this spell, for the FIRST_CAST rule. */
     public static boolean hasLearned(UUID player, String spellId) {

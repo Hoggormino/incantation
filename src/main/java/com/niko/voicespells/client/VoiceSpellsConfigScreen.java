@@ -503,7 +503,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
 
         help(slot(NeonToggle.named(0, 0, colW, 20, "Hands-free confirm", workHandsFree,
                 v -> workHandsFree = v), i++, gridX, colW, y),
-            "Say yes or no to answer the mod's prompts instead of pressing a key.");
+            "Say \"no\" to clear spells waiting in the cast queue. Only does anything when "
+            + "the queue has something in it, which needs Queue above 1.");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workCastQueue, 1, 5,
                 v -> "Queue: " + v, v -> workCastQueue = v), i++, gridX, colW, y),

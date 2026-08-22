@@ -189,19 +189,39 @@ public final class VoiceController {
     /** Last position the player moved through, and the nanotime of that move. Used by the
      *  AFK gate so we can pause recognition when the player has been stationary for a while. */
     private static volatile double lastPosX, lastPosY, lastPosZ;
+    private static volatile float  lastYRot, lastXRot;
     private static volatile long   lastMovementNanos = 0L;
 
     /** Sample the player's position once per client tick. Tracks the last meaningful movement
      *  so the AFK check has something to compare against. */
+    /**
+     * Decide whether the player is away, from what they are DOING and not only from where they
+     * are standing.
+     *
+     * <p>Position alone was wrong in the cases that matter. Mining a wall, AFK-fishing, holding a
+     * firing position in a mob grinder and turning to track a target are all activity, and all of
+     * them stand still - so the mod would decide a player mid-fight was away and stop listening.
+     * "Spells randomly stop working in my farm" is the report that produces.
+     *
+     * <p>Looking around counts, swinging counts, and using an item counts. All three are readable
+     * on the client without touching the server.
+     */
     public static void tickAfkPosition(net.minecraft.world.entity.player.Player player) {
         if (player == null) return;
         double dx = player.getX() - lastPosX;
         double dy = player.getY() - lastPosY;
         double dz = player.getZ() - lastPosZ;
-        if (lastMovementNanos == 0L || (dx*dx + dy*dy + dz*dz) > 0.0001) {
+        boolean moved = lastMovementNanos == 0L || (dx*dx + dy*dy + dz*dz) > 0.0001;
+        // A degree of turn is deliberate; mouse jitter does not reach it and aiming does.
+        boolean turned = Math.abs(player.getYRot() - lastYRot) > 1.0f
+                      || Math.abs(player.getXRot() - lastXRot) > 1.0f;
+        boolean acting = player.swinging || player.isUsingItem();
+        if (moved || turned || acting) {
             lastPosX = player.getX();
             lastPosY = player.getY();
             lastPosZ = player.getZ();
+            lastYRot = player.getYRot();
+            lastXRot = player.getXRot();
             lastMovementNanos = System.nanoTime();
         }
     }
@@ -343,6 +363,9 @@ public final class VoiceController {
      *  oldest entry is dropped to make room (most-recent-wins overflow). */
     private static final Deque<QueueEntry> CAST_QUEUE = new ArrayDeque<>();
     private static final long MAX_QUEUE_AGE_NANOS = 1500L * 1_000_000L;
+    /** Stamped every tick a cast is in flight, so a queued entry's life is counted
+     *  from when the cast ended rather than from when the player spoke. */
+    private static volatile long castEndedNanos = 0L;
 
     /** One entry per recognition attempt, for the debug monitor. {@code matched} is the spell
      *  id (optionally suffixed) or null when nothing matched. {@code confidence} is the Vosk
@@ -1387,12 +1410,24 @@ public final class VoiceController {
             entry = CAST_QUEUE.peekFirst();
         }
         if (entry == null) return;
-        long age = System.nanoTime() - entry.atNanos();
-        if (age > MAX_QUEUE_AGE_NANOS) {
+        // Still casting? Then the queue is WAITING, not going stale.
+        //
+        // These two checks were the other way round, and that made the queue unusable for its
+        // whole reason to exist. An entry's 1.5s life was measured from when it was spoken, so
+        // starting a three-second channel and naming the next spell - the natural way to use a
+        // queue - aged the entry out a second and a half before the first cast finished. It was
+        // dropped in silence, every time, which is why depths above 1 could never be reached.
+        // Stamping the clock each tick while a cast is in flight means the TTL measures time
+        // since the cast ENDED, which is when the player is actually waiting.
+        if (isClientCasting()) {
+            castEndedNanos = System.nanoTime();
+            return;
+        }
+        long effectiveStart = Math.max(entry.atNanos(), castEndedNanos);
+        if (System.nanoTime() - effectiveStart > MAX_QUEUE_AGE_NANOS) {
             synchronized (CAST_QUEUE) { CAST_QUEUE.pollFirst(); }
             return;
         }
-        if (isClientCasting()) return; // still casting — wait it out
         // Equipped-only check at drain time too — the player may have unequipped the spell
         // while it was sitting in the queue. Only enforced when the last scan was reliable
         // (ownedScanReliable); an unreadable scan fails open here just like the dispatch gate.
@@ -1610,6 +1645,11 @@ public final class VoiceController {
         // me" was the only gate that did not actually stop.
         if (!listeningEnabled) return false;
         if (mc.level == null || mc.player == null) return false;
+        // AFK closes the DEVICE, not just the frames. The setting is called "Pause when AFK" and
+        // it was not pausing anything: the microphone stayed open, Vosk kept decoding every
+        // frame, and the only effect was one rejection at the very end of the pipeline. Being
+        // AFK is exactly when a player would rather the mic light went out.
+        if (VoiceSpellsConfig.cPauseWhenAfk && isAfk()) return false;
         return !(VoiceSpellsConfig.cSuspendUnfocused && (!mc.isWindowActive() || mc.isPaused()));
     }
 
@@ -1882,6 +1922,22 @@ public final class VoiceController {
                 return;
             }
             if ("yes".equals(trimmed)) {
+                // Answer the alias prompt, which is the only prompt this mod puts on screen.
+                //
+                // This branch used to read the queue size, format a debug string and return -
+                // literally nothing a player could observe - while the setting's own description
+                // promised it answered the mod's prompts. Accepting the "Did you mean X?"
+                // suggestion is that promise, and it is the same thing the Y key does.
+                AliasSuggestion sug = lastSuggestion;
+                if (sug != null
+                        && System.nanoTime() - sug.shownAtNanos() <= SUGGESTION_LIFETIME_NANOS) {
+                    clearSuggestion();
+                    Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(
+                        new AddAliasScreen(null, sug.candidateSpellId().toString(),
+                            sug.heardPhrase())));
+                    recordEvent(phrase, "alias prompt accepted", confidence, ' ');
+                    return;
+                }
                 int n;
                 synchronized (CAST_QUEUE) { n = CAST_QUEUE.size(); }
                 recordEvent(phrase, "queue ack (" + n + ")", confidence, ' ');

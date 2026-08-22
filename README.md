@@ -67,8 +67,8 @@ custom phrases (see Configuration).
 - **Welcome wizard** on first launch — talks you through model + mic + first cast.
 - **Aliases / custom phrases.** Pick words the model can hear, bind them to a spell id.
 - **Loadout shortcuts.** Say one word, cast the first castable spell from a list.
-- **Voice commands.** `spell one`…`spell nine` switches the active spellbook slot. `yes`/`no`
-  control the cast queue when hands-free confirm is on.
+- **Voice commands.** With hands-free confirm on, say `no` to clear spells waiting in the cast
+  queue, or `yes` to accept a "did you mean…?" alias suggestion.
 - **Server-side controls.** Per-player whitelist, blocklist, rate limit, broadcast-nearby,
   cast logging, follow subscriptions for admins.
 

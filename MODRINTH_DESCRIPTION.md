@@ -80,8 +80,8 @@ beside it.
   spells are appended automatically.
 - **Loadout shortcuts** — say one word, cast the first castable spell from a list (cooldown + mana
   aware).
-- **Voice commands** — `spell one`…`spell nine` switches the spellbook slot without casting (enable
-  *voiceHotbarSelect* first); `yes`/`no` controls the cast queue.
+- **Voice commands** — say `no` to clear spells waiting in the cast queue, or `yes` to accept a
+  "did you mean…?" alias suggestion (enable *handsFreeConfirm* first).
 - **Server-side controls** — per-player whitelist, blocklist, rate limit, broadcast-nearby, cast
   logging.
 

@@ -960,8 +960,15 @@ public final class ClientEvents {
             String pct = (int) Math.floor((1f - percent) * 100f) + "%";
             final int GAP = 5;
             int bodyW = font.width(body);
-            int pctW  = font.width(pct);
-            int chipW = PAD_X + bodyW + GAP + pctW + PAD_X;
+            // Reserve the widest number this can ever print, not the one it is printing now.
+            //
+            // Sized to the live string, the chip grew by a digit's width the moment readiness
+            // crossed 9% - and because the HUD stack is right-aligned in a right-hand corner,
+            // that growth came out of the LEFT edge, so the whole chip jumped sideways mid-
+            // cooldown. Readiness is floored and the chip vanishes the instant it is ready, so
+            // "99%" is genuinely the widest it can reach.
+            int pctSlot = font.width("99%");
+            int chipW = PAD_X + bodyW + GAP + pctSlot + PAD_X;
             int x = alignX(anchorX, chipW);
             drawChip(g, x, anchorY, chipW, CHIP_H, 0.75f);
 
@@ -988,7 +995,10 @@ public final class ClientEvents {
             int textY = anchorY + (CHIP_H - 8) / 2;
             g.drawString(font, Component.literal(body), x + PAD_X, textY,
                 withAlpha(VoiceSpellsConfig.cTextToast, 0.95f), true);
-            g.drawString(font, Component.literal(pct), x + chipW - PAD_X - pctW, textY,
+            // Right-aligned inside that reserved slot, so the number's right edge stays put
+            // and only the digits change.
+            g.drawString(font, Component.literal(pct),
+                x + chipW - PAD_X - font.width(pct), textY,
                 withAlpha(VoiceSpellsConfig.cTextToast, 0.6f), true);
             return true;
         }
