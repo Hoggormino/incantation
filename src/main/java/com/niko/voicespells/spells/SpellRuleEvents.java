@@ -110,6 +110,7 @@ public final class SpellRuleEvents {
             int scaled = SpellRules.voiceCooldown(p, cdSpellId, base);
             if (scaled >= 0) {
                 e.getClass().getMethod("setEffectiveCooldown", int.class).invoke(e, scaled);
+                proveOnce("cooldown", cdSpellId + " " + base + " -> " + scaled + " ticks");
             }
         } catch (Throwable t) {
             warnOnce("cooldown", t);
@@ -131,6 +132,31 @@ public final class SpellRuleEvents {
      * setting it here is the only point at which the cost can be changed rather than
      * compensated for afterwards. {@code setManaCost(int)} exists on both jars.
      */
+    /** Advantages that have proved themselves at least once this run. */
+    private static final java.util.Set<String> PROVEN =
+        java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /**
+     * Say, once, that an advantage actually changed a number.
+     *
+     * <p>These hooks apply their effect and log nothing, which makes a working hook and a dead one
+     * look identical from outside - and three features in this mod have already shipped registered
+     * but never running. One INFO line the first time each one bites is the difference between
+     * "the hook is installed" and "the hook did something", and it is what a server owner needs to
+     * answer "is this feature on?". Everything after the first is debug, so it cannot become spam.
+     */
+    /** The level bonus is applied in SpellCaster, not from an event, so it needs a door in. */
+    public static void proveLevelOnce(String detail) { proveOnce("level", detail); }
+
+    private static void proveOnce(String what, String detail) {
+        if (PROVEN.add(what)) {
+            VoiceSpells.LOGGER.info("Voice advantage '{}' applied for the first time this run: {}",
+                what, detail);
+        } else {
+            VoiceSpells.LOGGER.debug("Voice advantage '{}': {}", what, detail);
+        }
+    }
+
     private static void onCast(Object e) {
         try {
             if (!(call(e, "getEntity") instanceof Player p)) return;
@@ -140,6 +166,7 @@ public final class SpellRuleEvents {
             int discounted = SpellRules.discountedManaCost(p, spellId, base);
             if (discounted >= 0 && discounted != base) {
                 e.getClass().getMethod("setManaCost", int.class).invoke(e, discounted);
+                proveOnce("mana", spellId + " " + base + " -> " + discounted + " mana");
             }
         } catch (Throwable t) {
             warnOnce("oncast", t);

@@ -341,7 +341,18 @@ public final class SpellCaster {
             // and nothing in the game would have told the player it was happening.
             int baseLevel  = castLevel;
             int levelBonus = SpellRules.configuredLevelBonus();
-            if (levelBonus > 0) castLevel = Math.min(castLevel + levelBonus, 10);
+            if (levelBonus > 0) {
+                int before = castLevel;
+                castLevel = Math.min(castLevel + levelBonus, 10);
+                // Same reason the other two advantages announce themselves once: a level bonus
+                // that silently does nothing is indistinguishable from one that works, and this
+                // one already shipped dead once when it was hung off ModifySpellLevelEvent, which
+                // never fires on the voice path.
+                if (castLevel != before) {
+                    com.niko.voicespells.spells.SpellRuleEvents.proveLevelOnce(
+                        spellId + " level " + before + " -> " + castLevel);
+                }
+            }
             // How much the bonus inflated the price. Carried on the voice stamp and subtracted by
             // the SpellOnCastEvent hook at the instant Iron's Spells charges for it - not credited
             // back afterwards, which is what this did first and was exploitable: mana is deducted
