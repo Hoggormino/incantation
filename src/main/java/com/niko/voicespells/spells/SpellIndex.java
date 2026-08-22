@@ -266,9 +266,8 @@ public final class SpellIndex {
     /** Append the non-spell control words the recognizer also has to hear. */
     private static List<String> withVoiceCommands(List<String> base) {
         boolean needsHF = com.niko.voicespells.VoiceSpellsConfig.cHandsFreeConfirm;
-        boolean needsHotbar = com.niko.voicespells.VoiceSpellsConfig.cVoiceHotbarSelect;
         java.util.Set<String> triggers = com.niko.voicespells.VoiceSpellsConfig.cTriggerWords;
-        if (!needsHF && !needsHotbar && triggers.isEmpty()) return base;
+        if (!needsHF && triggers.isEmpty()) return base;
         List<String> out = new java.util.ArrayList<>(base.size() + 16 + triggers.size());
         out.addAll(base);
         // Trigger words have to be in the grammar or the feature cannot work at all.
@@ -288,12 +287,6 @@ public final class SpellIndex {
         if (needsHF) {
             addControl(out, "yes", dropped);
             addControl(out, "no",  dropped);
-        }
-        if (needsHotbar) {
-            String[] ordinals = { "one","two","three","four","five","six","seven","eight","nine" };
-            for (String o : ordinals) {
-                addControl(out, "spell " + o, dropped);
-            }
         }
         reportDroppedControls(dropped);
         return out;
@@ -340,28 +333,6 @@ public final class SpellIndex {
             + "vocabulary and have been left out of the grammar: {}. They are English, and the "
             + "model is not - the recognizer would have discarded them without a word either way.",
             String.join(", ", dropped));
-    }
-
-    /** If the phrase is a "spell N" hotbar-select command and hotbar select is enabled,
-     *  returns the 1-based slot index (1..9). Returns -1 otherwise. */
-    public static int matchHotbarSlot(String phrase) {
-        if (!com.niko.voicespells.VoiceSpellsConfig.cVoiceHotbarSelect) return -1;
-        if (phrase == null) return -1;
-        String norm = normalize(phrase);
-        if (!norm.startsWith("spell ")) return -1;
-        String tail = norm.substring("spell ".length());
-        return switch (tail) {
-            case "one"   -> 1;
-            case "two"   -> 2;
-            case "three" -> 3;
-            case "four"  -> 4;
-            case "five"  -> 5;
-            case "six"   -> 6;
-            case "seven" -> 7;
-            case "eight" -> 8;
-            case "nine"  -> 9;
-            default      -> -1;
-        };
     }
 
     /** Lookup result carrying which matching tier produced the hit, so the debug monitor

@@ -268,7 +268,6 @@ public final class ConfigMoreScreen extends Screen {
         sb.append("pauseWhenAfk=").append(c.pauseWhenAfk.get()).append('\n');
         sb.append("afkSeconds=").append(c.afkSeconds.get()).append('\n');
         sb.append("chatRankTag=").append(c.chatRankTag.get()).append('\n');
-        sb.append("voiceHotbarSelect=").append(c.voiceHotbarSelect.get()).append('\n');
         // Both are on a settings tab, so a profile that omitted them handed the importer a
         // half-applied screen: their own vignette and focus behaviour under someone else's
         // tuning. Every setting the UI can change now round-trips.
@@ -360,7 +359,6 @@ public final class ConfigMoreScreen extends Screen {
             case "pauseWhenAfk":      c.pauseWhenAfk.set(Boolean.parseBoolean(val)); return true;
             case "afkSeconds":        c.afkSeconds.set(Integer.parseInt(val.trim())); return true;
             case "chatRankTag":       c.chatRankTag.set(Boolean.parseBoolean(val)); return true;
-            case "voiceHotbarSelect": c.voiceHotbarSelect.set(Boolean.parseBoolean(val)); return true;
             case "castVignette":      c.castVignette.set(Boolean.parseBoolean(val)); return true;
             case "suspendWhenUnfocused": c.suspendWhenUnfocused.set(Boolean.parseBoolean(val)); return true;
 //? if forge {

@@ -1820,21 +1820,6 @@ public final class VoiceController {
         if (utteranceFirstHeardNanos == 0L) utteranceFirstHeardNanos = System.nanoTime();
         lastEventWasFinal = isFinal;
 
-        // Voice hotbar select: "spell one" through "spell nine" switch the active spellbook
-        // slot without casting. Only acts on finals so partials don't trigger constantly.
-        if (VoiceSpellsConfig.cVoiceHotbarSelect && isFinal) {
-            int slot = SpellIndex.matchHotbarSlot(phrase);
-            if (slot > 0) {
-                final int s = slot;
-                Minecraft.getInstance().execute(() -> {
-                    boolean ok = SpellSelector.selectByIndex(s);
-                    recordEvent(phrase, ok ? "selected slot " + s : "slot " + s + " not in book",
-                        confidence, ' ');
-                });
-                return;
-            }
-        }
-
         // Hands-free queue control: "no" clears the queue, "yes" is a no-op acknowledgement
         // (the queue auto-drains anyway). Only finals — partials would fire instantly on the
         // first phoneme. Doesn't go through the rest of the cast pipeline.

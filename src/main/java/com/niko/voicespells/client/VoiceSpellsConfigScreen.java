@@ -71,7 +71,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private boolean workHandsFree;
     private int     workCastQueue;
     private boolean workSuspendUnfocused;
-    private boolean workHotbarSelect;
 
     private boolean initializedOnce = false;
     private Tab currentTab = Tab.RECOGNITION;
@@ -126,7 +125,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
             workHandsFree       = c.handsFreeConfirm.get();
             workCastQueue       = c.castQueueSize.get();
             workSuspendUnfocused = c.suspendWhenUnfocused.get();
-            workHotbarSelect    = c.voiceHotbarSelect.get();
             // Remembered so Cancel can undo the live theme preview — see onClose().
             initializedOnce = true;
             lastConfigStamp = configStamp(c);
@@ -320,7 +318,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             c.echoLockoutMillis.get(), c.showMisses.get(), c.alwaysShowHeard.get(),
             c.castVignette.get(), c.streamerMode.get(), c.combatOnly.get(),
             c.pauseWhenAfk.get(), c.afkSeconds.get(), c.handsFreeConfirm.get(),
-            c.castQueueSize.get(), c.suspendWhenUnfocused.get(), c.voiceHotbarSelect.get(),
+            c.castQueueSize.get(), c.suspendWhenUnfocused.get(),
         };
         for (Object v : vals) h = h * 31 + (v == null ? 0 : v.hashCode());
         return h;
@@ -491,9 +489,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 v -> "Queue: " + v, v -> workCastQueue = v), i++, gridX, colW, y),
             "How many casts may wait in line when you speak faster than spells can fire.");
 
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Voice hotbar", workHotbarSelect,
-                v -> workHotbarSelect = v), i++, gridX, colW, y),
-            "Let \"slot one\" through \"slot nine\" change your held item.");
 
         help(slot(NeonToggle.named(0, 0, colW, 20, "Sneak to cast", workRequireSneak,
                 v -> workRequireSneak = v), i++, gridX, colW, y),
@@ -551,7 +546,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 workSuspendUnfocused = true;
                 workHandsFree        = false;
                 workCastQueue        = 3;
-                workHotbarSelect     = false;
                 workRequireSneak     = false;
             }
         }
@@ -584,7 +578,6 @@ public final class VoiceSpellsConfigScreen extends Screen {
         c.handsFreeConfirm.set(workHandsFree);
         c.castQueueSize.set(workCastQueue);
         c.suspendWhenUnfocused.set(workSuspendUnfocused);
-        c.voiceHotbarSelect.set(workHotbarSelect);
         // set() alone does not reach the disk on NeoForge - see VoiceSpellsConfig.saveToDisk().
         VoiceSpellsConfig.saveToDisk();
         // set() persists but the reload event is debounced — refresh cache now so the mic

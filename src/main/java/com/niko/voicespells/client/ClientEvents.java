@@ -450,32 +450,37 @@ public final class ClientEvents {
                 int colon = spellId.indexOf(':');
                 name = (colon >= 0 ? spellId.substring(colon + 1) : spellId).replace('_', ' ');
             }
-            // Shown as readiness, not as remaining, so the number and the bar below it move in
-            // the same direction: both climb to 100% as the spell comes off cooldown.
-            int ready = Math.round((1f - percent) * 100);
-            String label = name + "  " + ready + "%";
+            // The name alone. The percentage it used to print was the same fact the bar below
+            // already shows, drawn twice - and it was the widest part of the chip, so dropping
+            // it is most of what makes this small. It also read ambiguously: "Fireball 24%"
+            // does not say 24% of WHAT, and a player is as likely to read it as cooldown
+            // remaining as cooldown elapsed. A bar that fills has no such problem.
+            String label = name;
             Font font = mc.font;
-            int tw = font.width(label);
-            int chipW = tw + 12;
-            int chipH = 12;
+            int chipW = font.width(label) + 8;
+            int chipH = 11;
             int x = (w - chipW) / 2;
-            int y = h / 2 + VoiceSpellsConfig.cCastCooldownChipY;
-            // Background + frame. A world HUD overlay reads best on dark whatever else is going
-            // on — light text-on-cream over a bright sky is unreadable — so the chip background
-            // is deliberately fixed dark and the border is plain white. There is no theme colour
-            // to follow any more, and this is drawn over scenery rather than over a panel.
+            // Anchored to the BOTTOM of the screen, not its middle.
+            //
+            // It used to sit at h/2 + 16, directly under the crosshair, which is exactly where a
+            // player is looking during the fight the cooldown matters in - reported as "the
+            // cooldown bar in the center of the screen". Above the hotbar is where Minecraft
+            // itself puts transient status text, and it is clear of the item-name popup at
+            // h - 59. The offset moves it anywhere; negative goes up.
+            int y = h - 70 + VoiceSpellsConfig.cCastCooldownChipY;
+            // No frame any more, just the ground and the bar. A world HUD overlay reads best on
+            // dark whatever else is going on - light text over a bright sky is unreadable - so
+            // the background stays fixed dark rather than following a palette, but the two white
+            // border lines were chrome on a element whose whole job is to be glanceable.
             g.fill(x, y, x + chipW, y + chipH, 0xAA0A0A12);
-            int border = 0xAAFFFFFF;
-            g.fill(x, y, x + chipW, y + 1, border);
-            g.fill(x, y + chipH - 1, x + chipW, y + chipH, border);
-            // tiny progress bar at the bottom: from full → empty as cooldown elapses
+            // Progress along the bottom edge: fills left to right as the spell comes back.
             int barW = (int) (chipW * (1f - percent));
             if (barW > 0) {
                 g.fill(x, y + chipH - 1, x + barW, y + chipH, Theme.C_HL);
             }
             // Fixed light text — the chip background is fixed-dark above, so we can't use
             // Theme.C_TEXT (which goes dark in light mode and would vanish into the dark chip).
-            g.drawString(font, Component.literal(label), x + 6, y + 2, 0xFFEAE6FA, true);
+            g.drawString(font, Component.literal(label), x + 4, y + 2, 0xFFEAE6FA, true);
         }
 
         /** Returns the 0..1 fraction of the cooldown still to run: 1.0 the instant the spell is

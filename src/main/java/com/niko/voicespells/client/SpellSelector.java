@@ -33,27 +33,6 @@ public final class SpellSelector {
 
     private SpellSelector() {}
 
-    /** Select the spell at the given hotbar index in the active spellbook (1-based — the
-     *  player says "spell one" for slot 0). Returns true if the selection took, false if the
-     *  index is out of range or reflection failed. */
-    public static boolean selectByIndex(int oneBasedIndex) {
-        try {
-            Class<?> cmd      = Class.forName(CLIENT_MAGIC);
-            Object ssm        = cmd.getMethod("getSpellSelectionManager").invoke(null);
-            if (ssm == null) return false;
-            Class<?> ssmCls   = Class.forName(SSM);
-            int count = (int) ssmCls.getMethod("getSpellCount").invoke(ssm);
-            int zero = oneBasedIndex - 1;
-            if (zero < 0 || zero >= count) return false;
-            ssmCls.getMethod("makeSelection", int.class).invoke(ssm, zero);
-            syncToServer(ssmCls, ssm);
-            return true;
-        } catch (Throwable t) {
-            VoiceSpells.LOGGER.debug("Spell index selection failed: {}", t.toString());
-            return false;
-        }
-    }
-
     /** Best-effort. Must be called on the client thread (touches ClientMagicData). */
     public static void select(ResourceLocation spellId) {
         try {

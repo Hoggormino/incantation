@@ -170,7 +170,6 @@ public final class VoiceSpellsConfig {
         /** Exact capture device name, or blank for the system default. /voicespells devices lists them. */
         public final ForgeConfigSpec.ConfigValue<String> captureDevice;
         public final ForgeConfigSpec.BooleanValue chatRankTag;
-        public final ForgeConfigSpec.BooleanValue voiceHotbarSelect;
         public final ForgeConfigSpec.BooleanValue restrictToOwned;
         public final ForgeConfigSpec.ConfigValue<List<? extends String>> customPhrases;
         public final ForgeConfigSpec.ConfigValue<List<? extends String>> incantations;
@@ -288,9 +287,10 @@ public final class VoiceSpellsConfig {
                       "It names the spell and fills as the cooldown runs down. Turn it off if",
                       "you would rather keep the centre of the screen clear.");
             castCooldownChip = b.define("castCooldownChip", true);
-            b.comment("Pixels BELOW the centre of the screen to draw that chip. Negative moves",
-                      "it above the crosshair; 0 puts it on the crosshair itself.");
-            castCooldownChipY = b.defineInRange("castCooldownChipY", 16, -200, 200);
+            b.comment("Nudge that chip up or down, in pixels. It sits just above the hotbar",
+                      "by default, clear of the crosshair and of vanilla's item-name popup.",
+                      "Negative moves it up the screen, positive moves it down.");
+            castCooldownChipY = b.defineInRange("castCooldownChipY", 0, -400, 200);
             b.comment("Cinematic accent bars top and bottom of the screen, plus corner",
                       "glows, while you are casting a long spell. Drawn in white.",
                       "Off by default: the code existed since early builds but never ran,",
@@ -358,10 +358,6 @@ public final class VoiceSpellsConfig {
             b.comment("Prefix chat messages with your voice-cast rank, e.g. '[Adept] hello'.",
                       "Cosmetic only — opt-in.");
             chatRankTag = b.define("chatRankTag", false);
-            b.comment("Voice hotbar select: when on, say 'spell one' through 'spell nine' to",
-                      "switch the active spell slot WITHOUT casting. Useful for combat where",
-                      "you want to manually trigger the selected spell later.");
-            voiceHotbarSelect = b.define("voiceHotbarSelect", false);
             b.comment("Restrict recognition to spells the player currently has. Scans the",
                       "Curios spellbook slot, both hands, and the hotbar for spellbooks and",
                       "imbued weapons; the Vosk grammar is rebuilt to only include those.",
@@ -434,7 +430,7 @@ public final class VoiceSpellsConfig {
     public static volatile boolean cStreamerMode    = false;
     public static volatile boolean cSassMode        = false;
     public static volatile boolean cCastCooldownChip  = true;
-    public static volatile int     cCastCooldownChipY = 16;
+    public static volatile int     cCastCooldownChipY = 0;
     public static volatile boolean cCastVignette    = false;
     public static volatile boolean cCombatOnly      = false;
     public static volatile boolean cPauseWhenAfk    = false;
@@ -449,7 +445,6 @@ public final class VoiceSpellsConfig {
     public static volatile int     cGrammarFloor    = 16;
     public static volatile String  cCaptureDevice    = "";
     public static volatile boolean cChatRankTag     = false;
-    public static volatile boolean cVoiceHotbarSelect = false;
     public static volatile boolean cRestrictToOwned   = true;
 
     // HUD layout — read every render frame, cache to avoid the underlying CommentedConfig
@@ -508,7 +503,6 @@ public final class VoiceSpellsConfig {
         cGrammarFloor     = c.grammarFloor.get();
         cCaptureDevice    = c.captureDevice.get();
         cChatRankTag      = c.chatRankTag.get();
-        cVoiceHotbarSelect = c.voiceHotbarSelect.get();
         cRestrictToOwned   = c.restrictToOwned.get();
         cHudCorner        = c.hudCorner.get();
         cHudOffsetX       = c.hudOffsetX.get();
