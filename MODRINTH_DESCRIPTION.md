@@ -41,7 +41,6 @@ Set `gatingMode` to taste:
 |---|---|
 | `HOLD_ITEM` | while a spell focus is in your hands **or Curios slot** *(default)* |
 | `HOLD_KEY_AND_ITEM` | while holding the cast key **and** a spell focus |
-
 | `HOLD_KEY` | while holding the cast key |
 | `ALWAYS_ON` | whenever you are in a world — fully hands-free |
 
