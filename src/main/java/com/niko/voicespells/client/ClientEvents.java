@@ -977,7 +977,7 @@ public final class ClientEvents {
             int fillW = (int) ((chipW - 2) * ready);
             if (fillW > 0) {
                 g.fill(x + 1, anchorY + 1, x + 1 + fillW, anchorY + CHIP_H - 1,
-                    withAlpha(Theme.C_HL, 0.16f));
+                    withAlpha(Theme.C_HL, 0.22f));
                 g.fill(x + 1, anchorY + CHIP_H - 2, x + 1 + fillW, anchorY + CHIP_H - 1,
                     withAlpha(Theme.C_HL, 0.85f));
             }
@@ -1036,9 +1036,28 @@ public final class ClientEvents {
             return true;
         }
 
+        /** Chip ground and edge when the player has not chosen their own. Fixed and dark on
+         *  purpose: this is drawn over scenery, not over a panel, so it has to stay readable
+         *  against a snowfield and a cave without knowing which it is over. */
+        private static final int CHIP_BG_DEFAULT     = 0xC0101014;
+        private static final int CHIP_BORDER_DEFAULT = 0x66FFFFFF;
+
         private static void drawChip(GuiGraphics g, int x, int y, int w, int h, float alpha) {
-            int border = withAlpha(VoiceSpellsConfig.cBorder, alpha);
-            int bg     = withAlpha(VoiceSpellsConfig.cBg,     alpha);
+            // A fully transparent colour means "unset", not "draw an invisible chip".
+            //
+            // Both hud colour keys ship as "00000000", so on every install nobody had edited,
+            // drawChip drew literally nothing - four transparent edges and a skipped body - and
+            // every chip on the HUD was bare text lying on the world. The border logic below,
+            // written to make a transparent body genuinely transparent, was solving a problem
+            // created by that default. Falling back here fixes it for existing configs too,
+            // which a changed default could not: their toml already has the old value written
+            // into it, so a new default would never reach them.
+            int rawBg     = VoiceSpellsConfig.cBg;
+            int rawBorder = VoiceSpellsConfig.cBorder;
+            if (((rawBg     >>> 24) & 0xFF) == 0) rawBg     = CHIP_BG_DEFAULT;
+            if (((rawBorder >>> 24) & 0xFF) == 0) rawBorder = CHIP_BORDER_DEFAULT;
+            int border = withAlpha(rawBorder, alpha);
+            int bg     = withAlpha(rawBg,     alpha);
             // Border is drawn as four thin edge rectangles, NOT as a full fill behind the body.
             // If we filled the whole area first, an alpha=0 background would leave the border
             // colour visible across the entire chip (alpha-blend "src*0 + dst*1 = dst" never
