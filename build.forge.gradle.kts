@@ -193,7 +193,7 @@ java { withSourcesJar() }
 publishMods {
     file = tasks.named<Jar>("jar").flatMap { it.archiveFile }
     displayName = "Incantation ${property("mod.version")} for Forge 1.20.1"
-    version = project.version.toString()
+    version = property("mod.version") as String
     type = STABLE
     changelog = rootProject.file("CHANGELOG_${property("mod.version")}.md")
         .takeIf { it.exists() }?.readText() ?: "See the repository for changes."
@@ -215,6 +215,8 @@ publishMods {
             accessToken = cfToken
             minecraftVersions.add("1.20.1")
             modLoaders.add("forge")
+            clientRequired = true
+            serverRequired = true
             requires("irons-spells-n-spellbooks")
             optional("curios")
         }

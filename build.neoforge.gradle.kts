@@ -182,7 +182,7 @@ java { withSourcesJar() }
 publishMods {
     file = tasks.named<Jar>("jar").flatMap { it.archiveFile }
     displayName = "Incantation ${property("mod.version")} for NeoForge 1.21.1"
-    version = project.version.toString()
+    version = property("mod.version") as String
     type = STABLE
     changelog = rootProject.file("CHANGELOG_${property("mod.version")}.md")
         .takeIf { it.exists() }?.readText() ?: "See the repository for changes."
@@ -204,6 +204,8 @@ publishMods {
             accessToken = cfToken
             minecraftVersions.add("1.21.1")
             modLoaders.add("neoforge")
+            clientRequired = true
+            serverRequired = true
             requires("irons-spells-n-spellbooks")
             optional("curios")
         }
