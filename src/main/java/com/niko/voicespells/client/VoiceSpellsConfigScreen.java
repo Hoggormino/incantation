@@ -71,6 +71,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private boolean workHandsFree;
     private int     workCastQueue;
     private boolean workSuspendUnfocused;
+    private boolean workCooldownChip;
+    private int     workCooldownChipY;
 
     private boolean initializedOnce = false;
     private Tab currentTab = Tab.RECOGNITION;
@@ -125,6 +127,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
             workHandsFree       = c.handsFreeConfirm.get();
             workCastQueue       = c.castQueueSize.get();
             workSuspendUnfocused = c.suspendWhenUnfocused.get();
+            workCooldownChip    = c.castCooldownChip.get();
+            workCooldownChipY   = c.castCooldownChipY.get();
             // Remembered so Cancel can undo the live theme preview — see onClose().
             initializedOnce = true;
             lastConfigStamp = configStamp(c);
@@ -289,8 +293,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // assertion is checked at runtime now (see init) rather than trusted.
         return switch (currentTab) {
             case RECOGNITION -> 8;
-            case HUD         -> 8;
-            case BEHAVIOUR   -> 8;
+            case HUD         -> 10;
+            case BEHAVIOUR   -> 7;
         };
     }
 
@@ -319,6 +323,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             c.castVignette.get(), c.streamerMode.get(), c.combatOnly.get(),
             c.pauseWhenAfk.get(), c.afkSeconds.get(), c.handsFreeConfirm.get(),
             c.castQueueSize.get(), c.suspendWhenUnfocused.get(),
+            c.castCooldownChip.get(), c.castCooldownChipY.get(),
         };
         for (Object v : vals) h = h * 31 + (v == null ? 0 : v.hashCode());
         return h;
@@ -457,6 +462,21 @@ public final class VoiceSpellsConfigScreen extends Screen {
         help(slot(NeonToggle.named(0, 0, colW, 20, "Streamer mode", workStreamer,
                 v -> workStreamer = v), i++, gridX, colW, y),
             "Hide anything that would expose what you said on stream.");
+
+        help(slot(NeonToggle.named(0, 0, colW, 20, "Cooldown chip", workCooldownChip,
+                v -> workCooldownChip = v), i++, gridX, colW, y),
+            "The chip naming the spell you just cast, with a bar that fills as it comes off "
+            + "cooldown. Sits above the hotbar.");
+
+        // Same trick the HUD offsets use: the slider covers the useful range rather than the
+        // config's full one, but stretches to contain a value already set beyond it, so a
+        // hand-edited toml is not silently clamped the first time Done is pressed. Negative is
+        // upward, and -120 reaches the middle of an ordinary window.
+        int chipMin = Math.min(-120, workCooldownChipY);
+        int chipMax = Math.max(120, workCooldownChipY);
+        help(slot(new NeonSlider(0, 0, colW, 20, workCooldownChipY, chipMin, chipMax,
+                v -> "Chip Y: " + v, v -> workCooldownChipY = v), i++, gridX, colW, y),
+            "Move that chip up or down. Negative is up the screen; 0 leaves it above the hotbar.");
     }
 
     private void buildBehaviourTab(int gridX, int colW, int y) {
@@ -544,6 +564,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
                 workPauseAfk         = false;
                 workAfkSeconds       = 60;
                 workSuspendUnfocused = true;
+                workCooldownChip     = true;
+                workCooldownChipY    = 0;
                 workHandsFree        = false;
                 workCastQueue        = 3;
                 workRequireSneak     = false;
@@ -578,6 +600,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
         c.handsFreeConfirm.set(workHandsFree);
         c.castQueueSize.set(workCastQueue);
         c.suspendWhenUnfocused.set(workSuspendUnfocused);
+        c.castCooldownChip.set(workCooldownChip);
+        c.castCooldownChipY.set(workCooldownChipY);
         // set() alone does not reach the disk on NeoForge - see VoiceSpellsConfig.saveToDisk().
         VoiceSpellsConfig.saveToDisk();
         // set() persists but the reload event is debounced — refresh cache now so the mic

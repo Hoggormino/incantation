@@ -273,6 +273,8 @@ public final class ConfigMoreScreen extends Screen {
         // tuning. Every setting the UI can change now round-trips.
         sb.append("castVignette=").append(c.castVignette.get()).append('\n');
         sb.append("suspendWhenUnfocused=").append(c.suspendWhenUnfocused.get()).append('\n');
+        sb.append("castCooldownChip=").append(c.castCooldownChip.get()).append('\n');
+        sb.append("castCooldownChipY=").append(c.castCooldownChipY.get()).append('\n');
         // Lists exported with one entry per pipe-separated token so it survives a single line
         // paste cycle. Less elegant than JSON but matches the spirit of the toml.
         sb.append("customPhrases=").append(String.join("|", c.customPhrases.get())).append('\n');
@@ -361,6 +363,8 @@ public final class ConfigMoreScreen extends Screen {
             case "chatRankTag":       c.chatRankTag.set(Boolean.parseBoolean(val)); return true;
             case "castVignette":      c.castVignette.set(Boolean.parseBoolean(val)); return true;
             case "suspendWhenUnfocused": c.suspendWhenUnfocused.set(Boolean.parseBoolean(val)); return true;
+            case "castCooldownChip": c.castCooldownChip.set(Boolean.parseBoolean(val)); return true;
+            case "castCooldownChipY": c.castCooldownChipY.set(Integer.parseInt(val)); return true;
 //? if forge {
 /*            case "customPhrases":     ((net.minecraftforge.common.ForgeConfigSpec.ConfigValue) c.customPhrases).set(splitList(val)); return true;
             case "incantations":      ((net.minecraftforge.common.ForgeConfigSpec.ConfigValue) c.incantations).set(splitList(val)); return true;

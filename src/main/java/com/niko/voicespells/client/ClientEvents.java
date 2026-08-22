@@ -204,7 +204,6 @@ public final class ClientEvents {
     private static void onRegisterGuiOverlays(RegisterGuiOverlaysEvent event) {
         event.registerAboveAll("voice_hud",           new HudOverlay());
         event.registerAboveAll("cast_vignette",       new CastingVignette());
-        event.registerAboveAll("cooldown_indicator",  new CooldownIndicator());
 *///?} else {
     private static void onRegisterGuiLayers(RegisterGuiLayersEvent event) {
         event.registerAboveAll(
@@ -214,10 +213,6 @@ public final class ClientEvents {
         event.registerAboveAll(
             ResourceLocation.fromNamespaceAndPath(VoiceSpells.MOD_ID, "cast_vignette"),
             new CastingVignette()
-        );
-        event.registerAboveAll(
-            ResourceLocation.fromNamespaceAndPath(VoiceSpells.MOD_ID, "cooldown_indicator"),
-            new CooldownIndicator()
         );
 //?}
     }
@@ -418,122 +413,43 @@ public final class ClientEvents {
         private IronsSpellsRefl() {}
     }
 
-//? if forge {
-/*    private static final class CooldownIndicator implements IGuiOverlay {
-*///?} else {
-    private static final class CooldownIndicator implements LayeredDraw.Layer {
-//?}
-        @Override
-//? if forge {
-/*        public void render(ForgeGui gui, GuiGraphics g, float partialTick, int screenWidth, int screenHeight) {
-*///?} else {
-        public void render(GuiGraphics g, net.minecraft.client.DeltaTracker delta) {
-//?}
-            // Asked for by a player: this chip sits under the crosshair and there was no way
-            // to turn it off or move it. Both now exist.
-            if (!VoiceSpellsConfig.cCastCooldownChip) return;
-            String spellId = VoiceController.lastDispatchedSpellId();
-            if (spellId == null || spellId.isEmpty()) return;
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player == null || mc.options.hideGui) return;
-            float percent = getCooldownPercent(spellId);
-            // percent is the fraction of the cooldown REMAINING. 0 means ready (or unknown —
-            // see getCooldownPercent), so there is nothing to show; > 1 can't happen but is
-            // clamped as a guard.
-            if (percent <= 0f) return;
-            percent = Math.min(1f, percent);
-            int w = mc.getWindow().getGuiScaledWidth();
-            int h = mc.getWindow().getGuiScaledHeight();
-            // displayName(), not name - resolved in the player's own language.
-            String name = com.niko.voicespells.spells.SpellInfo.of(spellId).displayName().getString();
-            if (name == null || name.isEmpty()) {
-                int colon = spellId.indexOf(':');
-                name = (colon >= 0 ? spellId.substring(colon + 1) : spellId).replace('_', ' ');
-            }
-            // The name alone. The percentage it used to print was the same fact the bar below
-            // already shows, drawn twice - and it was the widest part of the chip, so dropping
-            // it is most of what makes this small. It also read ambiguously: "Fireball 24%"
-            // does not say 24% of WHAT, and a player is as likely to read it as cooldown
-            // remaining as cooldown elapsed. A bar that fills has no such problem.
-            String label = name;
-            Font font = mc.font;
-            int chipW = font.width(label) + 8;
-            int chipH = 11;
-            int x = (w - chipW) / 2;
-            // Anchored to the BOTTOM of the screen, not its middle.
-            //
-            // It used to sit at h/2 + 16, directly under the crosshair, which is exactly where a
-            // player is looking during the fight the cooldown matters in - reported as "the
-            // cooldown bar in the center of the screen". Above the hotbar is where Minecraft
-            // itself puts transient status text, and it is clear of the item-name popup at
-            // h - 59. The offset moves it anywhere; negative goes up.
-            int y = h - 70 + VoiceSpellsConfig.cCastCooldownChipY;
-            // No frame any more, just the ground and the bar. A world HUD overlay reads best on
-            // dark whatever else is going on - light text over a bright sky is unreadable - so
-            // the background stays fixed dark rather than following a palette, but the two white
-            // border lines were chrome on a element whose whole job is to be glanceable.
-            g.fill(x, y, x + chipW, y + chipH, 0xAA0A0A12);
-            // Progress along the bottom edge: fills left to right as the spell comes back.
-            int barW = (int) (chipW * (1f - percent));
-            if (barW > 0) {
-                g.fill(x, y + chipH - 1, x + barW, y + chipH, Theme.C_HL);
-            }
-            // Fixed light text — the chip background is fixed-dark above, so we can't use
-            // Theme.C_TEXT (which goes dark in light mode and would vanish into the dark chip).
-            g.drawString(font, Component.literal(label), x + 4, y + 2, 0xFFEAE6FA, true);
-        }
-
-        /** Returns the 0..1 fraction of the cooldown still to run: 1.0 the instant the spell is
-         *  cast, decaying to exactly 0 the moment it is ready again.
-         *
-         *  <p>Returns {@code 0f} when we can't determine it — Iron's Spells absent, API
-         *  mismatch, reflection failure. This javadoc used to promise -1 for that case; no
-         *  such path exists, and callers were never checking for it. Be aware of what the
-         *  fallback means: 0f reads as "ready", so an unavailable cooldown is indistinguishable
-         *  from no cooldown, and the HUD will happily show a spell as castable when it has no
-         *  idea. That is the safe direction for a hint, but it is a guess, not a reading.
-         *
-         *  <p>This used to probe {@code PlayerCooldowns} for a {@code (String)} overload of
-         *  {@code getCooldownPercent} / {@code isOnCooldown}. No such overload exists on either
-         *  1.20.1 or 1.21.1 — both take an {@code AbstractSpell} (verified with javap against
-         *  irons-spells-n-spellbooks 3.16.2 for both versions) — so neither handle ever bound,
-         *  every call fell through to {@code return 0f}, and this indicator had never once
-         *  rendered. We now resolve the spell through {@code SpellRegistry.getSpell(String)}
-         *  and call the static {@code ClientMagicData.getCooldownPercent(AbstractSpell)}. */
-        private static float getCooldownPercent(String spellId) {
-            if (IronsSpellsRefl.GET_CD_PERCENT == null || IronsSpellsRefl.GET_SPELL == null) return 0f;
-            try {
-                Object spell = resolveSpell(spellId);
-                if (spell == null) return 0f;
-                Object v = IronsSpellsRefl.GET_CD_PERCENT.invoke(null, spell);
-                if (v instanceof Number n) {
-                    float f = n.floatValue();
-                    // NaN would sail past both bounds checks in render() and print as "NaN%".
-                    if (Float.isNaN(f)) return 0f;
-                    return Math.max(0f, Math.min(1f, f));
-                }
-            } catch (Throwable ignored) {}
-            return 0f;
-        }
-
-        /** Registry lookup for an id, memoised. Returns null for ids Iron's Spells doesn't know:
-         *  it answers unknown ids with a NoneSpell sentinel rather than null, so the result is
-         *  only accepted when its own id round-trips (same check {@code SpellInfo} makes). */
-        private static Object resolveSpell(String spellId) {
-            Object cached = IronsSpellsRefl.SPELL_CACHE.get(spellId);
-            if (cached != null) return cached;
-            try {
-                Object spell = IronsSpellsRefl.GET_SPELL.invoke(null, spellId);
-                if (spell == null) return null;
-                if (IronsSpellsRefl.SPELL_ID != null
-                    && !spellId.equals(IronsSpellsRefl.SPELL_ID.invoke(spell))) return null;
-                IronsSpellsRefl.SPELL_CACHE.put(spellId, spell);
-                return spell;
-            } catch (Throwable ignored) {
-                return null;
-            }
+    // The cooldown used to be its own full-screen layer drawn across the middle of the
+    // screen. It is a chip in the HUD stack now (HudOverlay.drawCooldownChipIfActive), so it
+    // lands in whichever corner the player chose and is styled like every other chip.
+    // Only the reflection it needed survives.
+    /** Resolve a spell id to Iron's Spells' own spell object, cached. Lifted out of the deleted
+     *  CooldownIndicator along with getCooldownPercent - they are one pair. */
+    private static Object resolveSpell(String spellId) {
+        Object cached = IronsSpellsRefl.SPELL_CACHE.get(spellId);
+        if (cached != null) return cached;
+        try {
+            Object spell = IronsSpellsRefl.GET_SPELL.invoke(null, spellId);
+            if (spell == null) return null;
+            if (IronsSpellsRefl.SPELL_ID != null
+                && !spellId.equals(IronsSpellsRefl.SPELL_ID.invoke(spell))) return null;
+            IronsSpellsRefl.SPELL_CACHE.put(spellId, spell);
+            return spell;
+        } catch (Throwable ignored) {
+            return null;
         }
     }
+
+    static float getCooldownPercent(String spellId) {
+        if (IronsSpellsRefl.GET_CD_PERCENT == null || IronsSpellsRefl.GET_SPELL == null) return 0f;
+        try {
+            Object spell = resolveSpell(spellId);
+            if (spell == null) return 0f;
+            Object v = IronsSpellsRefl.GET_CD_PERCENT.invoke(null, spell);
+            if (v instanceof Number n) {
+                float f = n.floatValue();
+                // NaN would sail past both bounds checks in render() and print as "NaN%".
+                if (Float.isNaN(f)) return 0f;
+                return Math.max(0f, Math.min(1f, f));
+            }
+        } catch (Throwable ignored) {}
+        return 0f;
+    }
+
 //? if forge {
 /*
     /^*
@@ -781,6 +697,14 @@ public final class ClientEvents {
                 slotsUsed++;
             }
 
+            // Cooldown chip: the spell you just cast, coming back. Next to the queue chip
+            // because they describe the same thing - what the mod is doing with your casts.
+            {
+                int cY = anchorY + (isBottom ? -(CHIP_H + 3) * (slotsUsed + 1)
+                                              :  (CHIP_H + 3) * (slotsUsed + 1));
+                if (drawCooldownChipIfActive(g, font, anchorX, cY)) slotsUsed++;
+            }
+
             // Miss toast (showMisses): a muted note one slot outward from the queue chip.
             //
             // Only claim the slot if the toast actually DREW. This chip is transient - it exists
@@ -995,6 +919,64 @@ public final class ClientEvents {
         /** Persistent chip while a spell is queued — gives the player visible confirmation
          *  that the spell will fire after the current cast ends, instead of disappearing
          *  into silent state. Slightly dimmer than the live toast so it reads as "pending". */
+        /**
+         * Cooldown of the last voice-cast spell, as a chip in the HUD stack.
+         *
+         * <p>This was a bespoke layer drawn across the centre of the screen, pinned under the
+         * crosshair - which is exactly where a player is looking during the fight the cooldown
+         * matters in. Reported twice: once as "the cooldown bar in the center of the screen",
+         * once as "still in the middle". Moving it down was not enough, because centred is
+         * centred whichever row it sits on. As a chip it inherits the corner the player already
+         * chose for the HUD, the opacity they set, and the same border and ground every other
+         * chip has - so it is out of the way AND stops looking like a different mod's overlay.
+         *
+         * @return true if it drew, so the caller knows whether the slot is occupied.
+         */
+        private static boolean drawCooldownChipIfActive(GuiGraphics g, Font font,
+                                                        int anchorX, int anchorY) {
+            if (!VoiceSpellsConfig.cCastCooldownChip) return false;
+            String spellId = VoiceController.lastDispatchedSpellId();
+            if (spellId == null || spellId.isEmpty()) return false;
+            // Fraction of the cooldown REMAINING; 0 means ready, or unknown.
+            float percent = getCooldownPercent(spellId);
+            if (percent <= 0f) return false;
+            percent = Math.min(1f, percent);
+
+            String name = com.niko.voicespells.spells.SpellInfo.of(spellId).displayName().getString();
+            if (name == null || name.isEmpty()) {
+                int colon = spellId.indexOf(':');
+                name = (colon >= 0 ? spellId.substring(colon + 1) : spellId).replace('_', ' ');
+            }
+            // "○" rather than a clock glyph. Minecraft falls back to unifont for anything
+            // outside its own sheet, and a unifont glyph sitting in a line of default-font text
+            // is visibly wider and heavier. This one is already used on the Codex, so it is
+            // known to render in the same weight as the letters beside it.
+            String text = "○ " + (VoiceSpellsConfig.cStreamerMode ? obscure(name) : name);
+            int chipW = PAD_X + font.width(text) + PAD_X;
+            int x = alignX(anchorX, chipW);
+            drawChip(g, x, anchorY, chipW, CHIP_H, 0.75f);
+
+            // The chip FILLS as the spell comes back, rather than carrying a hairline under the
+            // text. Two layers doing one job: a wash across the recharged portion so the whole
+            // chip reads as a progress control at a glance, and a brighter edge along its bottom
+            // so the exact boundary is still legible when the wash is faint over bright scenery.
+            //
+            // Inset by one so both stay inside the chip's own border instead of painting over
+            // it - drawChip draws that border as four edge rectangles, and overwriting the
+            // bottom one is what made the old version look like a bar with a broken frame.
+            float ready = 1f - percent;
+            int fillW = (int) ((chipW - 2) * ready);
+            if (fillW > 0) {
+                g.fill(x + 1, anchorY + 1, x + 1 + fillW, anchorY + CHIP_H - 1,
+                    withAlpha(Theme.C_HL, 0.16f));
+                g.fill(x + 1, anchorY + CHIP_H - 2, x + 1 + fillW, anchorY + CHIP_H - 1,
+                    withAlpha(Theme.C_HL, 0.85f));
+            }
+            g.drawString(font, Component.literal(text), x + PAD_X,
+                anchorY + (CHIP_H - 8) / 2, withAlpha(VoiceSpellsConfig.cTextToast, 0.9f), true);
+            return true;
+        }
+
         private static void drawQueuedChip(GuiGraphics g, Font font, int anchorX, int anchorY,
                                             String name) {
             String body = VoiceSpellsConfig.cStreamerMode ? obscure(name) : name;
