@@ -49,6 +49,7 @@ public final class VoiceSpellsServerConfig {
         // mechanically different from clicked ones, so casting by voice is a real choice.
         public final ModConfigSpec.IntValue            voiceCooldownPercent;
         public final ModConfigSpec.IntValue            voiceLevelBonus;
+        public final ModConfigSpec.ConfigValue<java.util.List<? extends String>> playerAdvantages;
         public final ModConfigSpec.EnumValue<IncantationRule> incantationOnly;
 
         Server(ModConfigSpec.Builder b) {
@@ -97,6 +98,21 @@ public final class VoiceSpellsServerConfig {
                       "Spell level is what Iron's Spells scales damage, duration and count from,",
                       "so this is the 'voice casts hit harder' knob.");
             voiceLevelBonus = b.defineInRange("voiceLevelBonus", 0, 0, 5);
+            b.comment("Per-player overrides for the two settings above. Empty means everybody",
+                      "gets the values above, which by default are normal Iron's Spells",
+                      "behaviour - no discount, no bonus, nothing changed.",
+                      "",
+                      "One entry per player, by name or UUID:",
+                      "  \"Steve=cooldown:50,level:2\"  Steve casts at half cooldown, +2 levels",
+                      "  \"Steve=level:1\"              only the level differs; cooldown is the",
+                      "                                 server value above",
+                      "  \"!Alex\"                      Alex is EXCEPTED - plain Iron's Spells",
+                      "                                 behaviour, whatever the server values say",
+                      "",
+                      "A player with no entry uses the server values. An exception always wins.",
+                      "Names are matched case-insensitively.");
+            playerAdvantages = b.defineList("playerAdvantages", java.util.List.of(),
+                o -> o instanceof String);
             b.comment("Whether spells may be cast WITHOUT speaking them.",
                       "OFF        - normal Iron's Spells behaviour (default).",
                       "FIRST_CAST - a spell must be voice-cast once before it can be clicked;",

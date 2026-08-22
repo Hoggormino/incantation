@@ -340,7 +340,7 @@ public final class SpellCaster {
             // drain you twice as fast" is not the advantage the host who asked for this wanted,
             // and nothing in the game would have told the player it was happening.
             int baseLevel  = castLevel;
-            int levelBonus = SpellRules.configuredLevelBonus();
+            int levelBonus = SpellRules.configuredLevelBonus(player);
             if (levelBonus > 0) {
                 int before = castLevel;
                 castLevel = Math.min(castLevel + levelBonus, 10);

@@ -236,12 +236,7 @@ public final class SpellRules {
             return -1;
         }
         pending.put(id, new Pending(p.spellId(), p.atNanos(), p.precastUsed(), p.manaDiscount(), true));
-        int pct;
-        try {
-            pct = VoiceSpellsServerConfig.SERVER.voiceCooldownPercent.get();
-        } catch (Throwable t) {
-            return -1;
-        }
+        int pct = advantagesFor(player).cooldownPercent();
         if (pct == 100) return -1;
         return Math.max(0, (int) Math.round(base * (pct / 100.0)));
     }
@@ -254,12 +249,89 @@ public final class SpellRules {
      * by the time {@code attemptInitiateCast} is called, so the bonus silently did nothing.
      * SpellCaster owns the number it is about to cast with, so that is where the bonus belongs.
      */
-    public static int configuredLevelBonus() {
+    /**
+     * What a specific player's voice advantages are, after per-player overrides.
+     *
+     * <p>The server values apply to everybody by default, and by default they are neutral - no
+     * discount, no bonus, plain Iron's Spells. {@code playerAdvantages} then lets a host give
+     * individual players something different, or take it away entirely.
+     *
+     * <ul>
+     *   <li>{@code Steve=cooldown:50,level:2} — Steve's own values</li>
+     *   <li>{@code Steve=level:1} — only the level differs; cooldown stays the server value</li>
+     *   <li>{@code !Alex} — Alex is EXCEPTED: normal Iron's Spells, whatever the server says</li>
+     * </ul>
+     *
+     * <p>An exception always wins, so a host can hand out an advantage broadly and still hold one
+     * player to the ordinary rules without having to list everybody else.
+     *
+     * @param cooldownPercent percent of the normal cooldown, 100 meaning unchanged
+     * @param levelBonus      extra spell levels, 0 meaning unchanged
+     */
+    public record Advantage(int cooldownPercent, int levelBonus) {
+        /** Plain Iron's Spells: nothing altered. */
+        static final Advantage NONE = new Advantage(100, 0);
+    }
+
+    /** Matches a config token against a player by name or UUID, case-insensitively. */
+    private static boolean tokenMatches(String token, Player player) {
+        if (token == null || token.isBlank()) return false;
+        return token.equalsIgnoreCase(player.getName().getString())
+            || token.equalsIgnoreCase(player.getUUID().toString());
+    }
+
+    public static Advantage advantagesFor(Player player) {
+        int pct   = 100;
+        int level = 0;
         try {
-            return VoiceSpellsServerConfig.SERVER.voiceLevelBonus.get();
+            pct   = VoiceSpellsServerConfig.SERVER.voiceCooldownPercent.get();
+            level = VoiceSpellsServerConfig.SERVER.voiceLevelBonus.get();
         } catch (Throwable t) {
-            return 0;
+            return Advantage.NONE;   // config unreadable: never invent an advantage
         }
+        if (player == null) return new Advantage(pct, level);
+        try {
+            java.util.List<? extends String> list =
+                VoiceSpellsServerConfig.SERVER.playerAdvantages.get();
+            if (list == null || list.isEmpty()) return new Advantage(pct, level);
+            for (String raw : list) {
+                if (raw == null) continue;
+                String entry = raw.trim();
+                if (entry.isEmpty()) continue;
+                // Exceptions are checked first AND win outright, so ordering in the file cannot
+                // change the answer - a host should not have to think about list order to be sure
+                // somebody is excluded.
+                if (entry.startsWith("!")) {
+                    if (tokenMatches(entry.substring(1).trim(), player)) return Advantage.NONE;
+                }
+            }
+            for (String raw : list) {
+                if (raw == null) continue;
+                String entry = raw.trim();
+                int eq = entry.indexOf('=');
+                if (eq <= 0 || entry.startsWith("!")) continue;
+                if (!tokenMatches(entry.substring(0, eq).trim(), player)) continue;
+                // Only the keys present are overridden; anything omitted keeps the server value,
+                // so "Steve=level:1" does not silently reset Steve's cooldown to default.
+                for (String part : entry.substring(eq + 1).split(",")) {
+                    String[] kv = part.trim().split(":", 2);
+                    if (kv.length != 2) continue;
+                    String key = kv[0].trim().toLowerCase(java.util.Locale.ROOT);
+                    int val;
+                    try { val = Integer.parseInt(kv[1].trim()); } catch (NumberFormatException e) { continue; }
+                    if (key.equals("cooldown")) pct   = Math.max(0, Math.min(300, val));
+                    else if (key.equals("level")) level = Math.max(0, Math.min(5, val));
+                }
+                break;   // first matching entry wins
+            }
+        } catch (Throwable t) {
+            // A malformed list must not take the server's own settings down with it.
+        }
+        return new Advantage(pct, level);
+    }
+
+    public static int configuredLevelBonus(Player player) {
+        return advantagesFor(player).levelBonus();
     }
 
     /**
