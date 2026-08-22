@@ -329,7 +329,19 @@ public final class Theme {
                               int mouseX, int mouseY, float partialTick) {
         background(screen, g, mouseX, mouseY, partialTick);
 //? if forge {
-/*        // Deliberately nothing. See above: renderBackground has already dimmed it.
+/*        // In a LEVEL, deliberately nothing: 1.20.1's renderBackground already lays down a
+        // 0xC0101010 -> 0xD0101010 gradient, and a scrim on top of that is the double-dim this
+        // used to have.
+        //
+        // Outside one it draws opaque dirt and no dim whatsoever, so the same screen was markedly
+        // brighter and busier on Forge than on NeoForge, which scrims unconditionally. That is
+        // the loader difference that reads as "Forge did not get the same work". Scrimming only
+        // the no-level case makes the two match without bringing the double-dim back.
+        if (net.minecraft.client.Minecraft.getInstance().level == null) {
+            int fw = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
+            int fh = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight();
+            g.fill(0, 0, fw, fh, C_SCRIM);
+        }
 *///?} else {
         int w = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
         int h = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight();
