@@ -429,6 +429,9 @@ public final class ClientEvents {
 *///?} else {
         public void render(GuiGraphics g, net.minecraft.client.DeltaTracker delta) {
 //?}
+            // Asked for by a player: this chip sits under the crosshair and there was no way
+            // to turn it off or move it. Both now exist.
+            if (!VoiceSpellsConfig.cCastCooldownChip) return;
             String spellId = VoiceController.lastDispatchedSpellId();
             if (spellId == null || spellId.isEmpty()) return;
             Minecraft mc = Minecraft.getInstance();
@@ -456,7 +459,7 @@ public final class ClientEvents {
             int chipW = tw + 12;
             int chipH = 12;
             int x = (w - chipW) / 2;
-            int y = h / 2 + 16; // just under the crosshair
+            int y = h / 2 + VoiceSpellsConfig.cCastCooldownChipY;
             // Background + frame. A world HUD overlay reads best on dark whatever else is going
             // on — light text-on-cream over a bright sky is unreadable — so the chip background
             // is deliberately fixed dark and the border is plain white. There is no theme colour

@@ -1588,7 +1588,62 @@ public final class VoiceController {
      * on something as fast as a push-to-talk keypress would clip the start of every utterance.
      * Short-lived gating is handled per frame in {@code captureArmed()} instead.
      */
+    /**
+     * A chat warning waiting for somebody to read it, or null.
+     *
+     * <p>Warnings raised while the model loads land at the title screen, where
+     * {@code mc.player} is null and a displayClientMessage goes nowhere. The one time this
+     * message matters most is the one time it was guaranteed to be thrown away.
+     */
+    private static volatile Component pendingChatWarning = null;
+
+    /**
+     * Say something when the loaded model cannot pronounce the grammar it was given.
+     *
+     * <p>Vosk runs a restricted grammar and silently discards any entry containing a word its
+     * lexicon has no entry for. Spell phrases are derived from the English registry path, so
+     * loading a non-English model drops most or all of them and recognition stops firing
+     * entirely - no error, no log from Vosk, nothing on screen. A player reported exactly this
+     * with the Russian model: "everything works with English, the Russian model doesn't trigger
+     * at all". It is not a broken model, it is an English grammar against a Russian dictionary.
+     *
+     * <p>This cannot fix it - only translated phrases can, which is what phrasebook.json is for -
+     * but a mod that does nothing should at least say why.
+     */
+    private static void checkGrammarIsSayable() {
+        try {
+            if (!com.niko.voicespells.speech.Lexicon.ready()) return;
+            SpellIndex.VocabReport r = SpellIndex.vocabularyReport();
+            int total = SpellIndex.getPhrases().size();
+            if (total <= 0) return;
+            int dead = r.dead().size();
+            // Two thirds is not a threshold anybody tuned; it is far past the point where a
+            // handful of awkward compound names could explain it, and comfortably short of
+            // demanding that every single phrase fail.
+            if (dead * 3 < total * 2) return;
+            VoiceSpells.LOGGER.warn("{} of {} spell phrases cannot be pronounced by the loaded "
+                + "speech model. The phrases are English and the model is not, so Vosk has "
+                + "dropped them from the grammar and recognition will not fire. Translate them "
+                + "in config/voicespells/phrasebook.json, or load an English model.", dead, total);
+            pendingChatWarning = Component.literal(
+                "§c[Incantation] §fThis speech model cannot say " + dead + " of "
+                + total + " spell phrases, so casting will not work. The phrases are English "
+                + "and the model is not — translate them in phrasebook.json, or use an "
+                + "English model. Run §e/voicespells vocab§f for the details.");
+        } catch (Throwable ignored) {
+            // A diagnostic must never be the thing that breaks the load.
+        }
+    }
+
     public static void tickCaptureSuspension() {
+        Component warn = pendingChatWarning;
+        if (warn != null) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null) {
+                pendingChatWarning = null;
+                mc.player.displayClientMessage(warn, false);
+            }
+        }
         if (!captureAllowedNow()) {
             if (capture != null) {
                 stopCapture();
@@ -1690,6 +1745,7 @@ public final class VoiceController {
             com.niko.voicespells.speech.Lexicon.clear();
             com.niko.voicespells.speech.Lexicon.load(modelPath);
             SpellIndex.registerRespellings();
+            checkGrammarIsSayable();
 
             VoskSession s = VoskSession.open(
                 modelPath,

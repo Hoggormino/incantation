@@ -152,6 +152,8 @@ public final class VoiceSpellsConfig {
         public final ForgeConfigSpec.BooleanValue enableEchoSfx;
         public final ForgeConfigSpec.BooleanValue streamerMode;
         public final ForgeConfigSpec.BooleanValue sassMode;
+        public final ForgeConfigSpec.BooleanValue castCooldownChip;
+        public final ForgeConfigSpec.IntValue          castCooldownChipY;
         public final ForgeConfigSpec.BooleanValue castVignette;
         public final ForgeConfigSpec.BooleanValue combatOnly;
         public final ForgeConfigSpec.BooleanValue pauseWhenAfk;
@@ -282,6 +284,13 @@ public final class VoiceSpellsConfig {
             streamerMode = b.define("streamerMode", false);
             b.comment("Sass mode - occasional snarky 'was that even a spell?' toast on miss.");
             sassMode = b.define("sassMode", false);
+            b.comment("Show the cooldown chip under the crosshair after a voice cast.",
+                      "It names the spell and fills as the cooldown runs down. Turn it off if",
+                      "you would rather keep the centre of the screen clear.");
+            castCooldownChip = b.define("castCooldownChip", true);
+            b.comment("Pixels BELOW the centre of the screen to draw that chip. Negative moves",
+                      "it above the crosshair; 0 puts it on the crosshair itself.");
+            castCooldownChipY = b.defineInRange("castCooldownChipY", 16, -200, 200);
             b.comment("Cinematic accent bars top and bottom of the screen, plus corner",
                       "glows, while you are casting a long spell. Drawn in white.",
                       "Off by default: the code existed since early builds but never ran,",
@@ -424,6 +433,8 @@ public final class VoiceSpellsConfig {
     public static volatile boolean cEchoSfx         = true;
     public static volatile boolean cStreamerMode    = false;
     public static volatile boolean cSassMode        = false;
+    public static volatile boolean cCastCooldownChip  = true;
+    public static volatile int     cCastCooldownChipY = 16;
     public static volatile boolean cCastVignette    = false;
     public static volatile boolean cCombatOnly      = false;
     public static volatile boolean cPauseWhenAfk    = false;
@@ -482,6 +493,8 @@ public final class VoiceSpellsConfig {
         cEchoSfx          = c.enableEchoSfx.get();
         cStreamerMode     = c.streamerMode.get();
         cSassMode         = c.sassMode.get();
+        cCastCooldownChip  = c.castCooldownChip.get();
+        cCastCooldownChipY = c.castCooldownChipY.get();
         cCastVignette     = c.castVignette.get();
         cCombatOnly       = c.combatOnly.get();
         cPauseWhenAfk     = c.pauseWhenAfk.get();

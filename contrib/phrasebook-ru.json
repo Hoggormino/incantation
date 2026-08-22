@@ -1,0 +1,1182 @@
+{
+  "_help": "Replace the override for each spell with the words you want to say in Russian. Entries for Iron's Spells' own spells were filled in from its ru_ru.json; the addon spells are blank because those mods ship no translations in any language. Vosk only recognises words its model knows - run /voicespells vocab to see which of these the loaded Russian model can actually say.",
+  "spells": {
+    "gtbcs_geomancy_plus:fissure": {
+      "default": "fissure",
+      "override": ""
+    },
+    "gtbcs_geomancy_plus:tremor_spike": {
+      "default": "tremor spike",
+      "override": ""
+    },
+    "gtbcs_geomancy_plus:tremor_step": {
+      "default": "tremor step",
+      "override": ""
+    },
+    "gtbcs_geomancy_plus:eroding_boulder": {
+      "default": "eroding boulder",
+      "override": ""
+    },
+    "gtbcs_geomancy_plus:chunker": {
+      "default": "chunker",
+      "override": ""
+    },
+    "gtbcs_geomancy_plus:seismic_surf": {
+      "default": "seismic surf",
+      "override": ""
+    },
+    "gtbcs_geomancy_plus:dripstone_bolt": {
+      "default": "dripstone bolt",
+      "override": ""
+    },
+    "gtbcs_geomancy_plus:pillar_of_the_resounding_earth": {
+      "default": "pillar of the resounding earth",
+      "override": ""
+    },
+    "gtbcs_geomancy_plus:geo_conductor": {
+      "default": "geo conductor",
+      "override": ""
+    },
+    "gtbcs_geomancy_plus:petrivise": {
+      "default": "petrivise",
+      "override": ""
+    },
+    "gtbcs_geomancy_plus:solar_storm": {
+      "default": "solar storm",
+      "override": ""
+    },
+    "gtbcs_geomancy_plus:solar_beam": {
+      "default": "solar beam",
+      "override": ""
+    },
+    "tunes_n_tomes:chord_blast": {
+      "default": "chord blast",
+      "override": ""
+    },
+    "tunes_n_tomes:crescendo": {
+      "default": "crescendo",
+      "override": ""
+    },
+    "tunes_n_tomes:grand_finale": {
+      "default": "grand finale",
+      "override": ""
+    },
+    "tunes_n_tomes:celestial_chant": {
+      "default": "celestial chant",
+      "override": ""
+    },
+    "tunes_n_tomes:rhapsody": {
+      "default": "rhapsody",
+      "override": ""
+    },
+    "tunes_n_tomes:sonata": {
+      "default": "sonata",
+      "override": ""
+    },
+    "tunes_n_tomes:serenade": {
+      "default": "serenade",
+      "override": ""
+    },
+    "tunes_n_tomes:dal_segno": {
+      "default": "dal segno",
+      "override": ""
+    },
+    "tunes_n_tomes:encore": {
+      "default": "encore",
+      "override": ""
+    },
+    "tunes_n_tomes:fortissimo": {
+      "default": "fortissimo",
+      "override": ""
+    },
+    "tunes_n_tomes:swift_melody": {
+      "default": "swift melody",
+      "override": ""
+    },
+    "tunes_n_tomes:hymn_of_hope": {
+      "default": "hymn of hope",
+      "override": ""
+    },
+    "tunes_n_tomes:slumber_note": {
+      "default": "slumber note",
+      "override": ""
+    },
+    "tunes_n_tomes:clamor_note": {
+      "default": "clamor note",
+      "override": ""
+    },
+    "tunes_n_tomes:harmonic_aria": {
+      "default": "harmonic aria",
+      "override": ""
+    },
+    "tunes_n_tomes:piercing_solo": {
+      "default": "piercing solo",
+      "override": ""
+    },
+    "cataclysm_spellbooks:void_beam": {
+      "default": "void beam",
+      "override": ""
+    },
+    "cataclysm_spellbooks:abyssal_blast": {
+      "default": "abyssal blast",
+      "override": ""
+    },
+    "cataclysm_spellbooks:dimensional_rift": {
+      "default": "dimensional rift",
+      "override": ""
+    },
+    "cataclysm_spellbooks:depth_charge": {
+      "default": "depth charge",
+      "override": ""
+    },
+    "cataclysm_spellbooks:abyssal_predator": {
+      "default": "abyssal predator",
+      "override": ""
+    },
+    "cataclysm_spellbooks:abyssal_slash": {
+      "default": "abyssal slash",
+      "override": ""
+    },
+    "cataclysm_spellbooks:tidal_grab": {
+      "default": "tidal grab",
+      "override": ""
+    },
+    "cataclysm_spellbooks:void_rune": {
+      "default": "void rune",
+      "override": ""
+    },
+    "cataclysm_spellbooks:void_bulwark": {
+      "default": "void bulwark",
+      "override": ""
+    },
+    "cataclysm_spellbooks:gravity_storm": {
+      "default": "gravity storm",
+      "override": ""
+    },
+    "cataclysm_spellbooks:gravitation_pull": {
+      "default": "gravitation pull",
+      "override": ""
+    },
+    "cataclysm_spellbooks:pilfer": {
+      "default": "pilfer",
+      "override": ""
+    },
+    "cataclysm_spellbooks:conjure_koboldiator": {
+      "default": "conjure koboldiator",
+      "override": ""
+    },
+    "cataclysm_spellbooks:summon_koboleton": {
+      "default": "summon koboleton",
+      "override": ""
+    },
+    "cataclysm_spellbooks:thoths_witness": {
+      "default": "thoths witness",
+      "override": ""
+    },
+    "cataclysm_spellbooks:incineration": {
+      "default": "incineration",
+      "override": ""
+    },
+    "cataclysm_spellbooks:infernal_strike": {
+      "default": "infernal strike",
+      "override": ""
+    },
+    "cataclysm_spellbooks:conjure_ignited_reinforcement": {
+      "default": "conjure ignited reinforcement",
+      "override": ""
+    },
+    "cataclysm_spellbooks:hellish_blade": {
+      "default": "hellish blade",
+      "override": ""
+    },
+    "cataclysm_spellbooks:bone_storm": {
+      "default": "bone storm",
+      "override": ""
+    },
+    "cataclysm_spellbooks:piercing_bone": {
+      "default": "piercing bone",
+      "override": ""
+    },
+    "cataclysm_spellbooks:ashen_breath": {
+      "default": "ashen breath",
+      "override": ""
+    },
+    "cataclysm_spellbooks:abyss_fireball": {
+      "default": "abyss fireball",
+      "override": ""
+    },
+    "cataclysm_spellbooks:tectonic_tremble": {
+      "default": "tectonic tremble",
+      "override": ""
+    },
+    "cataclysm_spellbooks:malevolent_battlefield": {
+      "default": "malevolent battlefield",
+      "override": ""
+    },
+    "cataclysm_spellbooks:forgone_rage": {
+      "default": "forgone rage",
+      "override": ""
+    },
+    "cataclysm_spellbooks:conjure_thralls": {
+      "default": "conjure thralls",
+      "override": ""
+    },
+    "cataclysm_spellbooks:cursed_rush": {
+      "default": "cursed rush",
+      "override": ""
+    },
+    "cataclysm_spellbooks:sandstorm": {
+      "default": "sandstorm",
+      "override": ""
+    },
+    "cataclysm_spellbooks:desert_winds": {
+      "default": "desert winds",
+      "override": ""
+    },
+    "cataclysm_spellbooks:monolith_crash": {
+      "default": "monolith crash",
+      "override": ""
+    },
+    "cataclysm_spellbooks:amethyst_puncture": {
+      "default": "amethyst puncture",
+      "override": ""
+    },
+    "cataclysm_spellbooks:conjure_amethyst_crab": {
+      "default": "conjure amethyst crab",
+      "override": ""
+    },
+    "cataclysm_spellbooks:pharaohs_wrath": {
+      "default": "pharaohs wrath",
+      "override": ""
+    },
+    "discerning_the_eldritch:silence": {
+      "default": "silence",
+      "override": ""
+    },
+    "discerning_the_eldritch:conjure_forsaken_aid": {
+      "default": "conjure forsaken aid",
+      "override": ""
+    },
+    "discerning_the_eldritch:esoteric_edge": {
+      "default": "esoteric edge",
+      "override": ""
+    },
+    "discerning_the_eldritch:conjure_gaoler": {
+      "default": "conjure gaoler",
+      "override": ""
+    },
+    "discerning_the_eldritch:otherworldly_presence": {
+      "default": "otherworldly presence",
+      "override": ""
+    },
+    "discerning_the_eldritch:mend_flesh": {
+      "default": "mend flesh",
+      "override": ""
+    },
+    "discerning_the_eldritch:rift_walker": {
+      "default": "rift walker",
+      "override": ""
+    },
+    "discerning_the_eldritch:abracadabra": {
+      "default": "abracadabra",
+      "override": ""
+    },
+    "discerning_the_eldritch:esoteric_strike": {
+      "default": "esoteric strike",
+      "override": ""
+    },
+    "discerning_the_eldritch:vein_ripper": {
+      "default": "vein ripper",
+      "override": ""
+    },
+    "discerning_the_eldritch:boogie_woogie": {
+      "default": "boogie woogie",
+      "override": ""
+    },
+    "discerning_the_eldritch:guardians_gaze": {
+      "default": "guardians gaze",
+      "override": ""
+    },
+    "discerning_the_eldritch:soul_slice": {
+      "default": "soul slice",
+      "override": ""
+    },
+    "discerning_the_eldritch:soul_set_ablaze": {
+      "default": "soul set ablaze",
+      "override": ""
+    },
+    "discerning_the_eldritch:exorcism": {
+      "default": "exorcism",
+      "override": ""
+    },
+    "discerning_the_eldritch:glacial_edge": {
+      "default": "glacial edge",
+      "override": ""
+    },
+    "discerning_the_eldritch:crystalline_carver": {
+      "default": "crystalline carver",
+      "override": ""
+    },
+    "discerning_the_eldritch:call_ascended_one": {
+      "default": "call ascended one",
+      "override": ""
+    },
+    "discerning_the_eldritch:blades_of_rancor": {
+      "default": "blades of rancor",
+      "override": ""
+    },
+    "discerning_the_eldritch:zealous_harbinger": {
+      "default": "zealous harbinger",
+      "override": ""
+    },
+    "discerning_the_eldritch:ravenous_revenant": {
+      "default": "ravenous revenant",
+      "override": ""
+    },
+    "discerning_the_eldritch:libras_judgement": {
+      "default": "libras judgement",
+      "override": ""
+    },
+    "aero_additions:wind_charge": {
+      "default": "wind charge",
+      "override": ""
+    },
+    "aero_additions:updraft": {
+      "default": "updraft",
+      "override": ""
+    },
+    "aero_additions:airstep": {
+      "default": "airstep",
+      "override": ""
+    },
+    "aero_additions:asphyxiate": {
+      "default": "asphyxiate",
+      "override": ""
+    },
+    "aero_additions:feather_fall": {
+      "default": "feather fall",
+      "override": ""
+    },
+    "aero_additions:wind_shield": {
+      "default": "wind shield",
+      "override": ""
+    },
+    "aero_additions:airblast": {
+      "default": "airblast",
+      "override": ""
+    },
+    "aero_additions:wind_blade": {
+      "default": "wind blade",
+      "override": ""
+    },
+    "aero_additions:flush": {
+      "default": "flush",
+      "override": ""
+    },
+    "aero_additions:dash": {
+      "default": "dash",
+      "override": ""
+    },
+    "ess_requiem:pact_of_the_dead": {
+      "default": "pact of the dead",
+      "override": ""
+    },
+    "ess_requiem:rip_and_tear": {
+      "default": "rip and tear",
+      "override": ""
+    },
+    "ess_requiem:strain": {
+      "default": "strain",
+      "override": ""
+    },
+    "ess_requiem:reaper": {
+      "default": "reaper",
+      "override": ""
+    },
+    "ess_requiem:summon_skulls": {
+      "default": "summon skulls",
+      "override": ""
+    },
+    "ess_requiem:wretch": {
+      "default": "wretch",
+      "override": ""
+    },
+    "ess_requiem:boiling_blood": {
+      "default": "boiling blood",
+      "override": ""
+    },
+    "ess_requiem:necrotic_burst": {
+      "default": "necrotic burst",
+      "override": ""
+    },
+    "ess_requiem:maggot_burst": {
+      "default": "maggot burst",
+      "override": ""
+    },
+    "ess_requiem:decaying_will": {
+      "default": "decaying will",
+      "override": ""
+    },
+    "ess_requiem:corpse_explosion": {
+      "default": "corpse explosion",
+      "override": ""
+    },
+    "ess_requiem:finality_of_decay": {
+      "default": "finality of decay",
+      "override": ""
+    },
+    "ess_requiem:arm_of_decay_insta_raise": {
+      "default": "arm of decay insta raise",
+      "override": ""
+    },
+    "ess_requiem:field_of_mourning": {
+      "default": "field of mourning",
+      "override": ""
+    },
+    "ess_requiem:ebony_armor": {
+      "default": "ebony armor",
+      "override": ""
+    },
+    "ess_requiem:protection_of_the_fallen": {
+      "default": "protection of the fallen",
+      "override": ""
+    },
+    "ess_requiem:spikes_of_agony": {
+      "default": "spikes of agony",
+      "override": ""
+    },
+    "ess_requiem:tentacle_whip": {
+      "default": "tentacle whip",
+      "override": ""
+    },
+    "ess_requiem:pale_flame": {
+      "default": "pale flame",
+      "override": ""
+    },
+    "ess_requiem:cursed_immortality": {
+      "default": "cursed immortality",
+      "override": ""
+    },
+    "ess_requiem:eternal_battlefield": {
+      "default": "eternal battlefield",
+      "override": ""
+    },
+    "ess_requiem:twilight_assault": {
+      "default": "twilight assault",
+      "override": ""
+    },
+    "ess_requiem:ebony_cataphract": {
+      "default": "ebony cataphract",
+      "override": ""
+    },
+    "ess_requiem:nights_cover": {
+      "default": "nights cover",
+      "override": ""
+    },
+    "ess_requiem:damnation": {
+      "default": "damnation",
+      "override": ""
+    },
+    "ess_requiem:slash": {
+      "default": "slash",
+      "override": ""
+    },
+    "ess_requiem:slam": {
+      "default": "slam",
+      "override": ""
+    },
+    "ess_requiem:quick_slice": {
+      "default": "quick slice",
+      "override": ""
+    },
+    "ess_requiem:uppercut": {
+      "default": "uppercut",
+      "override": ""
+    },
+    "ess_requiem:sword_stance": {
+      "default": "sword stance",
+      "override": ""
+    },
+    "ess_requiem:soulmaster_summon": {
+      "default": "soulmaster summon",
+      "override": ""
+    },
+    "ess_requiem:overwhelming_force": {
+      "default": "overwhelming force",
+      "override": ""
+    },
+    "ess_requiem:hone_edge": {
+      "default": "hone edge",
+      "override": ""
+    },
+    "ess_requiem:undying_dread": {
+      "default": "undying dread",
+      "override": ""
+    },
+    "ess_requiem:dismantle": {
+      "default": "dismantle",
+      "override": ""
+    },
+    "ess_requiem:cleave": {
+      "default": "cleave",
+      "override": ""
+    },
+    "ess_requiem:place_standard": {
+      "default": "place standard",
+      "override": ""
+    },
+    "ess_requiem:bastion_of_light": {
+      "default": "bastion of light",
+      "override": ""
+    },
+    "ess_requiem:overwhelming_light": {
+      "default": "overwhelming light",
+      "override": ""
+    },
+    "ess_requiem:glacial_sculpting": {
+      "default": "glacial sculpting",
+      "override": ""
+    },
+    "ess_requiem:lord_of_the_final_frost": {
+      "default": "lord of the final frost",
+      "override": ""
+    },
+    "ess_requiem:disappearing_act": {
+      "default": "disappearing act",
+      "override": ""
+    },
+    "ess_requiem:adrenaline_rush": {
+      "default": "adrenaline rush",
+      "override": ""
+    },
+    "ess_requiem:switcharoo": {
+      "default": "switcharoo",
+      "override": ""
+    },
+    "ess_requiem:cataphract_tackle": {
+      "default": "cataphract tackle",
+      "override": ""
+    },
+    "ess_requiem:cataphract_slam": {
+      "default": "cataphract slam",
+      "override": ""
+    },
+    "ess_requiem:cataphract_heal": {
+      "default": "cataphract heal",
+      "override": ""
+    },
+    "ess_requiem:gild_summon": {
+      "default": "gild summon",
+      "override": ""
+    },
+    "ess_requiem:slashing_ability": {
+      "default": "slashing ability",
+      "override": ""
+    },
+    "ess_requiem:nightmare": {
+      "default": "nightmare",
+      "override": ""
+    },
+    "ess_requiem:forever_dreaming": {
+      "default": "forever dreaming",
+      "override": ""
+    },
+    "ess_requiem:nightmare_scream": {
+      "default": "nightmare scream",
+      "override": ""
+    },
+    "hazennstuff:endraconic_meteor": {
+      "default": "endraconic meteor",
+      "override": ""
+    },
+    "hazennstuff:violent_regurgitation": {
+      "default": "violent regurgitation",
+      "override": ""
+    },
+    "hazennstuff:bone_bolt": {
+      "default": "bone bolt",
+      "override": ""
+    },
+    "hazennstuff:cinderous_step": {
+      "default": "cinderous step",
+      "override": ""
+    },
+    "hazennstuff:scorching_slash": {
+      "default": "scorching slash",
+      "override": ""
+    },
+    "hazennstuff:fiery_dagger": {
+      "default": "fiery dagger",
+      "override": ""
+    },
+    "hazennstuff:ice_arrow": {
+      "default": "ice arrow",
+      "override": ""
+    },
+    "hazennstuff:hailstorm": {
+      "default": "hailstorm",
+      "override": ""
+    },
+    "hazennstuff:energy_burst": {
+      "default": "energy burst",
+      "override": ""
+    },
+    "hazennstuff:ionic_slash": {
+      "default": "ionic slash",
+      "override": ""
+    },
+    "hazennstuff:dazzling_obliteration": {
+      "default": "dazzling obliteration",
+      "override": ""
+    },
+    "hazennstuff:thorn_chakram": {
+      "default": "thorn chakram",
+      "override": ""
+    },
+    "hazennstuff:counterspell_spider_lily": {
+      "default": "counterspell spider lily",
+      "override": ""
+    },
+    "hazennstuff:shard_sword": {
+      "default": "shard sword",
+      "override": ""
+    },
+    "hazennstuff:death_sentence": {
+      "default": "death sentence",
+      "override": ""
+    },
+    "hazennstuff:spectral_axe": {
+      "default": "spectral axe",
+      "override": ""
+    },
+    "hazennstuff:parry": {
+      "default": "parry",
+      "override": ""
+    },
+    "hazennstuff:golden_shower": {
+      "default": "golden shower",
+      "override": ""
+    },
+    "hazennstuff:syringe_barrage": {
+      "default": "syringe barrage",
+      "override": ""
+    },
+    "hazennstuff:terraprismic_barrage": {
+      "default": "terraprismic barrage",
+      "override": ""
+    },
+    "hazennstuff:call_forth_terraprisma": {
+      "default": "call forth terraprisma",
+      "override": ""
+    },
+    "hazennstuff:prismatic_shift": {
+      "default": "prismatic shift",
+      "override": ""
+    },
+    "hazennstuff:nights_edge_strike": {
+      "default": "nights edge strike",
+      "override": ""
+    },
+    "hazennstuff:umbrashift_barrage": {
+      "default": "umbrashift barrage",
+      "override": ""
+    },
+    "hazennstuff:shadow_reaver": {
+      "default": "shadow reaver",
+      "override": ""
+    },
+    "hazennstuff:arcane_cards": {
+      "default": "arcane cards",
+      "override": ""
+    },
+    "hazennstuff:soul_seekers": {
+      "default": "soul seekers",
+      "override": ""
+    },
+    "hazennstuff:shooting_star": {
+      "default": "shooting star",
+      "override": ""
+    },
+    "hazennstuff:cosmic_bolt": {
+      "default": "cosmic bolt",
+      "override": ""
+    },
+    "hazennstuff:evercomet_barrage": {
+      "default": "evercomet barrage",
+      "override": ""
+    },
+    "hazennstuff:moonkissed": {
+      "default": "moonkissed",
+      "override": ""
+    },
+    "hazennstuff:hydrobullet": {
+      "default": "hydrobullet",
+      "override": ""
+    },
+    "hazennstuff:water_bolt": {
+      "default": "water bolt",
+      "override": ""
+    },
+    "hazennstuff:razorblade_typhoon": {
+      "default": "razorblade typhoon",
+      "override": ""
+    },
+    "hazennstuff:trident_jetstream": {
+      "default": "trident jetstream",
+      "override": ""
+    },
+    "hazennstuff:horn_shell": {
+      "default": "horn shell",
+      "override": ""
+    },
+    "irons_spellbooks:acupuncture": {
+      "default": "acupuncture",
+      "override": "иглоукалывание"
+    },
+    "irons_spellbooks:blood_needles": {
+      "default": "blood needles",
+      "override": "кровавые иглы"
+    },
+    "irons_spellbooks:blood_slash": {
+      "default": "blood slash",
+      "override": "кровавый клинок"
+    },
+    "irons_spellbooks:blood_step": {
+      "default": "blood step",
+      "override": "кровавая поступь"
+    },
+    "irons_spellbooks:devour": {
+      "default": "devour",
+      "override": "пожирание"
+    },
+    "irons_spellbooks:heartstop": {
+      "default": "heartstop",
+      "override": "остановка сердца"
+    },
+    "irons_spellbooks:raise_dead": {
+      "default": "raise dead",
+      "override": "воскрешение мёртвых"
+    },
+    "irons_spellbooks:ray_of_siphoning": {
+      "default": "ray of siphoning",
+      "override": "истощающий луч"
+    },
+    "irons_spellbooks:wither_skull": {
+      "default": "wither skull",
+      "override": "череп иссушителя"
+    },
+    "irons_spellbooks:sacrifice": {
+      "default": "sacrifice",
+      "override": "жертвоприношение"
+    },
+    "irons_spellbooks:counterspell": {
+      "default": "counterspell",
+      "override": "контрзаклинание"
+    },
+    "irons_spellbooks:dragon_breath": {
+      "default": "dragon breath",
+      "override": "драконье дыхание"
+    },
+    "irons_spellbooks:evasion": {
+      "default": "evasion",
+      "override": "уклонение"
+    },
+    "irons_spellbooks:magic_arrow": {
+      "default": "magic arrow",
+      "override": "волшебная стрела"
+    },
+    "irons_spellbooks:magic_missile": {
+      "default": "magic missile",
+      "override": "магический снаряд"
+    },
+    "irons_spellbooks:starfall": {
+      "default": "starfall",
+      "override": "звездопад"
+    },
+    "irons_spellbooks:teleport": {
+      "default": "teleport",
+      "override": "перемещение"
+    },
+    "irons_spellbooks:summon_ender_chest": {
+      "default": "summon ender chest",
+      "override": "эндер хранилище"
+    },
+    "irons_spellbooks:recall": {
+      "default": "recall",
+      "override": "возвращение"
+    },
+    "irons_spellbooks:portal": {
+      "default": "portal",
+      "override": "портал"
+    },
+    "irons_spellbooks:echoing_strikes": {
+      "default": "echoing strikes",
+      "override": "эхо ударов"
+    },
+    "irons_spellbooks:black_hole": {
+      "default": "black hole",
+      "override": "чёрная дыра"
+    },
+    "irons_spellbooks:summon_swords": {
+      "default": "summon swords",
+      "override": "призыв орудий"
+    },
+    "irons_spellbooks:shadow_slash": {
+      "default": "shadow slash",
+      "override": "теневой взмах"
+    },
+    "irons_spellbooks:chain_creeper": {
+      "default": "chain creeper",
+      "override": "цепной крипер"
+    },
+    "irons_spellbooks:fang_strike": {
+      "default": "fang strike",
+      "override": "удар клыками"
+    },
+    "irons_spellbooks:fang_ward": {
+      "default": "fang ward",
+      "override": "кольцо клыков"
+    },
+    "irons_spellbooks:firecracker": {
+      "default": "firecracker",
+      "override": "фейерверк"
+    },
+    "irons_spellbooks:gust": {
+      "default": "gust",
+      "override": "порыв"
+    },
+    "irons_spellbooks:invisibility": {
+      "default": "invisibility",
+      "override": "невидимость"
+    },
+    "irons_spellbooks:lob_creeper": {
+      "default": "lob creeper",
+      "override": "бросок крипера"
+    },
+    "irons_spellbooks:shield": {
+      "default": "shield",
+      "override": "магический щит"
+    },
+    "irons_spellbooks:spectral_hammer": {
+      "default": "spectral hammer",
+      "override": "призрачный молот"
+    },
+    "irons_spellbooks:summon_horse": {
+      "default": "summon horse",
+      "override": "призыв лошади"
+    },
+    "irons_spellbooks:summon_vex": {
+      "default": "summon vex",
+      "override": "призыв вредин"
+    },
+    "irons_spellbooks:slow": {
+      "default": "slow",
+      "override": "замедление"
+    },
+    "irons_spellbooks:arrow_volley": {
+      "default": "arrow volley",
+      "override": "залп стрел"
+    },
+    "irons_spellbooks:wololo": {
+      "default": "wololo",
+      "override": "вололо"
+    },
+    "irons_spellbooks:throw": {
+      "default": "throw",
+      "override": "бросок"
+    },
+    "irons_spellbooks:blaze_storm": {
+      "default": "blaze storm",
+      "override": "пламенный шторм"
+    },
+    "irons_spellbooks:burning_dash": {
+      "default": "burning dash",
+      "override": "пламенный рывок"
+    },
+    "irons_spellbooks:fireball": {
+      "default": "fireball",
+      "override": "огненный шар"
+    },
+    "irons_spellbooks:firebolt": {
+      "default": "firebolt",
+      "override": "огненный снаряд"
+    },
+    "irons_spellbooks:fire_breath": {
+      "default": "fire breath",
+      "override": "огненное дыхание"
+    },
+    "irons_spellbooks:magma_bomb": {
+      "default": "magma bomb",
+      "override": "магмовая бомба"
+    },
+    "irons_spellbooks:wall_of_fire": {
+      "default": "wall of fire",
+      "override": "стена огня"
+    },
+    "irons_spellbooks:heat_surge": {
+      "default": "heat surge",
+      "override": "тепловой всплеск"
+    },
+    "irons_spellbooks:flaming_strike": {
+      "default": "flaming strike",
+      "override": "пылающий удар"
+    },
+    "irons_spellbooks:scorch": {
+      "default": "scorch",
+      "override": "ожог"
+    },
+    "irons_spellbooks:flaming_barrage": {
+      "default": "flaming barrage",
+      "override": "пламенный шквал"
+    },
+    "irons_spellbooks:fire_arrow": {
+      "default": "fire arrow",
+      "override": "огненная стрела"
+    },
+    "irons_spellbooks:raise_hell": {
+      "default": "raise hell",
+      "override": "адский удар"
+    },
+    "irons_spellbooks:angel_wing": {
+      "default": "angel wing",
+      "override": "ангельские крылья"
+    },
+    "irons_spellbooks:blessing_of_life": {
+      "default": "blessing of life",
+      "override": "благословение жизни"
+    },
+    "irons_spellbooks:cloud_of_regeneration": {
+      "default": "cloud of regeneration",
+      "override": "облако регенерации"
+    },
+    "irons_spellbooks:fortify": {
+      "default": "fortify",
+      "override": "укрепление"
+    },
+    "irons_spellbooks:greater_heal": {
+      "default": "greater heal",
+      "override": "великое исцеление"
+    },
+    "irons_spellbooks:guiding_bolt": {
+      "default": "guiding bolt",
+      "override": "путеводный снаряд"
+    },
+    "irons_spellbooks:healing_circle": {
+      "default": "healing circle",
+      "override": "исцеляющий круг"
+    },
+    "irons_spellbooks:heal": {
+      "default": "heal",
+      "override": "исцеление"
+    },
+    "irons_spellbooks:sunbeam": {
+      "default": "sunbeam",
+      "override": "солнечный луч"
+    },
+    "irons_spellbooks:wisp": {
+      "default": "wisp",
+      "override": "огонёк"
+    },
+    "irons_spellbooks:divine_smite": {
+      "default": "divine smite",
+      "override": "божья кара"
+    },
+    "irons_spellbooks:haste": {
+      "default": "haste",
+      "override": "ускорение"
+    },
+    "irons_spellbooks:cleanse": {
+      "default": "cleanse",
+      "override": "очищение"
+    },
+    "irons_spellbooks:cone_of_cold": {
+      "default": "cone of cold",
+      "override": "морозное дыхание"
+    },
+    "irons_spellbooks:frost_step": {
+      "default": "frost step",
+      "override": "ледяная поступь"
+    },
+    "irons_spellbooks:ice_block": {
+      "default": "ice block",
+      "override": "ледяная глыба"
+    },
+    "irons_spellbooks:icicle": {
+      "default": "icicle",
+      "override": "сосулька"
+    },
+    "irons_spellbooks:summon_polar_bear": {
+      "default": "summon polar bear",
+      "override": "призыв белого медведя"
+    },
+    "irons_spellbooks:ray_of_frost": {
+      "default": "ray of frost",
+      "override": "морозный луч"
+    },
+    "irons_spellbooks:frostwave": {
+      "default": "frostwave",
+      "override": "морозная волна"
+    },
+    "irons_spellbooks:ice_spikes": {
+      "default": "ice spikes",
+      "override": "ледяные шипы"
+    },
+    "irons_spellbooks:ice_tomb": {
+      "default": "ice tomb",
+      "override": "ледяной гроб"
+    },
+    "irons_spellbooks:snowball": {
+      "default": "snowball",
+      "override": "снежок"
+    },
+    "irons_spellbooks:frostbite": {
+      "default": "frostbite",
+      "override": "обморожение"
+    },
+    "irons_spellbooks:ascension": {
+      "default": "ascension",
+      "override": "вознесение"
+    },
+    "irons_spellbooks:chain_lightning": {
+      "default": "chain lightning",
+      "override": "цепная молния"
+    },
+    "irons_spellbooks:charge": {
+      "default": "charge",
+      "override": "перегрузка"
+    },
+    "irons_spellbooks:electrocute": {
+      "default": "electrocute",
+      "override": "электрошок"
+    },
+    "irons_spellbooks:lightning_bolt": {
+      "default": "lightning bolt",
+      "override": "удар молнии"
+    },
+    "irons_spellbooks:lightning_lance": {
+      "default": "lightning lance",
+      "override": "копьё молнии"
+    },
+    "irons_spellbooks:shockwave": {
+      "default": "shockwave",
+      "override": "шоковая волна"
+    },
+    "irons_spellbooks:thunderstorm": {
+      "default": "thunderstorm",
+      "override": "гроза"
+    },
+    "irons_spellbooks:ball_lightning": {
+      "default": "ball lightning",
+      "override": "шаровая молния"
+    },
+    "irons_spellbooks:volt_strike": {
+      "default": "volt strike",
+      "override": "электрический рывок"
+    },
+    "irons_spellbooks:acid_orb": {
+      "default": "acid orb",
+      "override": "кислотный плевок"
+    },
+    "irons_spellbooks:blight": {
+      "default": "blight",
+      "override": "порча"
+    },
+    "irons_spellbooks:poison_arrow": {
+      "default": "poison arrow",
+      "override": "отравленная стрела"
+    },
+    "irons_spellbooks:poison_breath": {
+      "default": "poison breath",
+      "override": "ядовитое дыхание"
+    },
+    "irons_spellbooks:poison_splash": {
+      "default": "poison splash",
+      "override": "всплеск яда"
+    },
+    "irons_spellbooks:root": {
+      "default": "root",
+      "override": "оплетение"
+    },
+    "irons_spellbooks:spider_aspect": {
+      "default": "spider aspect",
+      "override": "паучий нрав"
+    },
+    "irons_spellbooks:firefly_swarm": {
+      "default": "firefly swarm",
+      "override": "рой светлячков"
+    },
+    "irons_spellbooks:oakskin": {
+      "default": "oakskin",
+      "override": "дубовая кожа"
+    },
+    "irons_spellbooks:earthquake": {
+      "default": "earthquake",
+      "override": "землетрясение"
+    },
+    "irons_spellbooks:stomp": {
+      "default": "stomp",
+      "override": "дрожь"
+    },
+    "irons_spellbooks:gluttony": {
+      "default": "gluttony",
+      "override": "чревоугодие"
+    },
+    "irons_spellbooks:touch_dig": {
+      "default": "touch dig",
+      "override": "маг добыча"
+    },
+    "irons_spellbooks:abyssal_shroud": {
+      "default": "abyssal shroud",
+      "override": "покров бездны"
+    },
+    "irons_spellbooks:sculk_tentacles": {
+      "default": "sculk tentacles",
+      "override": "щупальца скалка"
+    },
+    "irons_spellbooks:sonic_boom": {
+      "default": "sonic boom",
+      "override": "звуковой выстрел"
+    },
+    "irons_spellbooks:planar_sight": {
+      "default": "planar sight",
+      "override": "сквозное зрение"
+    },
+    "irons_spellbooks:telekinesis": {
+      "default": "telekinesis",
+      "override": "телекинез"
+    },
+    "irons_spellbooks:eldritch_blast": {
+      "default": "eldritch blast",
+      "override": "потусторонний выстрел"
+    },
+    "irons_spellbooks:pocket_dimension": {
+      "default": "pocket dimension",
+      "override": "подпространство"
+    },
+    "elemental_synergies:soulflame_bolt": {
+      "default": "soulflame bolt",
+      "override": ""
+    },
+    "elemental_synergies:brimstone_hellblast": {
+      "default": "brimstone hellblast",
+      "override": ""
+    },
+    "elemental_synergies:brimflame_bolt": {
+      "default": "brimflame bolt",
+      "override": ""
+    },
+    "elemental_synergies:holy_blast": {
+      "default": "holy blast",
+      "override": ""
+    },
+    "elemental_synergies:spears_of_acropolis": {
+      "default": "spears of acropolis",
+      "override": ""
+    },
+    "elemental_synergies:tidal_wave": {
+      "default": "tidal wave",
+      "override": ""
+    }
+  },
+  "_seeded": "irons_spellbooks entries auto-filled from the mod's own ru_ru.json; addon spells left blank for a human"
+}
