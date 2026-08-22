@@ -91,6 +91,22 @@ beside it.
   aware).
 - **Voice commands** — say `no` to clear spells waiting in the cast queue, or `yes` to accept a
   "did you mean…?" alias suggestion (enable *handsFreeConfirm* first).
+- **Reward speaking** *(server, off by default)* — voice casts can come back faster, hit harder,
+  or both: `voiceCooldownPercent` scales the cooldown, `voiceLevelBonus` adds spell levels, and the
+  extra levels are charged at the spell's ordinary mana cost rather than the higher one. Set them
+  per player if you want, with `playerAdvantages`:
+
+  ```toml
+  playerAdvantages = [
+      "Steve=cooldown:50,level:2",   # Steve casts faster and harder
+      "!Alex",                       # Alex plays by ordinary Iron's Spells rules
+  ]
+  ```
+
+  Out of the box nothing is changed — the defaults are plain Iron's Spells.
+- **Incantation-only mode** *(server, off by default)* — require spells to be spoken. `FIRST_CAST`
+  makes a player voice-cast a spell once before they can click it, so learning the incantation
+  unlocks it; `ALWAYS` means spells can only ever be spoken.
 - **Server-side controls** — per-player whitelist, blocklist, rate limit, broadcast-nearby, cast
   logging.
 
