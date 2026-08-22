@@ -200,8 +200,14 @@ publishMods {
 
     val cfId = providers.gradleProperty("publish.curseforge.id").orNull
     val mrId = providers.gradleProperty("publish.modrinth.id").orNull
-    val cfToken = providers.environmentVariable("CURSEFORGE_TOKEN").orNull
-    val mrToken = providers.environmentVariable("MODRINTH_TOKEN").orNull
+    // Token from ~/.gradle/gradle.properties first, environment second. The home file is the
+    // standard place for a credential that must never enter a repository, and unlike an
+    // environment variable it is visible to any shell that runs the build rather than only to the
+    // one it was exported in.
+    val cfToken = providers.gradleProperty("curseforgeToken").orNull
+        ?: providers.environmentVariable("CURSEFORGE_TOKEN").orNull
+    val mrToken = providers.gradleProperty("modrinthToken").orNull
+        ?: providers.environmentVariable("MODRINTH_TOKEN").orNull
 
     if (!cfId.isNullOrBlank() && !cfToken.isNullOrBlank()) {
         curseforge {
