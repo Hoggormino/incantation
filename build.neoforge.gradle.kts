@@ -1,5 +1,6 @@
 plugins {
     id("java-library")
+    id("me.modmuss50.mod-publish-plugin") version "0.8.4"
     id("net.neoforged.moddev")
 }
 
@@ -165,3 +166,50 @@ tasks.withType<JavaCompile>().configureEach {
 
 java { withSourcesJar() }
 
+// ---------------------------------------------------------------------------------------------
+// Publishing.
+//
+// Exists so a release is one command rather than a hand-driven web form. The form is where this
+// project has been bitten before: CurseForge inherits a file's game version and loader from the
+// LAST file you uploaded rather than from the jar, so a 1.20.1 build can go out tagged 1.21.1 and
+// nobody notices until it crashes. Declaring them here means they come from the build that
+// produced the jar and cannot drift.
+//
+// Needs three things before it will run, none of which live in the repository:
+//   * publish.curseforge.id / publish.modrinth.id in gradle.properties (project ids, not slugs)
+//   * CURSEFORGE_TOKEN / MODRINTH_TOKEN in the environment
+// Without them the tasks are skipped rather than failing, so an ordinary build is unaffected.
+publishMods {
+    file = tasks.named<Jar>("jar").flatMap { it.archiveFile }
+    displayName = "Incantation ${property("mod.version")} for NeoForge 1.21.1"
+    version = project.version.toString()
+    type = STABLE
+    changelog = rootProject.file("CHANGELOG_${property("mod.version")}.md")
+        .takeIf { it.exists() }?.readText() ?: "See the repository for changes."
+
+    val cfId = providers.gradleProperty("publish.curseforge.id").orNull
+    val mrId = providers.gradleProperty("publish.modrinth.id").orNull
+    val cfToken = providers.environmentVariable("CURSEFORGE_TOKEN").orNull
+    val mrToken = providers.environmentVariable("MODRINTH_TOKEN").orNull
+
+    if (!cfId.isNullOrBlank() && !cfToken.isNullOrBlank()) {
+        curseforge {
+            projectId = cfId
+            accessToken = cfToken
+            minecraftVersions.add("1.21.1")
+            modLoaders.add("neoforge")
+            requires("irons-spells-n-spellbooks")
+            optional("curios")
+        }
+    }
+    if (!mrId.isNullOrBlank() && !mrToken.isNullOrBlank()) {
+        modrinth {
+            projectId = mrId
+            accessToken = mrToken
+            minecraftVersions.add("1.21.1")
+            modLoaders.add("neoforge")
+            requires("irons-spells-n-spellbooks")
+            optional("curios")
+        }
+    }
+}
