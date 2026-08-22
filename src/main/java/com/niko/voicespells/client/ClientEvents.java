@@ -277,6 +277,7 @@ public final class ClientEvents {
         VoiceController.tryDrainCastQueue();
         VoiceController.sampleWaveformIfDue();
         VoiceController.tickAfkPosition(mc.player);
+        VoiceController.tickCombat(mc.player);
         VoiceController.refreshOwnedSpellsIfDue();
 
         // First-run wizard: pop once in-world, after the Vosk model has finished loading and
@@ -947,12 +948,20 @@ public final class ClientEvents {
                 int colon = spellId.indexOf(':');
                 name = (colon >= 0 ? spellId.substring(colon + 1) : spellId).replace('_', ' ');
             }
-            // "○" rather than a clock glyph. Minecraft falls back to unifont for anything
-            // outside its own sheet, and a unifont glyph sitting in a line of default-font text
-            // is visibly wider and heavier. This one is already used on the Codex, so it is
-            // known to render in the same weight as the letters beside it.
-            String text = "○ " + (VoiceSpellsConfig.cStreamerMode ? obscure(name) : name);
-            int chipW = PAD_X + font.width(text) + PAD_X;
+            // No marker glyph. "○" rendered as a bare lowercase "o" in-game - Minecraft's own
+            // sheet does not carry it at the weight the surrounding letters use - so it read as
+            // a typo in front of the spell name and cost 9px for the privilege. The chip's slot
+            // in the HUD column and its filling bar already say what it is.
+            String body = VoiceSpellsConfig.cStreamerMode ? obscure(name) : name;
+            // Readiness, not remaining: this number and the bar under it climb together toward
+            // the spell coming back. Floored, not rounded, so it can never read 100% while the
+            // chip is still on screen - the chip disappears the moment the cooldown clears, and
+            // a 99.6% that printed as "100%" looked like it was stuck.
+            String pct = (int) Math.floor((1f - percent) * 100f) + "%";
+            final int GAP = 5;
+            int bodyW = font.width(body);
+            int pctW  = font.width(pct);
+            int chipW = PAD_X + bodyW + GAP + pctW + PAD_X;
             int x = alignX(anchorX, chipW);
             drawChip(g, x, anchorY, chipW, CHIP_H, 0.75f);
 
@@ -972,8 +981,15 @@ public final class ClientEvents {
                 g.fill(x + 1, anchorY + CHIP_H - 2, x + 1 + fillW, anchorY + CHIP_H - 1,
                     withAlpha(Theme.C_HL, 0.85f));
             }
-            g.drawString(font, Component.literal(text), x + PAD_X,
-                anchorY + (CHIP_H - 8) / 2, withAlpha(VoiceSpellsConfig.cTextToast, 0.9f), true);
+            // Name left, number right, the way every label/value row in this mod is set. The
+            // number is dimmer than the name because the name is what you are looking for and
+            // the number is the detail - and because the bar behind it already carries the same
+            // information for anyone who is only glancing.
+            int textY = anchorY + (CHIP_H - 8) / 2;
+            g.drawString(font, Component.literal(body), x + PAD_X, textY,
+                withAlpha(VoiceSpellsConfig.cTextToast, 0.95f), true);
+            g.drawString(font, Component.literal(pct), x + chipW - PAD_X - pctW, textY,
+                withAlpha(VoiceSpellsConfig.cTextToast, 0.6f), true);
             return true;
         }
 

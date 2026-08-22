@@ -214,21 +214,55 @@ public final class VoiceController {
 
     /** Was the player recently in combat? Uses vanilla's {@code getLastHurtByMobTimestamp},
      *  set whenever a mob last hurt the player (~10s window). */
+    /** Nanotime the player was last credibly in a fight. Stamped from the client tick, because
+     *  the only field vanilla exposes for this is written on the server and never reaches us. */
+    private static volatile long lastCombatNanos = 0L;
+
+    /**
+     * Sample combat state once per client tick.
+     *
+     * <p>{@code getLastHurtByMobTimestamp()} cannot work here. {@code LocalPlayer.hurt} returns
+     * false without calling super, and {@code LivingEntity.hurt} bails on {@code isClientSide}
+     * above the line that stamps the field - so on the client it reads 0 forever. That is why
+     * combatOnly did not merely fail to filter but blocked EVERY cast, silently, even while a
+     * zombie was hitting the player. Correcting the tick units it was compared against fixed a
+     * real bug and changed nothing, because the value itself was never written.
+     *
+     * <p>{@code hurtTime} IS client-side: the server sends a hurt animation and
+     * {@code LivingEntity.handleEntityEvent} sets it to 10. It decays each tick, so it has to be
+     * sampled rather than read at cast time.
+     */
+    public static void tickCombat(net.minecraft.world.entity.player.Player player) {
+        if (player == null) return;
+        if (player.hurtTime > 0) lastCombatNanos = System.nanoTime();
+    }
+
+    /** ~10 seconds, matching what the config has always claimed. */
+    private static final long COMBAT_WINDOW_NANOS = 10L * 1_000_000_000L;
+
     private static boolean isInCombat() {
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         if (mc.player == null || mc.player.level() == null) return false;
-        // Both sides must be the ENTITY's tick count.
-        //
-        // getLastHurtByMobTimestamp() returns an int that vanilla assigns from the entity's own
-        // tickCount, and this compared it against level().getGameTime() - the WORLD's age, which
-        // is millions of ticks in any save that has been played. The difference was therefore
-        // always far greater than 200, isInCombat() always returned false, and combatOnly did not
-        // merely fail to filter: it blocked EVERY cast, silently, for as long as it was on. It
-        // was toml-only until this release, which is presumably why nobody hit it; it is a
-        // one-click toggle on the Behaviour tab now.
-        int nowTicks = mc.player.tickCount;
-        int lastHurtTick = mc.player.getLastHurtByMobTimestamp();
-        return lastHurtTick > 0 && (nowTicks - lastHurtTick) < 200; // hurt within ~10s
+        // Taking damage counts for ten seconds after the fact.
+        if (lastCombatNanos != 0L
+                && System.nanoTime() - lastCombatNanos < COMBAT_WINDOW_NANOS) return true;
+        // So does a hostile actually being here. Damage alone is not enough: a player who opens
+        // with a spell has not been hit yet, which is precisely the case reported - "it blocks
+        // all spellcasting even when fighting a zombie". Evaluated only when a phrase is
+        // recognised, not per tick, so the entity query costs nothing while nobody is speaking.
+        try {
+            java.util.List<net.minecraft.world.entity.monster.Monster> near =
+                mc.player.level().getEntitiesOfClass(
+                    net.minecraft.world.entity.monster.Monster.class,
+                    mc.player.getBoundingBox().inflate(12.0D));
+            for (net.minecraft.world.entity.monster.Monster m : near) {
+                if (m.isAlive()) return true;
+            }
+        } catch (Throwable ignored) {
+            // A gate that throws must not become a second way to block every cast.
+            return true;
+        }
+        return false;
     }
 
     /** Rolling history of recent audio levels for the debug-monitor waveform. Sampled at ~20Hz
@@ -1762,6 +1796,19 @@ public final class VoiceController {
         }
     }
 
+    /**
+     * Surface a gate rejection on the HUD.
+     *
+     * <p>Recognition worked, the spell was found, and something then refused to cast it. That is
+     * a different event from "I did not understand you", and it is the one a player is most
+     * likely to misread as the mod being broken - so it says which gate, rather than nothing.
+     */
+    private static void noteGateRejection(String reason) {
+        if (!VoiceSpellsConfig.cShowMisses) return;
+        lastMissText  = "blocked: " + reason;
+        lastMissNanos = System.nanoTime();
+    }
+
     private static void notifyModelMissing(Path modelPath) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> {
@@ -2027,9 +2074,13 @@ public final class VoiceController {
             recordEvent(phrase, spellKey + " (no sneak)", confidence);
             return;
         }
-        // Combat-only gate — only cast when recently hurt or recently dealt damage.
+        // Combat-only gate — only cast while a fight is actually happening.
         if (VoiceSpellsConfig.cCombatOnly && !isInCombat()) {
             recordEvent(phrase, spellKey + " (out of combat)", confidence);
+            // Say so on the HUD. Every gate on this path used to reject in total silence, into a
+            // ring buffer four debug screens read - so a blocked cast was indistinguishable from
+            // a dead microphone, which is exactly how this bug was experienced.
+            noteGateRejection("out of combat");
             return;
         }
         // AFK gate — pause recognition for stationary players (also saves a tick of CPU
