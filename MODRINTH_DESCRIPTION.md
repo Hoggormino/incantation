@@ -73,11 +73,20 @@ beside it.
   Useful for tuning aliases or learning a tricky spell's pronunciation.
 - **Welcome wizard** on first launch — walks you through mic + model + first cast.
 - **Aliases & custom phrases** — bind words the model can pronounce to any spell id.
-- **Play in your own language** — Spanish, Russian, French and German models are one config line
+- **Play in your own language** — Spanish, Russian and French speech models are one config line
   away (`modelId`), and `config/voicespells/phrasebook.json` is generated with every installed
   spell and an editable `override` field, so you can translate the whole spell list in one file
   instead of adding aliases one at a time. Your overrides survive updates, and newly installed
   spells are appended automatically.
+
+  **The model is only half of it.** The recogniser only listens for words its model knows, so the
+  spell phrases have to be translated too — a Russian model against English spell names hears
+  nothing at all. A Spanish phrasebook contributed by the community, and a Russian one part-filled
+  from Iron's Spells' own translation, are both in the repository's `contrib/` folder.
+
+  **German does not work yet**, and not for want of a model: Iron's Spells ships no German
+  translation, so there are no German spell names to start from. It needs a hand-written phrase
+  pack. If you speak German and fancy writing one, please get in touch.
 - **Loadout shortcuts** — say one word, cast the first castable spell from a list (cooldown + mana
   aware).
 - **Voice commands** — say `no` to clear spells waiting in the cast queue, or `yes` to accept a
