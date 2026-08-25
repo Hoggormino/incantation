@@ -111,7 +111,8 @@ public final class DiagnosticsScreen extends Screen {
     private void copyReport() {
         if (minecraft == null) return;
         StringBuilder sb = new StringBuilder();
-        sb.append("Incantation diagnostics — ").append(Diagnostics.shortSummary(results)).append('\n');
+        sb.append(Component.translatable("voicespells.diagnostics.report_header",
+            Diagnostics.shortSummary(results)).getString()).append('\n');
         for (Diagnostics.Result r : results) {
             sb.append('[').append(r.status()).append("] ")
                 .append(r.name()).append(" — ").append(r.detail()).append('\n');

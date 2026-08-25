@@ -399,13 +399,17 @@ public final class VoiceStats {
             .toLocalDate().toString();
     }
 
+    private static String tr(String key, Object... args) {
+        return net.minecraft.network.chat.Component.translatable(key, args).getString();
+    }
+
     public static String fmtElapsed(long sinceMs) {
         if (sinceMs <= 0) return "—";
         long secs = (System.currentTimeMillis() - sinceMs) / 1000;
-        if (secs < 60)    return secs + "s ago";
-        if (secs < 3600)  return (secs / 60) + "m ago";
-        if (secs < 86400) return (secs / 3600) + "h ago";
-        return (secs / 86400) + "d ago";
+        if (secs < 60)    return tr("voicespells.elapsed.seconds", secs);
+        if (secs < 3600)  return tr("voicespells.elapsed.minutes", secs / 60);
+        if (secs < 86400) return tr("voicespells.elapsed.hours", secs / 3600);
+        return tr("voicespells.elapsed.days", secs / 86400);
     }
 
     /** Read-only snapshot for the codex screen. */

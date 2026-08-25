@@ -213,7 +213,8 @@ public final class ConfigMoreScreen extends Screen {
         String suggestion = spellOfTheDay();
         if (!suggestion.isEmpty()) {
             StringWidget sotd = new StringWidget(px, footerY - 24, panelW, 9,
-                Component.literal(Theme.fit(font, "Today's spell: " + suggestion, panelW)), font);
+                Component.literal(Theme.fit(font, Component.translatable(
+                    "voicespells.more.todays_spell", suggestion).getString(), panelW)), font);
             sotd.alignLeft();
             // C_MUTED, not C_FAINT. This line names a spell and tracks progress toward it, so it
             // is content; the faintest tier is for things whose absence would not be noticed.
@@ -403,7 +404,7 @@ public final class ConfigMoreScreen extends Screen {
         String name = (dn == null || dn.isEmpty()) ? id : dn;
         int casts = VoiceStats.spellOfTheDayCasts();
         if (casts >= VoiceStats.SOTD_TARGET) {
-            return name + "  (✓ challenge complete)";
+            return name + "  " + Component.translatable("voicespells.more.challenge_done").getString();
         }
         return name + "  (" + casts + "/" + VoiceStats.SOTD_TARGET + ")";
     }
@@ -444,11 +445,11 @@ public final class ConfigMoreScreen extends Screen {
         if (calibBtn != null) {
             if (calibratingNow) {
                 long remainingS = (VoiceController.calibRemainingNanos() + 999_999_999L) / 1_000_000_000L;
-                calibBtn.setMessage(Component.literal("Listening… " + remainingS + "s"));
+                calibBtn.setMessage(Component.translatable("voicespells.more.listening", remainingS));
             } else if (VoiceController.lastCalibThreshold() > 0
                     && System.currentTimeMillis() < calibResultUntil) {
-                calibBtn.setMessage(Component.literal(
-                    "Gate set: " + Math.round(VoiceController.lastCalibThreshold())));
+                calibBtn.setMessage(Component.translatable("voicespells.more.gate_set",
+                    Math.round(VoiceController.lastCalibThreshold())));
             } else {
                 // Must fit the half-width grid button; the old full-width label spilled out.
                 calibBtn.setMessage(Component.translatable("voicespells.more.calibrate_mic"));

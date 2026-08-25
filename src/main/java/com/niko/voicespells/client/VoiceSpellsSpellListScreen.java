@@ -424,8 +424,10 @@ public final class VoiceSpellsSpellListScreen extends Screen {
             int castCount = VoiceStats.castCount(spellId);
             if (castCount > 0) {
                 long lastMs = VoiceStats.lastCastMsFor(spellId);
-                String when = lastMs > 0 ? "  · last " + VoiceStats.fmtElapsed(lastMs) : "";
-                body.add("Cast " + castCount + "× via voice" + when);
+                String when = lastMs > 0 ? Component.translatable("voicespells.spelllist.last_cast",
+                    VoiceStats.fmtElapsed(lastMs)).getString() : "";
+                body.add(Component.translatable("voicespells.spelllist.cast_count",
+                    castCount).getString() + when);
             }
 
             // The phrases column is already shown inline on the row, but spelling out

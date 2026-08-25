@@ -227,7 +227,8 @@ public final class VoiceCodexScreen extends Screen {
         // still says what to do about it rather than showing a bare dash.
         line(g, x, y, "voicespells.codex.speak_to_cast",
             avgMs < 0 ? Component.translatable("voicespells.codex.latency_pending").getString()
-                      : String.format(Locale.ROOT, "%.0fms this session", avgMs)); y += rowH;
+                      : Component.translatable("voicespells.codex.latency_value",
+                          String.format(Locale.ROOT, "%.0f", avgMs)).getString()); y += rowH;
         int streak = VoiceStats.sotdStreak();
         // This counts consecutive days of completing the SPELL-OF-THE-DAY challenge, not days
         // the mod was used — "Daily streak" invited the second reading and then showed "—" to a

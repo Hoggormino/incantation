@@ -215,7 +215,7 @@ public final class TestArenaScreen extends Screen {
                 if (e.matched() == null) {
                     outcome = Component.translatable("voicespells.arena.no_match").getString();
                     color = Theme.F_NOMATCH;
-                } else if (e.matched().contains("low conf")) {
+                } else if (VoiceController.TAG_LOW_CONF.equals(e.tag())) {
                     outcome = Component.translatable("voicespells.arena.rejected").getString()
                         + e.matched();
                     color = Theme.F_DEDUP;

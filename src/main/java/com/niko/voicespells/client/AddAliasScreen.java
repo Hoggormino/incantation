@@ -167,7 +167,7 @@ public final class AddAliasScreen extends Screen {
                 int moreY = Math.min(y, py + panelH - 30 - 9);
                 StringWidget moreLabel = new StringWidget(px + Theme.PAD, moreY,
                     panelW - Theme.PAD * 2, 9,
-                    Component.literal("...and " + (aliasRows.size() - shown) + " more (edit toml)"),
+                    Component.translatable("voicespells.alias.more_rows", aliasRows.size() - shown),
                     font);
                 moreLabel.alignLeft();
                 moreLabel.setColor(Theme.C_MUTED);

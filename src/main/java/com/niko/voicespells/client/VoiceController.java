@@ -372,7 +372,12 @@ public final class VoiceController {
      *  average word confidence for final results (1.0 for partials). {@code tier} is the
      *  single-letter match-tier ({@code E/F/S/P/L}, space for n/a). */
     public record RecognitionEvent(long nanoTime, String heard, String matched,
-                                    double confidence, char tier) {}
+                                    double confidence, char tier, String tag) {}
+
+    /** Machine tag for a rejection, independent of the displayed reason. The screens used to
+     *  test the reason text itself, which stopped working the moment the reason was
+     *  translated. Null when the event needs no tag. */
+    public static final String TAG_LOW_CONF = "low_conf";
 
     /** One entry per successfully dispatched cast, for the rolling HUD history strip. */
     public record HistoryEntry(String display, long nanoTime) {}
@@ -571,13 +576,23 @@ public final class VoiceController {
         synchronized (RECENT) { return new ArrayList<>(RECENT); }
     }
 
+    /** Localise at the point a string is built, for values that are stored rather than drawn. */
+    private static String tr(String key, Object... args) {
+        return Component.translatable(key, args).getString();
+    }
+
     private static void recordEvent(String heard, String matched, double confidence) {
         recordEvent(heard, matched, confidence, ' ');
     }
 
     private static void recordEvent(String heard, String matched, double confidence, char tier) {
+        recordEvent(heard, matched, confidence, tier, null);
+    }
+
+    private static void recordEvent(String heard, String matched, double confidence, char tier,
+                                    String tag) {
         synchronized (RECENT) {
-            RECENT.addFirst(new RecognitionEvent(System.nanoTime(), heard, matched, confidence, tier));
+            RECENT.addFirst(new RecognitionEvent(System.nanoTime(), heard, matched, confidence, tier, tag));
             while (RECENT.size() > MAX_EVENTS) RECENT.removeLast();
         }
     }
@@ -1916,7 +1931,7 @@ public final class VoiceController {
                     cleared = CAST_QUEUE.size();
                     CAST_QUEUE.clear();
                 }
-                recordEvent(phrase, "queue cleared (" + cleared + ")", confidence, ' ');
+                recordEvent(phrase, tr("voicespells.monitor.queue_cleared", cleared), confidence, ' ');
                 return;
             }
             if ("yes".equals(trimmed)) {
@@ -1933,12 +1948,12 @@ public final class VoiceController {
                     Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(
                         new AddAliasScreen(null, sug.candidateSpellId().toString(),
                             sug.heardPhrase())));
-                    recordEvent(phrase, "alias prompt accepted", confidence, ' ');
+                    recordEvent(phrase, tr("voicespells.monitor.alias_accepted"), confidence, ' ');
                     return;
                 }
                 int n;
                 synchronized (CAST_QUEUE) { n = CAST_QUEUE.size(); }
-                recordEvent(phrase, "queue ack (" + n + ")", confidence, ' ');
+                recordEvent(phrase, tr("voicespells.monitor.queue_ack", n), confidence, ' ');
                 return;
             }
         }
@@ -1991,8 +2006,9 @@ public final class VoiceController {
         // the global setting.
         if (isFinal && confidence < VoiceSpellsConfig.cMinConfidence
                 && VoiceSpellsConfig.cPerSpellConfidence.isEmpty()) {
-            recordEvent(phrase, String.format(java.util.Locale.ROOT,
-                "low conf %.2f", confidence), confidence);
+            recordEvent(phrase, Component.translatable("voicespells.monitor.low_conf_simple",
+                String.format(java.util.Locale.ROOT, "%.2f", confidence)).getString(),
+                confidence, ' ', TAG_LOW_CONF);
             logRecog("Heard '{}' rejected (conf {} < {})",
                 phrase, String.format(java.util.Locale.ROOT, "%.2f", confidence),
                 VoiceSpellsConfig.cMinConfidence);
@@ -2012,7 +2028,7 @@ public final class VoiceController {
         if (loadoutSpells != null && !loadoutSpells.isEmpty()) {
             ResourceLocation chosen = pickCastableFromLoadout(loadoutSpells);
             if (chosen == null) {
-                recordEvent(phrase, "loadout: none castable", confidence, 'L');
+                recordEvent(phrase, tr("voicespells.monitor.loadout_none"), confidence, 'L');
                 logRecog("Loadout '{}' matched but no spell is castable", phrase);
                 return;
             }
@@ -2095,7 +2111,7 @@ public final class VoiceController {
         if (VoiceSpellsConfig.cRestrictToOwned && ownedScanReliable) {
             java.util.Set<String> owned = ownedSpellIds;
             if (!owned.contains(spellKey)) {
-                recordEvent(phrase, spellKey + " (not equipped)", confidence, matchTier);
+                recordEvent(phrase, spellKey + " " + tr("voicespells.monitor.not_equipped"), confidence, matchTier);
                 logRecog("Heard '{}' but {} is not equipped", phrase, spellId);
                 return;
             }
@@ -2110,7 +2126,7 @@ public final class VoiceController {
                 recordEvent(phrase, Component.translatable("voicespells.monitor.low_conf",
                     String.format(java.util.Locale.ROOT, "%.2f", confidence),
                     String.format(java.util.Locale.ROOT, "%.2f", threshold)).getString(),
-                    confidence, matchTier);
+                    confidence, matchTier, TAG_LOW_CONF);
                 logRecog("Heard '{}' rejected for {} (conf {} < {})",
                     phrase, spellId,
                     String.format(java.util.Locale.ROOT, "%.2f", confidence), threshold);
@@ -2122,18 +2138,18 @@ public final class VoiceController {
         // monitor stays useful while you're tuning in the config screen.
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         if (mc.screen != null) {
-            recordEvent(phrase, spellKey + " (menu)", confidence);
+            recordEvent(phrase, spellKey + " " + tr("voicespells.monitor.menu"), confidence);
             return;
         }
         // Optional sneak gate so casual talking doesn't fire spells.
         if (VoiceSpellsConfig.cRequireSneak
                 && (mc.player == null || !mc.player.isShiftKeyDown())) {
-            recordEvent(phrase, spellKey + " (no sneak)", confidence);
+            recordEvent(phrase, spellKey + " " + tr("voicespells.monitor.no_sneak"), confidence);
             return;
         }
         // Combat-only gate — only cast while a fight is actually happening.
         if (VoiceSpellsConfig.cCombatOnly && !isInCombat()) {
-            recordEvent(phrase, spellKey + " (out of combat)", confidence);
+            recordEvent(phrase, spellKey + " " + tr("voicespells.monitor.out_of_combat"), confidence);
             // Say so on the HUD. Every gate on this path used to reject in total silence, into a
             // ring buffer four debug screens read - so a blocked cast was indistinguishable from
             // a dead microphone, which is exactly how this bug was experienced.
@@ -2143,7 +2159,7 @@ public final class VoiceController {
         // AFK gate — pause recognition for stationary players (also saves a tick of CPU
         // every time we'd otherwise traverse the cast pipeline).
         if (VoiceSpellsConfig.cPauseWhenAfk && isAfk()) {
-            recordEvent(phrase, spellKey + " (afk)", confidence);
+            recordEvent(phrase, spellKey + " " + tr("voicespells.monitor.afk"), confidence);
             return;
         }
         // Sliding-window dedup. Vosk emits one utterance as partial(s) → getResult → the
@@ -2201,7 +2217,7 @@ public final class VoiceController {
                 // that leaked the block past the end of the cast: every suppressed tail event
                 // re-armed the dedup window, so a spell with a long channel time could stay
                 // un-recastable well after it finished.
-                recordEvent(phrase, spellKey + " (already in flight)", confidence, matchTier);
+                recordEvent(phrase, spellKey + " " + tr("voicespells.monitor.in_flight"), confidence, matchTier);
                 logRecog("Heard '{}' but {} is already casting/queued — dropped",
                     phrase, spellId);
                 return;
@@ -2221,14 +2237,14 @@ public final class VoiceController {
             lastDispatchedFirstNanos = now;   // anchor echo lockout to this queue insert
             lastDispatchedUtterance  = utteranceId;
             lastHeard       = clampHeard(phrase);
-            recordEvent(phrase, spellKey + " (queued)", confidence, matchTier);
+            recordEvent(phrase, spellKey + " " + tr("voicespells.monitor.queued"), confidence, matchTier);
             logRecog("Heard '{}' while casting -> queued {}", phrase, spellId);
             return;
         }
         // Client-side preflight: skip impossible casts (no mana / on cooldown) so we don't
         // round-trip the server. Server-side preflight is still the authoritative gate.
         if (!clientCanCast(spellId)) {
-            recordEvent(phrase, spellKey + " (cant cast)", confidence, matchTier);
+            recordEvent(phrase, spellKey + " " + tr("voicespells.monitor.cant_cast"), confidence, matchTier);
             logRecog("Heard '{}' but client preflight failed for {}", phrase, spellId);
             return;
         }

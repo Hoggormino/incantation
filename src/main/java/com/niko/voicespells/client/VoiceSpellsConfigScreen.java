@@ -371,6 +371,11 @@ public final class VoiceSpellsConfigScreen extends Screen {
         return Component.translatable(key).getString();
     }
 
+    /** Same, for the slider labels, which are built per value and so carry an argument. */
+    private static String tr(String key, Object... args) {
+        return Component.translatable(key, args).getString();
+    }
+
     private void buildRecognitionTab(int gridX, int colW, int y) {
         int i = 0;
         help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.owned_only"),
@@ -393,7 +398,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // slider stopped at 3000, so opening the screen and pressing Done rewrote a 4000ms
         // gap the player had set by hand down to 3000, silently.
         help(slot(new NeonSlider(0, 0, colW, 20, workDedup, 0, Math.max(3000, workDedup),
-                v -> "Repeat gap: " + v + " ms", v -> workDedup = v), i++, gridX, colW, y),
+                v -> tr("voicespells.config.slider_repeat_gap", v), v -> workDedup = v), i++, gridX, colW, y),
             "voicespells.config.dedup_tip");
 
         help(slot(NeonCycle.named(0, 0, colW, 20, tr("voicespells.config.listen"),
@@ -403,11 +408,11 @@ public final class VoiceSpellsConfigScreen extends Screen {
             "voicespells.config.listen_tip");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workMinConfPct, 0, 100,
-                v -> "Confidence: " + v + "%", v -> workMinConfPct = v), i++, gridX, colW, y),
+                v -> tr("voicespells.config.slider_confidence", v), v -> workMinConfPct = v), i++, gridX, colW, y),
             "voicespells.config.confidence_tip");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workEchoLockout, 0, 10000,
-                v -> "Echo guard: " + v + " ms", v -> workEchoLockout = v), i++, gridX, colW, y),
+                v -> tr("voicespells.config.slider_echo_guard", v), v -> workEchoLockout = v), i++, gridX, colW, y),
             "voicespells.config.echo_guard_tip");
     }
 
@@ -442,15 +447,15 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // the kind of fix that is worse than the bug.
         int offsetMax = Math.max(200, Math.max(workOffsetX, workOffsetY));
         help(slot(new NeonSlider(0, 0, colW, 20, workOffsetX, 0, offsetMax,
-                v -> "Offset X: " + v, v -> workOffsetX = v), i++, gridX, colW, y),
+                v -> tr("voicespells.config.slider_offset_x", v), v -> workOffsetX = v), i++, gridX, colW, y),
             "voicespells.config.offset_x_tip");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workOffsetY, 0, offsetMax,
-                v -> "Offset Y: " + v, v -> workOffsetY = v), i++, gridX, colW, y),
+                v -> tr("voicespells.config.slider_offset_y", v), v -> workOffsetY = v), i++, gridX, colW, y),
             "voicespells.config.offset_y_tip");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workOpacityPct, 0, 100,
-                v -> "Opacity: " + v + "%", v -> workOpacityPct = v), i++, gridX, colW, y),
+                v -> tr("voicespells.config.slider_opacity", v), v -> workOpacityPct = v), i++, gridX, colW, y),
             "voicespells.config.opacity_tip");
 
         help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.show_misses"),
@@ -480,7 +485,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         int chipMin = Math.min(-120, workCooldownChipY);
         int chipMax = Math.max(120, workCooldownChipY);
         help(slot(new NeonSlider(0, 0, colW, 20, workCooldownChipY, chipMin, chipMax,
-                v -> "Chip Y: " + v, v -> workCooldownChipY = v), i++, gridX, colW, y),
+                v -> tr("voicespells.config.slider_chip_y", v), v -> workCooldownChipY = v), i++, gridX, colW, y),
             "voicespells.config.chip_y_tip");
     }
 
@@ -497,7 +502,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
         // The toml ceiling is 3600. A slider that reached it would move in 24-second steps,
         // so it stops at 10 minutes and stretches for anyone who set more than that.
         help(slot(new NeonSlider(0, 0, colW, 20, workAfkSeconds, 5, Math.max(600, workAfkSeconds),
-                v -> "AFK after: " + v + " s", v -> workAfkSeconds = v), i++, gridX, colW, y),
+                v -> tr("voicespells.config.slider_afk", v), v -> workAfkSeconds = v), i++, gridX, colW, y),
             "voicespells.config.afk_seconds_tip");
 
         help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.pause_unfocused"),
@@ -509,7 +514,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             "voicespells.config.hands_free_tip");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workCastQueue, 1, 5,
-                v -> "Queue: " + v, v -> workCastQueue = v), i++, gridX, colW, y),
+                v -> tr("voicespells.config.slider_queue", v), v -> workCastQueue = v), i++, gridX, colW, y),
             "voicespells.config.queue_tip");
 
 

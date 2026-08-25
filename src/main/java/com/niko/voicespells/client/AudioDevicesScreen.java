@@ -483,7 +483,8 @@ public final class AudioDevicesScreen extends Screen {
             note = Component.translatable("voicespells.devices.no_signal").getString();
             noteColor = Theme.C_DANGER;
         } else if (level > 0.02f) {
-            note = String.format(Locale.ROOT, "hearing you (%.0f%%)", level * 100f);
+            note = Component.translatable("voicespells.devices.hearing_you",
+                String.format(Locale.ROOT, "%.0f", level * 100f)).getString();
             noteColor = Theme.C_SUCCESS;
         } else {
             note = Component.translatable("voicespells.devices.say_something").getString();
