@@ -306,8 +306,9 @@ public final class ConfigMoreScreen extends Screen {
         }
         String[] lines = raw.split("\\r?\\n");
         if (lines.length == 0 || !lines[0].trim().equals(PROFILE_HEADER)) {
-            flashStatus(Theme.fit(font, "Not a VoiceSpells profile (need '"
-            + PROFILE_HEADER + "' header)", panelW), Theme.C_DANGER);
+            flashStatus(Theme.fit(font, Component.translatable(
+                "voicespells.config.profile_bad_header", PROFILE_HEADER).getString(),
+                panelW), Theme.C_DANGER);
             return;
         }
         VoiceSpellsConfig.Client c = VoiceSpellsConfig.CLIENT;

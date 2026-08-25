@@ -2107,8 +2107,10 @@ public final class VoiceController {
             double threshold = VoiceSpellsConfig.cPerSpellConfidence.getOrDefault(
                 spellKey, (double) VoiceSpellsConfig.cMinConfidence);
             if (confidence < threshold) {
-                recordEvent(phrase, String.format(java.util.Locale.ROOT,
-                    "low conf %.2f / need %.2f", confidence, threshold), confidence, matchTier);
+                recordEvent(phrase, Component.translatable("voicespells.monitor.low_conf",
+                    String.format(java.util.Locale.ROOT, "%.2f", confidence),
+                    String.format(java.util.Locale.ROOT, "%.2f", threshold)).getString(),
+                    confidence, matchTier);
                 logRecog("Heard '{}' rejected for {} (conf {} < {})",
                     phrase, spellId,
                     String.format(java.util.Locale.ROOT, "%.2f", confidence), threshold);

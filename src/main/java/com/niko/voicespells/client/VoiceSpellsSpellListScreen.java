@@ -213,7 +213,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
                 .append(Component.literal(": " + selectedId + "  ·  "))
                 .append(Component.translatable("voicespells.spelllist.selected_hint"));
         }
-        return Component.literal(filtered.size() + " spells — click a row to select + copy id");
+        return Component.translatable("voicespells.spelllist.count", filtered.size());
     }
 
     private void applyFilter(String q) {

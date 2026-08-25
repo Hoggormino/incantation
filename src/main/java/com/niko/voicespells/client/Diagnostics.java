@@ -40,6 +40,18 @@ public final class Diagnostics {
         return net.minecraft.network.chat.Component.translatable(key, args).getString();
     }
 
+    /** {@code MicCapture.status()} is a machine value — this class compares it against
+     *  "capturing" and "no device" — so it is localized only where it is displayed.
+     *  An unknown value passes through untouched rather than becoming a missing key. */
+    private static String micStatus(String s) {
+        return switch (s) {
+            case "closed", "capturing", "no device", "device missing",
+                 "start failed", "open failed", "reconnecting" ->
+                tr("voicespells.mic.status." + s.replace(' ', '_'));
+            default -> s;
+        };
+    }
+
     /** Runs every check and returns the results in display order. */
     public static List<Result> runAll() {
         List<Result> out = new ArrayList<>();
@@ -119,9 +131,9 @@ public final class Diagnostics {
             return new Result(tr("voicespells.diag.name.microphone"), Status.OK, tr("voicespells.diag.mic.capturing", com.niko.voicespells.client.MicCapture.SAMPLE_RATE));
         }
         if ("no device".equals(status) || "device missing".equals(status)) {
-            return new Result(tr("voicespells.diag.name.microphone"), Status.FAIL, tr("voicespells.diag.mic.no_device", status));
+            return new Result(tr("voicespells.diag.name.microphone"), Status.FAIL, tr("voicespells.diag.mic.no_device", micStatus(status)));
         }
-        return new Result(tr("voicespells.diag.name.microphone"), Status.WARN, status);
+        return new Result(tr("voicespells.diag.name.microphone"), Status.WARN, micStatus(status));
     }
 
     /**
