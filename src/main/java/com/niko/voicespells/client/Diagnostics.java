@@ -34,6 +34,12 @@ public final class Diagnostics {
     public enum Status { OK, WARN, FAIL, INFO }
     public record Result(String name, Status status, String detail) {}
 
+    /** Diagnostics rows carry plain strings, so they are localized here at construction. The
+     *  screen rebuilds the whole list every time it opens, so a language change lands on reopen. */
+    private static String tr(String key, Object... args) {
+        return net.minecraft.network.chat.Component.translatable(key, args).getString();
+    }
+
     /** Runs every check and returns the results in display order. */
     public static List<Result> runAll() {
         List<Result> out = new ArrayList<>();
@@ -70,7 +76,7 @@ public final class Diagnostics {
             all.addAll(VoiceSpellsConfig.CLIENT.customPhrases.get());
             all.addAll(VoiceSpellsConfig.CLIENT.incantations.get());
         } catch (Throwable ignored) {
-            return new Result("Custom phrase duplicates", Status.INFO, "Config not loaded");
+            return new Result(tr("voicespells.diag.name.custom_phrases"), Status.INFO, tr("voicespells.diag.custom.no_config"));
         }
         for (String entry : all) {
             if (entry == null) continue;
@@ -84,12 +90,9 @@ public final class Diagnostics {
             seen.put(phrase, id);
         }
         if (conflicts.isEmpty()) {
-            return new Result("Custom phrase duplicates", Status.OK,
-                seen.size() + " custom/incantation phrase(s), no duplicates");
+            return new Result(tr("voicespells.diag.name.custom_phrases"), Status.OK, tr("voicespells.diag.custom.ok", seen.size()));
         }
-        return new Result("Custom phrase duplicates", Status.WARN,
-            conflicts.size() + " duplicate(s): " + conflicts.get(0)
-            + (conflicts.size() > 1 ? " (+" + (conflicts.size() - 1) + " more)" : ""));
+        return new Result(tr("voicespells.diag.name.custom_phrases"), Status.WARN, tr("voicespells.diag.custom.dupes", conflicts.size(), conflicts.get(0)) + (conflicts.size() > 1 ? tr("voicespells.diag.more_suffix", conflicts.size() - 1) : ""));
     }
 
     // -------------------------------------------------------------------- Integrations
@@ -101,10 +104,7 @@ public final class Diagnostics {
         java.util.List<String> devices = com.niko.voicespells.client.MicCapture.listDevices();
         com.niko.voicespells.client.MicCapture cap = VoiceController.captureEngine();
         if (cap == null) {
-            return new Result("Microphone", Status.WARN,
-                devices.isEmpty()
-                    ? "Capture not started, and no devices detected"
-                    : "Capture not started (" + devices.size() + " device(s) available)");
+            return new Result(tr("voicespells.diag.name.microphone"), Status.WARN, devices.isEmpty() ? tr("voicespells.diag.mic.idle_none") : tr("voicespells.diag.mic.idle", devices.size()));
         }
         String status = cap.status();
         if ("capturing".equals(status)) {
@@ -114,19 +114,14 @@ public final class Diagnostics {
             // this one said OK, and voice casting still never fired. An open device that has
             // produced pure silence for seconds is a FAIL with a fix attached, not an OK.
             if (VoiceController.deviceSilent()) {
-                return new Result("Microphone", Status.FAIL,
-                    "Device is open but delivering pure silence — likely a virtual driver "
-                    + "(iVCam, VB-Cable, NVIDIA Broadcast). Pick a real mic in More… → "
-                    + "Microphone & Sound");
+                return new Result(tr("voicespells.diag.name.microphone"), Status.FAIL, tr("voicespells.diag.mic.silent"));
             }
-            return new Result("Microphone", Status.OK,
-                "Capturing at " + com.niko.voicespells.client.MicCapture.SAMPLE_RATE + " Hz");
+            return new Result(tr("voicespells.diag.name.microphone"), Status.OK, tr("voicespells.diag.mic.capturing", com.niko.voicespells.client.MicCapture.SAMPLE_RATE));
         }
         if ("no device".equals(status) || "device missing".equals(status)) {
-            return new Result("Microphone", Status.FAIL,
-                status + " — run /voicespells devices to see what is connected");
+            return new Result(tr("voicespells.diag.name.microphone"), Status.FAIL, tr("voicespells.diag.mic.no_device", status));
         }
-        return new Result("Microphone", Status.WARN, status);
+        return new Result(tr("voicespells.diag.name.microphone"), Status.WARN, status);
     }
 
     /**
@@ -138,12 +133,10 @@ public final class Diagnostics {
     private static Result checkPhraseCollisions() {
         java.util.List<String> clashes = com.niko.voicespells.spells.SpellIndex.phraseCollisions();
         if (clashes.isEmpty()) {
-            return new Result("Phrases claimed twice", Status.OK, "Every phrase maps to one spell");
+            return new Result(tr("voicespells.diag.name.collisions"), Status.OK, tr("voicespells.diag.collide.ok"));
         }
         String first = clashes.get(0);
-        return new Result("Phrases claimed twice", Status.WARN,
-            clashes.size() + " phrase(s) claimed twice — one spell each is unreachable. e.g. "
-            + first + " (see the log, or phrasebook.json)");
+        return new Result(tr("voicespells.diag.name.collisions"), Status.WARN, tr("voicespells.diag.collide.warn", clashes.size(), first));
     }
 
     /** Which route casts actually take. The client path needs no server-side component; the
@@ -152,37 +145,31 @@ public final class Diagnostics {
     private static Result checkCastPath() {
         Boolean avail = ClientCast.availability();
         if (Boolean.TRUE.equals(avail)) {
-            return new Result("Cast path", Status.OK,
-                "Iron's Spells client path — no server-side mod needed");
+            return new Result(tr("voicespells.diag.name.cast_path"), Status.OK, tr("voicespells.diag.path.client"));
         }
         if (Boolean.FALSE.equals(avail)) {
-            return new Result("Cast path", Status.WARN,
-                "Client path unavailable; using the fallback, which needs Incantation on the server");
+            return new Result(tr("voicespells.diag.name.cast_path"), Status.WARN, tr("voicespells.diag.path.fallback"));
         }
-        return new Result("Cast path", Status.INFO,
-            "Untried — resolves on the first cast");
+        return new Result(tr("voicespells.diag.name.cast_path"), Status.INFO, tr("voicespells.diag.path.untried"));
     }
 
     private static Result checkIronsSpells() {
         if (!ModList.get().isLoaded("irons_spellbooks")) {
-            return new Result("Iron's Spells", Status.FAIL,
-                "Not installed — there are no spells to cast");
+            return new Result(tr("voicespells.diag.name.irons_spells"), Status.FAIL, tr("voicespells.diag.iss.missing"));
         }
         // Verify the registry class is reachable. ApiSelfCheck at startup already does this
         // in detail; we just do a smoke probe here so the UI is fast.
         try {
             Class.forName("io.redspace.ironsspellbooks.api.registry.SpellRegistry");
-            return new Result("Iron's Spells", Status.OK, "Registry reachable");
+            return new Result(tr("voicespells.diag.name.irons_spells"), Status.OK, tr("voicespells.diag.iss.ok"));
         } catch (Throwable t) {
-            return new Result("Iron's Spells", Status.FAIL,
-                "Registry class missing: " + t.getMessage());
+            return new Result(tr("voicespells.diag.name.irons_spells"), Status.FAIL, tr("voicespells.diag.iss.no_registry", t.getMessage()));
         }
     }
 
     private static Result checkCurios() {
         if (!ModList.get().isLoaded("curios")) {
-            return new Result("Curios API", Status.WARN,
-                "Not installed — spellbook detection falls back to mainhand/offhand only");
+            return new Result(tr("voicespells.diag.name.curios"), Status.WARN, tr("voicespells.diag.curios.missing"));
         }
         try {
 //? if forge {
@@ -196,20 +183,17 @@ public final class Diagnostics {
             // versions (LazyOptional on 1.20.1, Optional on 1.21.1) and an unrecognised one means
             // every Curios spellbook lookup silently returns nothing.
             if (!com.niko.voicespells.spells.CuriosCompat.returnTypeSupported(m)) {
-                return new Result("Curios API", Status.WARN,
-                    "Unsupported return type " + m.getReturnType().getSimpleName()
-                    + " — Curios spellbook slot will not be seen");
+                return new Result(tr("voicespells.diag.name.curios"), Status.WARN, tr("voicespells.diag.curios.bad_type", m.getReturnType().getSimpleName()));
             }
 *///?}
-            return new Result("Curios API", Status.OK,
+            return new Result(tr("voicespells.diag.name.curios"), Status.OK,
 //? if forge {
-/*                "getCuriosInventory reachable (" + m.getReturnType().getSimpleName() + ")");
+/*                tr("voicespells.diag.curios.ok_type", m.getReturnType().getSimpleName()));
 *///?} else {
-                "getCuriosInventory reachable");
+                tr("voicespells.diag.curios.ok"));
 //?}
         } catch (Throwable t) {
-            return new Result("Curios API", Status.WARN,
-                "Loaded but API method changed: " + t.getClass().getSimpleName());
+            return new Result(tr("voicespells.diag.name.curios"), Status.WARN, tr("voicespells.diag.curios.changed", t.getClass().getSimpleName()));
         }
     }
 
@@ -229,23 +213,16 @@ public final class Diagnostics {
         if (r.vocabularyWords() == 0) {
             // Not a failure on its own - the model may still be loading, and every consumer of the
             // vocabulary degrades to "change nothing" without it.
-            return new Result("Model vocabulary", Status.WARN,
-                "Not read yet - respelling and unsayable-name detection are inactive");
+            return new Result(tr("voicespells.diag.name.vocabulary"), Status.WARN, tr("voicespells.diag.vocab.unread"));
         }
         if (!r.dead().isEmpty()) {
             String names = String.join(", ", r.dead().subList(0, Math.min(4, r.dead().size())));
-            return new Result("Model vocabulary", Status.FAIL,
-                r.dead().size() + " spell(s) cannot be spoken on this model (" + names
-                + (r.dead().size() > 4 ? ", ..." : "")
-                + ") - run /voicespells vocab, then bind an alias");
+            return new Result(tr("voicespells.diag.name.vocabulary"), Status.FAIL, tr("voicespells.diag.vocab.dead", r.dead().size(), names + (r.dead().size() > 4 ? ", ..." : "")));
         }
         if (!r.rescued().isEmpty()) {
-            return new Result("Model vocabulary", Status.OK,
-                r.vocabularyWords() + " words; " + r.rescued().size()
-                + " name(s) need an alias and have one (/voicespells vocab)");
+            return new Result(tr("voicespells.diag.name.vocabulary"), Status.OK, tr("voicespells.diag.vocab.rescued", r.vocabularyWords(), r.rescued().size()));
         }
-        return new Result("Model vocabulary", Status.OK,
-            r.vocabularyWords() + " words; every phrase is pronounceable");
+        return new Result(tr("voicespells.diag.name.vocabulary"), Status.OK, tr("voicespells.diag.vocab.ok", r.vocabularyWords()));
     }
 
     /**
@@ -256,10 +233,9 @@ public final class Diagnostics {
      */
     private static Result checkGrammarEncoding() {
         if (VoskSession.utf8Grammar) {
-            return new Result("Grammar encoding", Status.OK, "UTF-8 at the recogniser boundary");
+            return new Result(tr("voicespells.diag.name.encoding"), Status.OK, tr("voicespells.diag.enc.ok"));
         }
-        return new Result("Grammar encoding", Status.WARN,
-            "Not UTF-8 - phrases with accented characters will not reach the recogniser intact");
+        return new Result(tr("voicespells.diag.name.encoding"), Status.WARN, tr("voicespells.diag.enc.warn"));
     }
 
     private static Result checkVoskModel() {
@@ -271,48 +247,39 @@ public final class Diagnostics {
         Path p = com.niko.voicespells.speech.ModelCatalog.resolveModelDir(
             VoiceSpellsConfig.CLIENT.modelPath.get(), VoiceSpellsConfig.cModelId);
         if (!Files.isDirectory(p)) {
-            return new Result("Vosk model", Status.FAIL,
-                "Directory not present: " + p.toAbsolutePath()
-                + (VoiceSpellsConfig.CLIENT.autoDownloadModel.get()
-                    ? " (auto-download is on — wait for first launch to finish)"
-                    : " (auto-download is off; install a model manually)"));
+            return new Result(tr("voicespells.diag.name.vosk_model"), Status.FAIL, tr("voicespells.diag.model.missing", p.toAbsolutePath()) + (VoiceSpellsConfig.CLIENT.autoDownloadModel.get() ? tr("voicespells.diag.model.autodl_on") : tr("voicespells.diag.model.autodl_off")));
         }
         String status = VoiceController.statusLine();
         if ("READY".equals(status)) {
-            return new Result("Vosk model", Status.OK, "Loaded from " + p);
+            return new Result(tr("voicespells.diag.name.vosk_model"), Status.OK, tr("voicespells.diag.model.loaded", p));
         }
         if (status == null || status.isEmpty()) {
-            return new Result("Vosk model", Status.WARN, "Model on disk but not loaded yet");
+            return new Result(tr("voicespells.diag.name.vosk_model"), Status.WARN, tr("voicespells.diag.model.not_loaded"));
         }
-        return new Result("Vosk model", Status.WARN, "Status: " + status);
+        return new Result(tr("voicespells.diag.name.vosk_model"), Status.WARN, tr("voicespells.diag.model.status", status));
     }
 
     private static Result checkSpellIndex() {
         if (!SpellIndex.isReady()) {
-            return new Result("Spell index", Status.FAIL,
-                "Empty — Iron's Spells didn't expose any enabled spells");
+            return new Result(tr("voicespells.diag.name.spell_index"), Status.FAIL, tr("voicespells.diag.index.empty"));
         }
         int n = SpellIndex.allSpells().size();
         int phrases = SpellIndex.getPhrases().size();
         Status st = (n < 20) ? Status.WARN : Status.OK;
-        return new Result("Spell index", st,
-            n + " spells, " + phrases + " grammar phrases (incl. aliases)");
+        return new Result(tr("voicespells.diag.name.spell_index"), st, tr("voicespells.diag.index.ok", n, phrases));
     }
 
     private static Result checkRecognitionActivity() {
         List<VoiceController.RecognitionEvent> events = VoiceController.recentEvents();
         if (events.isEmpty()) {
-            return new Result("Recognition activity", Status.INFO,
-                "No recognition events yet this session");
+            return new Result(tr("voicespells.diag.name.recognition"), Status.INFO, tr("voicespells.diag.recog.none"));
         }
         long ageSec = TimeUnit.NANOSECONDS.toSeconds(
             System.nanoTime() - events.get(0).nanoTime());
         if (ageSec > 300) {
-            return new Result("Recognition activity", Status.WARN,
-                "Last event " + ageSec + "s ago — recognizer may have stalled");
+            return new Result(tr("voicespells.diag.name.recognition"), Status.WARN, tr("voicespells.diag.recog.stalled", ageSec));
         }
-        return new Result("Recognition activity", Status.OK,
-            events.size() + " events buffered, freshest " + ageSec + "s ago");
+        return new Result(tr("voicespells.diag.name.recognition"), Status.OK, tr("voicespells.diag.recog.ok", events.size(), ageSec));
     }
 
     // -------------------------------------------------------------------- Cast pipeline
@@ -322,14 +289,11 @@ public final class Diagnostics {
             Class<?> cmd = Class.forName("io.redspace.ironsspellbooks.player.ClientMagicData");
             Method m = cmd.getMethod("isCasting");
             m.invoke(null);
-            return new Result("ClientMagicData", Status.OK,
-                "isCasting() reflective call succeeded");
+            return new Result(tr("voicespells.diag.name.magic_data"), Status.OK, tr("voicespells.diag.cmd.ok"));
         } catch (ClassNotFoundException notLoaded) {
-            return new Result("ClientMagicData", Status.WARN,
-                "Iron's Spells client class missing — cast queue degrades to no-op");
+            return new Result(tr("voicespells.diag.name.magic_data"), Status.WARN, tr("voicespells.diag.cmd.missing"));
         } catch (Throwable t) {
-            return new Result("ClientMagicData", Status.WARN,
-                "Reflective call failed: " + t.getClass().getSimpleName());
+            return new Result(tr("voicespells.diag.name.magic_data"), Status.WARN, tr("voicespells.diag.cmd.failed", t.getClass().getSimpleName()));
         }
     }
 
@@ -337,11 +301,9 @@ public final class Diagnostics {
         int total = VoiceStats.totalCasts();
         long lastMs = VoiceStats.lastCastMs();
         if (total == 0) {
-            return new Result("Cast history", Status.INFO,
-                "No successful casts recorded yet");
+            return new Result(tr("voicespells.diag.name.cast_history"), Status.INFO, tr("voicespells.diag.history.none"));
         }
-        return new Result("Cast history", Status.OK,
-            total + " total casts · last " + VoiceStats.fmtElapsed(lastMs));
+        return new Result(tr("voicespells.diag.name.cast_history"), Status.OK, tr("voicespells.diag.history.ok", total, VoiceStats.fmtElapsed(lastMs)));
     }
 
     // -------------------------------------------------------------------- Config
@@ -350,12 +312,9 @@ public final class Diagnostics {
         try {
             // A read confirms the spec loaded.
             VoiceSpellsConfig.CLIENT.dedupMillis.get();
-            return new Result("Client config", Status.OK,
-                "Loaded; dedupMillis=" + VoiceSpellsConfig.cDedupNanos / 1_000_000L
-                + ", minConfidence=" + VoiceSpellsConfig.cMinConfidence);
+            return new Result(tr("voicespells.diag.name.client_config"), Status.OK, tr("voicespells.diag.client.ok", VoiceSpellsConfig.cDedupNanos / 1_000_000L, VoiceSpellsConfig.cMinConfidence));
         } catch (Throwable t) {
-            return new Result("Client config", Status.FAIL,
-                "Not loaded: " + t.getClass().getSimpleName());
+            return new Result(tr("voicespells.diag.name.client_config"), Status.FAIL, tr("voicespells.diag.client.failed", t.getClass().getSimpleName()));
         }
     }
 
@@ -364,13 +323,11 @@ public final class Diagnostics {
             com.niko.voicespells.VoiceSpellsServerConfig.CastMode mode =
                 com.niko.voicespells.VoiceSpellsServerConfig.SERVER.castMode.get();
             int max = com.niko.voicespells.VoiceSpellsServerConfig.SERVER.maxCastsPerSecond.get();
-            return new Result("Server config", Status.OK,
-                "castMode=" + mode + ", maxCastsPerSecond=" + max);
+            return new Result(tr("voicespells.diag.name.server_config"), Status.OK, tr("voicespells.diag.server.ok", mode, max));
         } catch (IllegalStateException notLoaded) {
-            return new Result("Server config", Status.INFO,
-                "Not loaded (singleplayer needs a world; dedicated server: per-world)");
+            return new Result(tr("voicespells.diag.name.server_config"), Status.INFO, tr("voicespells.diag.server.not_loaded"));
         } catch (Throwable t) {
-            return new Result("Server config", Status.WARN, t.getClass().getSimpleName());
+            return new Result(tr("voicespells.diag.name.server_config"), Status.WARN, t.getClass().getSimpleName());
         }
     }
 
@@ -379,9 +336,7 @@ public final class Diagnostics {
         long usedMb  = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
         long totalMb = rt.totalMemory() / (1024 * 1024);
         long maxMb   = rt.maxMemory() / (1024 * 1024);
-        return new Result("JVM memory", Status.INFO,
-            String.format(Locale.ROOT, "%dMB used / %dMB committed / %dMB max",
-                usedMb, totalMb, maxMb));
+        return new Result(tr("voicespells.diag.name.jvm_memory"), Status.INFO, tr("voicespells.diag.jvm.ok", usedMb, totalMb, maxMb));
     }
 
     /** Compact one-line summary for the More menu or chat. */
