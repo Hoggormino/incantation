@@ -1,5 +1,5 @@
 {
-  "_help": "Replace the override for each spell with the words you want to say in Russian. Entries for Iron's Spells' own spells were filled in from its ru_ru.json; the addon spells are blank because those mods ship no translations in any language. Vosk only recognises words its model knows - run /voicespells vocab to see which of these the loaded Russian model can actually say.",
+  "_help": "Write what you would SAY OUT LOUD for each spell in the 'override' field. Leave it empty to keep the English default. These are spoken phrases, not written names - pick the words a player would actually say, and prefer words the Vosk model knows. Run /voicespells vocab in-game to see which of your phrases the loaded model can actually pronounce; anything it cannot say is dropped from the grammar silently.",
   "spells": {
     "gtbcs_geomancy_plus:fissure": {
       "default": "fissure",
@@ -731,427 +731,427 @@
     },
     "irons_spellbooks:acupuncture": {
       "default": "acupuncture",
-      "override": "иглоукалывание"
+      "override": ""
     },
     "irons_spellbooks:blood_needles": {
       "default": "blood needles",
-      "override": "кровавые иглы"
+      "override": ""
     },
     "irons_spellbooks:blood_slash": {
       "default": "blood slash",
-      "override": "кровавый клинок"
+      "override": ""
     },
     "irons_spellbooks:blood_step": {
       "default": "blood step",
-      "override": "кровавая поступь"
+      "override": ""
     },
     "irons_spellbooks:devour": {
       "default": "devour",
-      "override": "пожирание"
+      "override": ""
     },
     "irons_spellbooks:heartstop": {
       "default": "heartstop",
-      "override": "остановка сердца"
+      "override": ""
     },
     "irons_spellbooks:raise_dead": {
       "default": "raise dead",
-      "override": "воскрешение мёртвых"
+      "override": ""
     },
     "irons_spellbooks:ray_of_siphoning": {
       "default": "ray of siphoning",
-      "override": "истощающий луч"
+      "override": ""
     },
     "irons_spellbooks:wither_skull": {
       "default": "wither skull",
-      "override": "череп иссушителя"
+      "override": ""
     },
     "irons_spellbooks:sacrifice": {
       "default": "sacrifice",
-      "override": "жертвоприношение"
+      "override": ""
     },
     "irons_spellbooks:counterspell": {
       "default": "counterspell",
-      "override": "контрзаклинание"
+      "override": ""
     },
     "irons_spellbooks:dragon_breath": {
       "default": "dragon breath",
-      "override": "драконье дыхание"
+      "override": ""
     },
     "irons_spellbooks:evasion": {
       "default": "evasion",
-      "override": "уклонение"
+      "override": ""
     },
     "irons_spellbooks:magic_arrow": {
       "default": "magic arrow",
-      "override": "волшебная стрела"
+      "override": ""
     },
     "irons_spellbooks:magic_missile": {
       "default": "magic missile",
-      "override": "магический снаряд"
+      "override": ""
     },
     "irons_spellbooks:starfall": {
       "default": "starfall",
-      "override": "звездопад"
+      "override": ""
     },
     "irons_spellbooks:teleport": {
       "default": "teleport",
-      "override": "перемещение"
+      "override": ""
     },
     "irons_spellbooks:summon_ender_chest": {
       "default": "summon ender chest",
-      "override": "эндер хранилище"
+      "override": ""
     },
     "irons_spellbooks:recall": {
       "default": "recall",
-      "override": "возвращение"
+      "override": ""
     },
     "irons_spellbooks:portal": {
       "default": "portal",
-      "override": "портал"
+      "override": ""
     },
     "irons_spellbooks:echoing_strikes": {
       "default": "echoing strikes",
-      "override": "эхо ударов"
+      "override": ""
     },
     "irons_spellbooks:black_hole": {
       "default": "black hole",
-      "override": "чёрная дыра"
+      "override": ""
     },
     "irons_spellbooks:summon_swords": {
       "default": "summon swords",
-      "override": "призыв орудий"
+      "override": ""
     },
     "irons_spellbooks:shadow_slash": {
       "default": "shadow slash",
-      "override": "теневой взмах"
+      "override": ""
     },
     "irons_spellbooks:chain_creeper": {
       "default": "chain creeper",
-      "override": "цепной крипер"
+      "override": ""
     },
     "irons_spellbooks:fang_strike": {
       "default": "fang strike",
-      "override": "удар клыками"
+      "override": ""
     },
     "irons_spellbooks:fang_ward": {
       "default": "fang ward",
-      "override": "кольцо клыков"
+      "override": ""
     },
     "irons_spellbooks:firecracker": {
       "default": "firecracker",
-      "override": "фейерверк"
+      "override": ""
     },
     "irons_spellbooks:gust": {
       "default": "gust",
-      "override": "порыв"
+      "override": ""
     },
     "irons_spellbooks:invisibility": {
       "default": "invisibility",
-      "override": "невидимость"
+      "override": ""
     },
     "irons_spellbooks:lob_creeper": {
       "default": "lob creeper",
-      "override": "бросок крипера"
+      "override": ""
     },
     "irons_spellbooks:shield": {
       "default": "shield",
-      "override": "магический щит"
+      "override": ""
     },
     "irons_spellbooks:spectral_hammer": {
       "default": "spectral hammer",
-      "override": "призрачный молот"
+      "override": ""
     },
     "irons_spellbooks:summon_horse": {
       "default": "summon horse",
-      "override": "призыв лошади"
+      "override": ""
     },
     "irons_spellbooks:summon_vex": {
       "default": "summon vex",
-      "override": "призыв вредин"
+      "override": ""
     },
     "irons_spellbooks:slow": {
       "default": "slow",
-      "override": "замедление"
+      "override": ""
     },
     "irons_spellbooks:arrow_volley": {
       "default": "arrow volley",
-      "override": "залп стрел"
+      "override": ""
     },
     "irons_spellbooks:wololo": {
       "default": "wololo",
-      "override": "вололо"
+      "override": ""
     },
     "irons_spellbooks:throw": {
       "default": "throw",
-      "override": "бросок"
+      "override": ""
     },
     "irons_spellbooks:blaze_storm": {
       "default": "blaze storm",
-      "override": "пламенный шторм"
+      "override": ""
     },
     "irons_spellbooks:burning_dash": {
       "default": "burning dash",
-      "override": "пламенный рывок"
+      "override": ""
     },
     "irons_spellbooks:fireball": {
       "default": "fireball",
-      "override": "огненный шар"
+      "override": ""
     },
     "irons_spellbooks:firebolt": {
       "default": "firebolt",
-      "override": "огненный снаряд"
+      "override": ""
     },
     "irons_spellbooks:fire_breath": {
       "default": "fire breath",
-      "override": "огненное дыхание"
+      "override": ""
     },
     "irons_spellbooks:magma_bomb": {
       "default": "magma bomb",
-      "override": "магмовая бомба"
+      "override": ""
     },
     "irons_spellbooks:wall_of_fire": {
       "default": "wall of fire",
-      "override": "стена огня"
+      "override": ""
     },
     "irons_spellbooks:heat_surge": {
       "default": "heat surge",
-      "override": "тепловой всплеск"
+      "override": ""
     },
     "irons_spellbooks:flaming_strike": {
       "default": "flaming strike",
-      "override": "пылающий удар"
+      "override": ""
     },
     "irons_spellbooks:scorch": {
       "default": "scorch",
-      "override": "ожог"
+      "override": ""
     },
     "irons_spellbooks:flaming_barrage": {
       "default": "flaming barrage",
-      "override": "пламенный шквал"
+      "override": ""
     },
     "irons_spellbooks:fire_arrow": {
       "default": "fire arrow",
-      "override": "огненная стрела"
+      "override": ""
     },
     "irons_spellbooks:raise_hell": {
       "default": "raise hell",
-      "override": "адский удар"
+      "override": ""
     },
     "irons_spellbooks:angel_wing": {
       "default": "angel wing",
-      "override": "ангельские крылья"
+      "override": ""
     },
     "irons_spellbooks:blessing_of_life": {
       "default": "blessing of life",
-      "override": "благословение жизни"
+      "override": ""
     },
     "irons_spellbooks:cloud_of_regeneration": {
       "default": "cloud of regeneration",
-      "override": "облако регенерации"
+      "override": ""
     },
     "irons_spellbooks:fortify": {
       "default": "fortify",
-      "override": "укрепление"
+      "override": ""
     },
     "irons_spellbooks:greater_heal": {
       "default": "greater heal",
-      "override": "великое исцеление"
+      "override": ""
     },
     "irons_spellbooks:guiding_bolt": {
       "default": "guiding bolt",
-      "override": "путеводный снаряд"
+      "override": ""
     },
     "irons_spellbooks:healing_circle": {
       "default": "healing circle",
-      "override": "исцеляющий круг"
+      "override": ""
     },
     "irons_spellbooks:heal": {
       "default": "heal",
-      "override": "исцеление"
+      "override": ""
     },
     "irons_spellbooks:sunbeam": {
       "default": "sunbeam",
-      "override": "солнечный луч"
+      "override": ""
     },
     "irons_spellbooks:wisp": {
       "default": "wisp",
-      "override": "огонёк"
+      "override": ""
     },
     "irons_spellbooks:divine_smite": {
       "default": "divine smite",
-      "override": "божья кара"
+      "override": ""
     },
     "irons_spellbooks:haste": {
       "default": "haste",
-      "override": "ускорение"
+      "override": ""
     },
     "irons_spellbooks:cleanse": {
       "default": "cleanse",
-      "override": "очищение"
+      "override": ""
     },
     "irons_spellbooks:cone_of_cold": {
       "default": "cone of cold",
-      "override": "морозное дыхание"
+      "override": ""
     },
     "irons_spellbooks:frost_step": {
       "default": "frost step",
-      "override": "ледяная поступь"
+      "override": ""
     },
     "irons_spellbooks:ice_block": {
       "default": "ice block",
-      "override": "ледяная глыба"
+      "override": ""
     },
     "irons_spellbooks:icicle": {
       "default": "icicle",
-      "override": "сосулька"
+      "override": ""
     },
     "irons_spellbooks:summon_polar_bear": {
       "default": "summon polar bear",
-      "override": "призыв белого медведя"
+      "override": ""
     },
     "irons_spellbooks:ray_of_frost": {
       "default": "ray of frost",
-      "override": "морозный луч"
+      "override": ""
     },
     "irons_spellbooks:frostwave": {
       "default": "frostwave",
-      "override": "морозная волна"
+      "override": ""
     },
     "irons_spellbooks:ice_spikes": {
       "default": "ice spikes",
-      "override": "ледяные шипы"
+      "override": ""
     },
     "irons_spellbooks:ice_tomb": {
       "default": "ice tomb",
-      "override": "ледяной гроб"
+      "override": ""
     },
     "irons_spellbooks:snowball": {
       "default": "snowball",
-      "override": "снежок"
+      "override": ""
     },
     "irons_spellbooks:frostbite": {
       "default": "frostbite",
-      "override": "обморожение"
+      "override": ""
     },
     "irons_spellbooks:ascension": {
       "default": "ascension",
-      "override": "вознесение"
+      "override": ""
     },
     "irons_spellbooks:chain_lightning": {
       "default": "chain lightning",
-      "override": "цепная молния"
+      "override": ""
     },
     "irons_spellbooks:charge": {
       "default": "charge",
-      "override": "перегрузка"
+      "override": ""
     },
     "irons_spellbooks:electrocute": {
       "default": "electrocute",
-      "override": "электрошок"
+      "override": ""
     },
     "irons_spellbooks:lightning_bolt": {
       "default": "lightning bolt",
-      "override": "удар молнии"
+      "override": ""
     },
     "irons_spellbooks:lightning_lance": {
       "default": "lightning lance",
-      "override": "копьё молнии"
+      "override": ""
     },
     "irons_spellbooks:shockwave": {
       "default": "shockwave",
-      "override": "шоковая волна"
+      "override": ""
     },
     "irons_spellbooks:thunderstorm": {
       "default": "thunderstorm",
-      "override": "гроза"
+      "override": ""
     },
     "irons_spellbooks:ball_lightning": {
       "default": "ball lightning",
-      "override": "шаровая молния"
+      "override": ""
     },
     "irons_spellbooks:volt_strike": {
       "default": "volt strike",
-      "override": "электрический рывок"
+      "override": ""
     },
     "irons_spellbooks:acid_orb": {
       "default": "acid orb",
-      "override": "кислотный плевок"
+      "override": ""
     },
     "irons_spellbooks:blight": {
       "default": "blight",
-      "override": "порча"
+      "override": ""
     },
     "irons_spellbooks:poison_arrow": {
       "default": "poison arrow",
-      "override": "отравленная стрела"
+      "override": ""
     },
     "irons_spellbooks:poison_breath": {
       "default": "poison breath",
-      "override": "ядовитое дыхание"
+      "override": ""
     },
     "irons_spellbooks:poison_splash": {
       "default": "poison splash",
-      "override": "всплеск яда"
+      "override": ""
     },
     "irons_spellbooks:root": {
       "default": "root",
-      "override": "оплетение"
+      "override": ""
     },
     "irons_spellbooks:spider_aspect": {
       "default": "spider aspect",
-      "override": "паучий нрав"
+      "override": ""
     },
     "irons_spellbooks:firefly_swarm": {
       "default": "firefly swarm",
-      "override": "рой светлячков"
+      "override": ""
     },
     "irons_spellbooks:oakskin": {
       "default": "oakskin",
-      "override": "дубовая кожа"
+      "override": ""
     },
     "irons_spellbooks:earthquake": {
       "default": "earthquake",
-      "override": "землетрясение"
+      "override": ""
     },
     "irons_spellbooks:stomp": {
       "default": "stomp",
-      "override": "дрожь"
+      "override": ""
     },
     "irons_spellbooks:gluttony": {
       "default": "gluttony",
-      "override": "чревоугодие"
+      "override": ""
     },
     "irons_spellbooks:touch_dig": {
       "default": "touch dig",
-      "override": "маг добыча"
+      "override": ""
     },
     "irons_spellbooks:abyssal_shroud": {
       "default": "abyssal shroud",
-      "override": "покров бездны"
+      "override": ""
     },
     "irons_spellbooks:sculk_tentacles": {
       "default": "sculk tentacles",
-      "override": "щупальца скалка"
+      "override": ""
     },
     "irons_spellbooks:sonic_boom": {
       "default": "sonic boom",
-      "override": "звуковой выстрел"
+      "override": ""
     },
     "irons_spellbooks:planar_sight": {
       "default": "planar sight",
-      "override": "сквозное зрение"
+      "override": ""
     },
     "irons_spellbooks:telekinesis": {
       "default": "telekinesis",
-      "override": "телекинез"
+      "override": ""
     },
     "irons_spellbooks:eldritch_blast": {
       "default": "eldritch blast",
-      "override": "потусторонний выстрел"
+      "override": ""
     },
     "irons_spellbooks:pocket_dimension": {
       "default": "pocket dimension",
-      "override": "подпространство"
+      "override": ""
     },
     "elemental_synergies:soulflame_bolt": {
       "default": "soulflame bolt",
@@ -1177,6 +1177,5 @@
       "default": "tidal wave",
       "override": ""
     }
-  },
-  "_seeded": "irons_spellbooks entries auto-filled from the mod's own ru_ru.json; addon spells left blank for a human"
+  }
 }

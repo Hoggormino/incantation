@@ -193,11 +193,11 @@ public final class VoiceSpellsConfigScreen extends Screen {
         int lastTabX = gridX + tabColW * 2;
         int lastTabW = gridX + gridW - lastTabX;
         addRenderableWidget(new TabButton(gridX, tabsY, tabColW, TAB_H,
-            "Recognition", Tab.RECOGNITION));
+            Component.translatable("voicespells.config.tab_recognition"), Tab.RECOGNITION));
         addRenderableWidget(new TabButton(gridX + tabColW, tabsY, tabColW, TAB_H,
-            "HUD", Tab.HUD));
+            Component.translatable("voicespells.config.tab_hud"), Tab.HUD));
         addRenderableWidget(new TabButton(lastTabX, tabsY, lastTabW, TAB_H,
-            "Behaviour", Tab.BEHAVIOUR));
+            Component.translatable("voicespells.config.tab_behaviour"), Tab.BEHAVIOUR));
 
         // The panel the tabs sit on. Its top edge is the tab row's bottom edge, deliberately:
         // the sprite's nine-slice border is bottom:0 so a selected tab has an OPEN bottom and is
@@ -244,7 +244,7 @@ public final class VoiceSpellsConfigScreen extends Screen {
             Component.translatable("voicespells.config.spelllist"),
             b -> { if (minecraft != null) minecraft.setScreen(new VoiceSpellsSpellListScreen(this)); }));
         addRenderableWidget(NeonButton.of(gridX + (thirdW + COL_GAP) * 2, row1Y,
-            avail - (thirdW + COL_GAP) * 2, 20, Component.literal("More..."),
+            avail - (thirdW + COL_GAP) * 2, 20, Component.translatable("voicespells.config.more"),
             b -> { if (minecraft != null) minecraft.setScreen(new ConfigMoreScreen(this)); }));
         int halfW = (avail - COL_GAP) / 2;
         addRenderableWidget(NeonButton.of(gridX, row2Y, halfW, 20,
@@ -350,74 +350,83 @@ public final class VoiceSpellsConfigScreen extends Screen {
         return addRenderableWidget(w);
     }
 
-    private static void help(AbstractWidget w, String text) {
-        w.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(text)));
+    /** Hover tooltip, named by lang key so the whole help text is translatable.
+     *
+     *  <p>Takes a KEY, not the English sentence it used to take: every one of these strings is
+     *  read by a player, so leaving them in Java put 25 paragraphs of copy out of a translator's
+     *  reach. The key is resolved on every rebuild, which is when a language change re-inits the
+     *  screen anyway. */
+    private static void help(AbstractWidget w, String key) {
+        w.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
+            Component.translatable(key)));
+    }
+
+    /** A lang key resolved to a plain String.
+     *
+     *  <p>{@link NeonToggle#named}, {@link NeonCycle#named} and {@link NeonSlider} all label
+     *  themselves from a String rather than a Component, so a key cannot be handed to them
+     *  directly. Resolving here keeps the option names translatable without changing any of
+     *  those signatures. */
+    private static String tr(String key) {
+        return Component.translatable(key).getString();
     }
 
     private void buildRecognitionTab(int gridX, int colW, int y) {
         int i = 0;
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Owned only", workRestrictToOwned,
-                v -> workRestrictToOwned = v), i++, gridX, colW, y),
-            "Only listen for spells you actually have equipped. Off means every indexed spell "
-            + "is a candidate, which makes false matches far more likely.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.owned_only"),
+                workRestrictToOwned, v -> workRestrictToOwned = v), i++, gridX, colW, y),
+            "voicespells.config.owned_only_tip");
 
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Verbose log", workDebug,
-                v -> workDebug = v), i++, gridX, colW, y),
-            "Log every recognition to the game log at INFO instead of DEBUG. Useful when sending "
-            + "a log to support. It does not affect the Live Monitor, which is always on and "
-            + "always keeps its history - open it from More... > Live Monitor.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.verbose_log"),
+                workDebug, v -> workDebug = v), i++, gridX, colW, y),
+            "voicespells.config.verbose_log_tip");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workFuzzy, 0, 2,
                 this::fuzzyLabel, v -> workFuzzy = v), i++, gridX, colW, y),
-            "How many letters a heard phrase may differ from a spell name and still match. "
-            + "Higher catches more mispronunciations and more wrong spells.");
+            "voicespells.config.fuzzy_tip");
 
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Substring", workSubstring,
-                v -> workSubstring = v), i++, gridX, colW, y),
-            "Match when a spell name appears inside a longer sentence, so talking normally can "
-            + "still cast. Turn off if casual conversation keeps triggering spells.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.substring"),
+                workSubstring, v -> workSubstring = v), i++, gridX, colW, y),
+            "voicespells.config.substring_tip");
 
         // Same stretch-to-fit as the HUD offsets below: the toml allows up to 5000 and this
         // slider stopped at 3000, so opening the screen and pressing Done rewrote a 4000ms
         // gap the player had set by hand down to 3000, silently.
         help(slot(new NeonSlider(0, 0, colW, 20, workDedup, 0, Math.max(3000, workDedup),
                 v -> "Repeat gap: " + v + " ms", v -> workDedup = v), i++, gridX, colW, y),
-            "Ignore the same spell heard again within this long. Stops one drawn-out word from "
-            + "casting twice.");
+            "voicespells.config.dedup_tip");
 
-        help(slot(NeonCycle.named(0, 0, colW, 20, "Listen", VoiceSpellsConfig.GatingMode.values(),
+        help(slot(NeonCycle.named(0, 0, colW, 20, tr("voicespells.config.listen"),
+                VoiceSpellsConfig.GatingMode.values(),
                 workGating, VoiceSpellsConfigScreen::prettyGating, v -> workGating = v),
                 i++, gridX, colW, y),
-            "When the microphone is open at all. Hold item is the default: it listens only while "
-            + "you are holding a spellbook, staff or imbued weapon, or wearing one in a Curios "
-            + "slot. Always on listens whenever you are in a world.");
+            "voicespells.config.listen_tip");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workMinConfPct, 0, 100,
                 v -> "Confidence: " + v + "%", v -> workMinConfPct = v), i++, gridX, colW, y),
-            "How sure the recogniser has to be before a phrase counts. Higher means fewer wrong "
-            + "casts and more phrases ignored.");
+            "voicespells.config.confidence_tip");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workEchoLockout, 0, 10000,
                 v -> "Echo guard: " + v + " ms", v -> workEchoLockout = v), i++, gridX, colW, y),
-            "Ignore the microphone briefly after a cast, so the game's own sound coming back "
-            + "through your speakers cannot trigger another one.");
+            "voicespells.config.echo_guard_tip");
     }
 
     private static String prettyGating(VoiceSpellsConfig.GatingMode m) {
         return switch (m) {
-            case ALWAYS_ON          -> "Always on";
-            case HOLD_KEY           -> "Hold key";
-            case HOLD_ITEM          -> "Hold item";
-            case HOLD_KEY_AND_ITEM  -> "Key + item";
+            case ALWAYS_ON          -> tr("voicespells.config.gating_always_on");
+            case HOLD_KEY           -> tr("voicespells.config.gating_hold_key");
+            case HOLD_ITEM          -> tr("voicespells.config.gating_hold_item");
+            case HOLD_KEY_AND_ITEM  -> tr("voicespells.config.gating_key_and_item");
         };
     }
 
     private void buildHudTab(int gridX, int colW, int y) {
         int i = 0;
-        help(slot(NeonCycle.named(0, 0, colW, 20, "Corner", VoiceSpellsConfig.Corner.values(),
+        help(slot(NeonCycle.named(0, 0, colW, 20, tr("voicespells.config.corner"),
+                VoiceSpellsConfig.Corner.values(),
                 workCorner, VoiceSpellsConfigScreen::prettyCorner, v -> workCorner = v),
                 i++, gridX, colW, y),
-            "Which corner of the screen the voice HUD sits in.");
+            "voicespells.config.corner_tip");
 
         // Slider top end, NOT the config's own limit.
         //
@@ -434,39 +443,35 @@ public final class VoiceSpellsConfigScreen extends Screen {
         int offsetMax = Math.max(200, Math.max(workOffsetX, workOffsetY));
         help(slot(new NeonSlider(0, 0, colW, 20, workOffsetX, 0, offsetMax,
                 v -> "Offset X: " + v, v -> workOffsetX = v), i++, gridX, colW, y),
-            "Nudge the HUD horizontally away from its corner.");
+            "voicespells.config.offset_x_tip");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workOffsetY, 0, offsetMax,
                 v -> "Offset Y: " + v, v -> workOffsetY = v), i++, gridX, colW, y),
-            "Nudge the HUD vertically away from its corner.");
+            "voicespells.config.offset_y_tip");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workOpacityPct, 0, 100,
                 v -> "Opacity: " + v + "%", v -> workOpacityPct = v), i++, gridX, colW, y),
-            "How solid the HUD is over the world.");
+            "voicespells.config.opacity_tip");
 
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Show misses", workShowMisses,
-                v -> workShowMisses = v), i++, gridX, colW, y),
-            "Show phrases the recogniser heard but could not match. Useful while learning which "
-            + "names it struggles with; noise once you know.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.show_misses"),
+                workShowMisses, v -> workShowMisses = v), i++, gridX, colW, y),
+            "voicespells.config.show_misses_tip");
 
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Show heard", workAlwaysShowHeard,
-                v -> workAlwaysShowHeard = v), i++, gridX, colW, y),
-            "Keep a chip on the HUD showing the last phrase heard, matched or not. It draws on "
-            + "the HUD and never touches chat. The Live Monitor shows the same stream with "
-            + "confidence scores, so turning both on is a wall of text.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.show_heard"),
+                workAlwaysShowHeard, v -> workAlwaysShowHeard = v), i++, gridX, colW, y),
+            "voicespells.config.show_heard_tip");
 
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Cast vignette", workCastVignette,
-                v -> workCastVignette = v), i++, gridX, colW, y),
-            "Screen-edge glow while a long spell is being cast.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.cast_vignette"),
+                workCastVignette, v -> workCastVignette = v), i++, gridX, colW, y),
+            "voicespells.config.cast_vignette_tip");
 
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Streamer mode", workStreamer,
-                v -> workStreamer = v), i++, gridX, colW, y),
-            "Hide anything that would expose what you said on stream.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.streamer_mode"),
+                workStreamer, v -> workStreamer = v), i++, gridX, colW, y),
+            "voicespells.config.streamer_mode_tip");
 
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Cooldown chip", workCooldownChip,
-                v -> workCooldownChip = v), i++, gridX, colW, y),
-            "The chip naming the spell you just cast, with a bar that fills as it comes off "
-            + "cooldown. Sits above the hotbar.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.cooldown_chip"),
+                workCooldownChip, v -> workCooldownChip = v), i++, gridX, colW, y),
+            "voicespells.config.cooldown_chip_tip");
 
         // Same trick the HUD offsets use: the slider covers the useful range rather than the
         // config's full one, but stretches to contain a value already set beyond it, so a
@@ -476,63 +481,59 @@ public final class VoiceSpellsConfigScreen extends Screen {
         int chipMax = Math.max(120, workCooldownChipY);
         help(slot(new NeonSlider(0, 0, colW, 20, workCooldownChipY, chipMin, chipMax,
                 v -> "Chip Y: " + v, v -> workCooldownChipY = v), i++, gridX, colW, y),
-            "Move that chip up or down. Negative is up the screen; 0 leaves it above the hotbar.");
+            "voicespells.config.chip_y_tip");
     }
 
     private void buildBehaviourTab(int gridX, int colW, int y) {
         int i = 0;
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Combat only", workCombatOnly,
-                v -> workCombatOnly = v), i++, gridX, colW, y),
-            "Only cast while something hostile is nearby. Stops conversation casting spells "
-            + "while you are building.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.combat_only"),
+                workCombatOnly, v -> workCombatOnly = v), i++, gridX, colW, y),
+            "voicespells.config.combat_only_tip");
 
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Pause when AFK", workPauseAfk,
-                v -> workPauseAfk = v), i++, gridX, colW, y),
-            "Stop listening after a spell of no input.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.pause_afk"),
+                workPauseAfk, v -> workPauseAfk = v), i++, gridX, colW, y),
+            "voicespells.config.pause_afk_tip");
 
         // The toml ceiling is 3600. A slider that reached it would move in 24-second steps,
         // so it stops at 10 minutes and stretches for anyone who set more than that.
         help(slot(new NeonSlider(0, 0, colW, 20, workAfkSeconds, 5, Math.max(600, workAfkSeconds),
                 v -> "AFK after: " + v + " s", v -> workAfkSeconds = v), i++, gridX, colW, y),
-            "How long counts as away.");
+            "voicespells.config.afk_seconds_tip");
 
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Pause unfocused", workSuspendUnfocused,
-                v -> workSuspendUnfocused = v), i++, gridX, colW, y),
-            "Release the microphone entirely while the game window is not focused, so other "
-            + "applications can use it and the OS microphone light goes out.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.pause_unfocused"),
+                workSuspendUnfocused, v -> workSuspendUnfocused = v), i++, gridX, colW, y),
+            "voicespells.config.pause_unfocused_tip");
 
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Hands-free confirm", workHandsFree,
-                v -> workHandsFree = v), i++, gridX, colW, y),
-            "Say \"no\" to clear spells waiting in the cast queue. Only does anything when "
-            + "the queue has something in it, which needs Queue above 1.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.hands_free"),
+                workHandsFree, v -> workHandsFree = v), i++, gridX, colW, y),
+            "voicespells.config.hands_free_tip");
 
         help(slot(new NeonSlider(0, 0, colW, 20, workCastQueue, 1, 5,
                 v -> "Queue: " + v, v -> workCastQueue = v), i++, gridX, colW, y),
-            "How many casts may wait in line when you speak faster than spells can fire.");
+            "voicespells.config.queue_tip");
 
 
-        help(slot(NeonToggle.named(0, 0, colW, 20, "Sneak to cast", workRequireSneak,
-                v -> workRequireSneak = v), i++, gridX, colW, y),
-            "Require holding sneak while speaking. A strong filter if you talk on voice chat "
-            + "while playing.");
+        help(slot(NeonToggle.named(0, 0, colW, 20, tr("voicespells.config.sneak_to_cast"),
+                workRequireSneak, v -> workRequireSneak = v), i++, gridX, colW, y),
+            "voicespells.config.sneak_to_cast_tip");
 
     }
 
     private static String prettyCorner(VoiceSpellsConfig.Corner c) {
         return switch (c) {
-            case TOP_LEFT     -> "Top Left";
-            case TOP_RIGHT    -> "Top Right";
-            case BOTTOM_LEFT  -> "Bottom Left";
-            case BOTTOM_RIGHT -> "Bottom Right";
+            case TOP_LEFT     -> tr("voicespells.config.corner_top_left");
+            case TOP_RIGHT    -> tr("voicespells.config.corner_top_right");
+            case BOTTOM_LEFT  -> tr("voicespells.config.corner_bottom_left");
+            case BOTTOM_RIGHT -> tr("voicespells.config.corner_bottom_right");
         };
     }
 
 
     private String fuzzyLabel(int v) {
         return switch (v) {
-            case 0  -> "Fuzzy: Exact only";
-            case 1  -> "Fuzzy: ±1 letter";
-            default -> "Fuzzy: ±2 letters";
+            case 0  -> tr("voicespells.config.fuzzy_exact");
+            case 1  -> tr("voicespells.config.fuzzy_one");
+            default -> tr("voicespells.config.fuzzy_two");
         };
     }
 
@@ -686,8 +687,8 @@ public final class VoiceSpellsConfigScreen extends Screen {
     private final class TabButton extends Button {
         private final Tab tab;
 
-        TabButton(int x, int y, int w, int h, String label, Tab tab) {
-            super(x, y, w, h, Component.literal(label), b -> {}, Button.DEFAULT_NARRATION);
+        TabButton(int x, int y, int w, int h, Component label, Tab tab) {
+            super(x, y, w, h, label, b -> {}, Button.DEFAULT_NARRATION);
             this.tab = tab;
             // Both tabs stay ACTIVE.
             //

@@ -322,7 +322,7 @@ public final class ClientEvents {
             String last = VoiceController.lastDispatchedSpellId();
             if (last == null || last.isEmpty()) {
                 mc.player.displayClientMessage(
-                    Component.literal("Nothing to recast yet — say a spell first."), true);
+                    Component.translatable("voicespells.hud.no_recast"), true);
             } else {
                 VoiceController.quickRecastLast();
             }
@@ -587,7 +587,11 @@ public final class ClientEvents {
                          : hot         ? 0xFFFFFFFF   // white: audio reaching the recogniser
                                        : 0xFFA0A0A0; // light grey: armed, below the gate
 
-            String tail = calibrating ? "calibrating" : silent ? "mic silent" : "";
+            String tail = calibrating
+                ? Component.translatable("voicespells.hud.calibrating").getString()
+                : silent
+                ? Component.translatable("voicespells.hud.mic_silent").getString()
+                : "";
             int chipW = PAD_X + DOT_SIZE + 4 + METER_W
                       + (tail.isEmpty() ? 0 : 4 + font.width(tail)) + PAD_X;
             int x = alignX(anchorX, chipW);
@@ -907,7 +911,8 @@ public final class ClientEvents {
             else alpha = 1f;
             alpha = Math.max(0f, Math.min(1f, alpha));
 
-            String text = "? " + capitalize(s.candidateDisplay()) + "  [press Y]";
+            String text = "? " + capitalize(s.candidateDisplay()) + "  "
+                        + Component.translatable("voicespells.hud.press_key").getString();
             int toastW = PAD_X + font.width(text) + PAD_X;
             int x = alignX(anchorX, toastW);
             drawChip(g, x, anchorY, toastW, CHIP_H, alpha);

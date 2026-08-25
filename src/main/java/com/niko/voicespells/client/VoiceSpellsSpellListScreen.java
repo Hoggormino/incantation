@@ -34,9 +34,12 @@ public final class VoiceSpellsSpellListScreen extends Screen {
 
     /** Sort modes are fixed — they don't depend on what's indexed. */
     private enum SortMode {
-        NAME("Name"), SCHOOL("School"), MANA("Mana"), CAST("Cast");
-        final String label;
-        SortMode(String l) { this.label = l; }
+        NAME("voicespells.spelllist.sort_name"),
+        SCHOOL("voicespells.spelllist.sort_school"),
+        MANA("voicespells.spelllist.sort_mana"),
+        CAST("voicespells.spelllist.sort_cast");
+        final String labelKey;
+        SortMode(String k) { this.labelKey = k; }
     }
 
     /** Sentinel used by the school cycle to mean "no filter". */
@@ -116,16 +119,20 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         // a plain vanilla button with no chevrons, so a chip reading just "Fire" or "Name" gave
         // no hint that it cycles at all — it looked like a button that would do something. The
         // label carries it instead, which is what vanilla's own cycle options do.
-        addRenderableWidget(NeonCycle.named(px, controlsY, schoolW, 18, "School",
+        addRenderableWidget(NeonCycle.named(px, controlsY, schoolW, 18,
+            Component.translatable("voicespells.spelllist.filter_school").getString(),
             schoolOptions, currentSchool,
-            s -> capitalizeOne(s),
+            s -> SCHOOL_ALL.equals(s)
+                ? Component.translatable("voicespells.spelllist.school_all").getString()
+                : capitalizeOne(s),
             val -> {
                 currentSchool = val;
                 applyFilter(search != null ? search.getValue() : "");
             }));
         addRenderableWidget(NeonCycle.named(px + schoolW + 4, controlsY, sortW, 18,
-            "Sort", SortMode.values(), currentSort,
-            s -> s.label,
+            Component.translatable("voicespells.spelllist.filter_sort").getString(),
+            SortMode.values(), currentSort,
+            s -> Component.translatable(s.labelKey).getString(),
             val -> {
                 currentSort = val;
                 applyFilter(search != null ? search.getValue() : "");
@@ -165,7 +172,7 @@ public final class VoiceSpellsSpellListScreen extends Screen {
         // "Add alias..." pops the inline editor for the selected row. Disabled while nothing
         // is selected so the affordance points at the click-a-row UX.
         aliasButton = NeonButton.of(px, buttonsY, 110, 20,
-            Component.literal("Add alias..."), b -> openAliasEditor());
+            Component.translatable("voicespells.spelllist.add_alias"), b -> openAliasEditor());
         aliasButton.active = !selectedId.isEmpty();
         addRenderableWidget(aliasButton);
 
@@ -198,10 +205,13 @@ public final class VoiceSpellsSpellListScreen extends Screen {
 
     private Component footerText() {
         if (System.currentTimeMillis() < copiedFlashUntil) {
-            return Component.literal("Copied: " + copiedId);
+            return Component.translatable("voicespells.spelllist.copied")
+                .append(Component.literal(": " + copiedId));
         }
         if (!selectedId.isEmpty()) {
-            return Component.literal("Selected: " + selectedId + "  ·  click 'Add alias...' to map a phrase");
+            return Component.translatable("voicespells.spelllist.selected")
+                .append(Component.literal(": " + selectedId + "  ·  "))
+                .append(Component.translatable("voicespells.spelllist.selected_hint"));
         }
         return Component.literal(filtered.size() + " spells — click a row to select + copy id");
     }
@@ -407,7 +417,8 @@ public final class VoiceSpellsSpellListScreen extends Screen {
             }
             if (meta.length() > 0) body.add(meta.toString());
             String ct = info.castTimeFormatted();
-            if (!ct.isEmpty()) body.add("Cast: " + ct);
+            if (!ct.isEmpty()) body.add(
+                Component.translatable("voicespells.spelllist.tooltip_cast").getString() + ": " + ct);
             // How many times the player has voice-cast this specific spell. Only shows once
             // we have at least one cast to report.
             int castCount = VoiceStats.castCount(spellId);
@@ -423,7 +434,8 @@ public final class VoiceSpellsSpellListScreen extends Screen {
             String phrases = filtered.stream()
                 .filter(r -> r.id().equals(spellId))
                 .findFirst().map(SpellIndex.SpellRow::phrases).orElse("");
-            if (!phrases.isEmpty()) body.add("Say: " + phrases);
+            if (!phrases.isEmpty()) body.add(
+                Component.translatable("voicespells.spelllist.tooltip_say").getString() + ": " + phrases);
 
             // Reflective per-spell description (damage / range / duration etc. — whatever
             // Iron's Spells' getUniqueInfo decides to surface).

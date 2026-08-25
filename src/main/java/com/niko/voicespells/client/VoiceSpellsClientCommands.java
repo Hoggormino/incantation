@@ -33,12 +33,14 @@ public final class VoiceSpellsClientCommands {
             String def = MicCapture.defaultDevice();
             String selected = VoiceSpellsConfig.cCaptureDevice;
 
-            ctx.getSource().sendSuccess(() -> Component.literal("Capture devices")
+            ctx.getSource().sendSuccess(() -> Component
+                .translatable("voicespells.command.devices_title")
                 .withStyle(ChatFormatting.GOLD), false);
 
             if (devices.isEmpty()) {
                 ctx.getSource().sendSuccess(() -> Component
-                    .literal("  none found — OpenAL reported no capture devices")
+                    .literal("  ")
+                    .append(Component.translatable("voicespells.command.devices_none"))
                     .withStyle(ChatFormatting.RED), false);
             } else {
                 for (String d : devices) {
@@ -55,22 +57,34 @@ public final class VoiceSpellsClientCommands {
             }
 
             ctx.getSource().sendSuccess(() -> Component
-                .literal("  default: ").withStyle(ChatFormatting.DARK_GRAY)
-                .append(Component.literal(def.isEmpty() ? "(unknown)" : def)
+                .literal("  ")
+                .append(Component.translatable("voicespells.command.devices_default"))
+                .append(Component.literal(": ")).withStyle(ChatFormatting.DARK_GRAY)
+                .append((def.isEmpty()
+                        ? Component.translatable("voicespells.command.devices_unknown")
+                        : Component.literal(def))
                     .withStyle(ChatFormatting.GRAY)), false);
             ctx.getSource().sendSuccess(() -> Component
-                .literal("  configured: ").withStyle(ChatFormatting.DARK_GRAY)
-                .append(Component.literal(
-                        selected == null || selected.isBlank() ? "(system default)" : selected)
+                .literal("  ")
+                .append(Component.translatable("voicespells.command.devices_configured"))
+                .append(Component.literal(": ")).withStyle(ChatFormatting.DARK_GRAY)
+                .append((selected == null || selected.isBlank()
+                        ? Component.translatable("voicespells.command.devices_system_default")
+                        : Component.literal(selected))
                     .withStyle(ChatFormatting.GRAY)), false);
 
             MicCapture cap = VoiceController.captureEngine();
-            String state = cap == null ? "not started" : cap.status();
+            String state = cap == null
+                ? Component.translatable("voicespells.command.devices_not_started").getString()
+                : cap.status();
             ctx.getSource().sendSuccess(() -> Component
-                .literal("  state: ").withStyle(ChatFormatting.DARK_GRAY)
+                .literal("  ")
+                .append(Component.translatable("voicespells.command.devices_state"))
+                .append(Component.literal(": ")).withStyle(ChatFormatting.DARK_GRAY)
                 .append(Component.literal(state).withStyle(ChatFormatting.AQUA)), false);
             ctx.getSource().sendSuccess(() -> Component
-                .literal("  set captureDevice in voicespells-client.toml to pick one")
+                .literal("  ")
+                .append(Component.translatable("voicespells.command.devices_hint"))
                 .withStyle(ChatFormatting.DARK_GRAY), false);
             return 1;
         }));
@@ -81,7 +95,7 @@ public final class VoiceSpellsClientCommands {
             int floor = VoiceSpellsConfig.cGrammarFloor;
 
             ctx.getSource().sendSuccess(() -> Component
-                .literal("Active grammar — " + active.size() + " phrases, floor " + floor)
+                .translatable("voicespells.command.grammar_title", active.size(), floor)
                 .withStyle(ChatFormatting.GOLD), false);
             // Only claim there are decoys when the grammar is actually the narrowed one. With no
             // usable owned-spell scan the recognizer listens for every phrase and all of them can
@@ -89,10 +103,10 @@ public final class VoiceSpellsClientCommands {
             // both wrong and alarming.
             boolean narrowed = VoiceController.grammarIsNarrowed();
             ctx.getSource().sendSuccess(() -> Component
-                .literal(narrowed
-                    ? "  " + owned.size() + " spell(s) equipped; anything beyond that is a "
-                      + "decoy that cannot cast"
-                    : "  Not narrowed to equipped spells, so every phrase here can cast")
+                .literal("  ")
+                .append(narrowed
+                    ? Component.translatable("voicespells.command.grammar_decoys", owned.size())
+                    : Component.translatable("voicespells.command.grammar_not_narrowed"))
                 .withStyle(ChatFormatting.DARK_GRAY), false);
 
             // Sort so the phrases you can actually cast are listed first and marked — the whole
@@ -119,33 +133,34 @@ public final class VoiceSpellsClientCommands {
                 com.niko.voicespells.spells.SpellIndex.vocabularyReport();
             if (r.vocabularyWords() == 0) {
                 ctx.getSource().sendSuccess(() -> Component
-                    .literal("No speech-model vocabulary loaded — nothing can be checked.")
+                    .translatable("voicespells.command.vocab_none")
                     .withStyle(ChatFormatting.YELLOW), false);
                 ctx.getSource().sendSuccess(() -> Component
-                    .literal("  The model may still be downloading, or its word list could not be read.")
+                    .literal("  ")
+                    .append(Component.translatable("voicespells.command.vocab_none_hint"))
                     .withStyle(ChatFormatting.DARK_GRAY), false);
                 return 1;
             }
             ctx.getSource().sendSuccess(() -> Component
-                .literal("Speech model vocabulary — " + r.vocabularyWords() + " words")
+                .translatable("voicespells.command.vocab_title", r.vocabularyWords())
                 .withStyle(ChatFormatting.GOLD), false);
 
             if (r.dead().isEmpty()) {
                 ctx.getSource().sendSuccess(() -> Component
-                    .literal("  Every indexed phrase can be spoken. Nothing is stranded.")
+                    .literal("  ")
+                    .append(Component.translatable("voicespells.command.vocab_all_sayable"))
                     .withStyle(ChatFormatting.GREEN), false);
             } else {
                 ctx.getSource().sendSuccess(() -> Component
-                    .literal("  " + r.dead().size() + " spell(s) CANNOT be cast by voice — the model "
-                           + "has no entry for a word in the name and no alias covers it:")
+                    .literal("  ").append(Component.translatable("voicespells.command.vocab_dead", r.dead().size()))
                     .withStyle(ChatFormatting.RED), false);
                 for (String d : r.dead()) {
                     ctx.getSource().sendSuccess(() -> Component.literal("    " + d)
                         .withStyle(ChatFormatting.RED), false);
                 }
                 ctx.getSource().sendSuccess(() -> Component
-                    .literal("  Add a phrase for each in customPhrases, or use Add alias... on the "
-                           + "spell list.")
+                    .literal("  ")
+                    .append(Component.translatable("voicespells.command.vocab_dead_hint"))
                     .withStyle(ChatFormatting.DARK_GRAY), false);
             }
 
@@ -153,8 +168,7 @@ public final class VoiceSpellsClientCommands {
             // "why does saying the spell's actual name not work, when the spell casts fine?"
             if (!r.rescued().isEmpty()) {
                 ctx.getSource().sendSuccess(() -> Component
-                    .literal("  " + r.rescued().size() + " name(s) the model cannot say, covered by "
-                           + "an alias — say the right-hand form:")
+                    .literal("  ").append(Component.translatable("voicespells.command.vocab_rescued", r.rescued().size()))
                     .withStyle(ChatFormatting.AQUA), false);
                 for (String s : r.rescued()) {
                     ctx.getSource().sendSuccess(() -> Component.literal("    " + s)
@@ -168,15 +182,14 @@ public final class VoiceSpellsClientCommands {
             boolean on = VoiceController.toggleTranscription();
             if (on) {
                 ctx.getSource().sendSuccess(() -> Component
-                    .literal("Calibration mode ON — grammar dropped, casting disabled")
+                    .translatable("voicespells.command.calibration_on")
                     .withStyle(ChatFormatting.GOLD), false);
                 ctx.getSource().sendSuccess(() -> Component
-                    .literal("Say a spell name and read what the model actually heard, then bind "
-                           + "that wording as an alias. Run again to go back to casting.")
+                    .translatable("voicespells.command.calibration_hint")
                     .withStyle(ChatFormatting.DARK_GRAY), false);
             } else {
                 ctx.getSource().sendSuccess(() -> Component
-                    .literal("Calibration mode OFF — grammar restored, casting re-enabled")
+                    .translatable("voicespells.command.calibration_off")
                     .withStyle(ChatFormatting.GREEN), false);
             }
             return 1;
@@ -187,7 +200,7 @@ public final class VoiceSpellsClientCommands {
             VoiceController.onConfigChanged();
             VoiceController.syncCapture();
             ctx.getSource().sendSuccess(() -> Component
-                .literal("Reloaded config, phrases and grammar")
+                .translatable("voicespells.command.reloaded")
                 .withStyle(ChatFormatting.GREEN), false);
             return 1;
         }));

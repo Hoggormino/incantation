@@ -43,11 +43,26 @@ public final class CreditsScreen extends Screen {
     private List<Page> pages = List.of();
 
     /** One credit line: a name on the left, what it is on the right. A blank name draws the value
-     *  as a full-width note instead, which is how the disclaimers and licence lines are set. */
+     *  as a full-width note instead, which is how the disclaimers and licence lines are set.
+     *
+     *  <p>Either field may hold a lang key or literal text. Prose is a key so it can be
+     *  translated; people's handles, mod names, licence identifiers, version numbers and the
+     *  model URL are literal, because translating them would be wrong. {@link #text(String)}
+     *  tells the two apart by the mod-id prefix and resolves the row at draw time. */
     private record Row(String name, String note) {
         static Row of(String name, String note) { return new Row(name, note); }
         static Row note(String text)            { return new Row("", text); }
         static Row gap()                        { return new Row("", ""); }
+    }
+
+    /** Marks a row field or heading as a lang key rather than text to draw as-is. */
+    private static final String KEY_PREFIX = "voicespells.";
+
+    /** Resolves one row field: a lang key becomes translated text, anything else is used as is.
+     *  Resolved per frame rather than cached because the player can change language without
+     *  reopening the screen, and because truncation has to measure the translated string. */
+    private static String text(String s) {
+        return s.startsWith(KEY_PREFIX) ? Component.translatable(s).getString() : s;
     }
 
     private record Page(String heading, List<Row> rows) {}
@@ -60,48 +75,48 @@ public final class CreditsScreen extends Screen {
     private static final List<Row> THANKS = List.of(
         Row.of("NeoTargetStudios", "Spidercat0926"),
         Row.gap(),
-        Row.note("Spanish phrasebook - close to 300 spell"),
-        Row.note("names across nine spell mods, and a hand"),
-        Row.note("with the mod itself.")
+        Row.note("voicespells.credits.thanks_1"),
+        Row.note("voicespells.credits.thanks_2"),
+        Row.note("voicespells.credits.thanks_3")
     );
 
     private static List<Page> pages() {
         List<Page> out = new ArrayList<>();
 
-        out.add(new Page("The mod", List.of(
-            Row.of("Iron's Spells: Incantation", "v" + modVersion()),
-            Row.of("Author", "Hoggormino"),
-            Row.of("Licence", "MIT"),
+        out.add(new Page("voicespells.credits.mod_heading", List.of(
+            Row.of("voicespells.config.title", "v" + modVersion()),
+            Row.of("voicespells.credits.author", "Hoggormino"),
+            Row.of("voicespells.credits.licence", "MIT"),
             Row.gap(),
-            Row.note("Voice casting for Iron's Spells 'n Spellbooks."),
-            Row.note("Speech recognition runs locally on your own"),
-            Row.note("machine. Nothing you say leaves it.")
+            Row.note("voicespells.credits.about_1"),
+            Row.note("voicespells.credits.about_2"),
+            Row.note("voicespells.credits.about_3")
         )));
 
-        out.add(new Page("Speech recognition", List.of(
+        out.add(new Page("voicespells.credits.speech_heading", List.of(
             Row.of("Vosk", "Alpha Cephei - Apache 2.0"),
             Row.of("JNA", "Apache 2.0 / LGPL 2.1"),
             Row.gap(),
-            Row.note("Vosk does the listening; JNA is how it reaches"),
-            Row.note("its native library from Java."),
+            Row.note("voicespells.credits.vosk_1"),
+            Row.note("voicespells.credits.vosk_2"),
             Row.gap(),
-            Row.note("Speech models are downloaded separately and"),
-            Row.note("are not all under the same licence as Vosk."),
-            Row.note("Each one's terms are listed with it at:"),
+            Row.note("voicespells.credits.models_1"),
+            Row.note("voicespells.credits.models_2"),
+            Row.note("voicespells.credits.models_3"),
             Row.note("alphacephei.com/vosk/models")
         )));
 
-        out.add(new Page("Built for", List.of(
+        out.add(new Page("voicespells.credits.built_for_heading", List.of(
             Row.of("Iron's Spells 'n Spellbooks", "iron431"),
-            Row.of("Curios API", "optional - spellbook slots"),
+            Row.of("Curios API", "voicespells.credits.curios_note"),
             Row.gap(),
-            Row.note("Incantation is an add-on. It is not made by"),
-            Row.note("or affiliated with the authors of the mods"),
-            Row.note("above, and it does nothing without Iron's"),
-            Row.note("Spells installed.")
+            Row.note("voicespells.credits.addon_1"),
+            Row.note("voicespells.credits.addon_2"),
+            Row.note("voicespells.credits.addon_3"),
+            Row.note("voicespells.credits.addon_4")
         )));
 
-        if (!THANKS.isEmpty()) out.add(new Page("Thanks", THANKS));
+        if (!THANKS.isEmpty()) out.add(new Page("voicespells.credits.thanks_heading", THANKS));
         return out;
     }
 
@@ -124,7 +139,7 @@ public final class CreditsScreen extends Screen {
     }
 
     public CreditsScreen(Screen parent) {
-        super(Component.literal("Incantation - Credits"));
+        super(Component.translatable("voicespells.credits.title"));
         this.parent = parent;
     }
 
@@ -147,10 +162,10 @@ public final class CreditsScreen extends Screen {
         int btnW = 90;
 
         addRenderableWidget(NeonButton.of(px + Theme.PAD, btnY, btnW, 20,
-            Component.literal("← Prev"), b -> { if (page > 0) { page--; rebuildWidgets(); } }))
+            Component.translatable("voicespells.credits.prev"), b -> { if (page > 0) { page--; rebuildWidgets(); } }))
             .active = page > 0;
         addRenderableWidget(NeonButton.of(px + Theme.PAD + btnW + 6, btnY, btnW, 20,
-            Component.literal("Next →"), b -> { if (page < total - 1) { page++; rebuildWidgets(); } }))
+            Component.translatable("voicespells.credits.next"), b -> { if (page < total - 1) { page++; rebuildWidgets(); } }))
             .active = page < total - 1;
         addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 80, btnY, 80, 20,
             CommonComponents.GUI_BACK, b -> onClose()));
@@ -188,7 +203,7 @@ public final class CreditsScreen extends Screen {
         int y = py + Theme.HEADER_H + 24;
         int bodyLimit = wellBottom;   // the frame's own inner edge - these must not drift apart
 
-        g.drawString(font, Component.literal(current.heading()), x, y,
+        g.drawString(font, Component.translatable(current.heading()), x, y,
             Theme.C_HEADING, !Theme.lightSurface());
         y += 14;
 
@@ -204,16 +219,19 @@ public final class CreditsScreen extends Screen {
             Row row = current.rows().get(i);
             if (row.name().isEmpty()) {
                 if (row.note().isEmpty()) continue;    // spacer
-                g.drawString(font, Component.literal(Theme.fit(font, row.note(), innerW)),
+                g.drawString(font, Component.literal(Theme.fit(font, text(row.note()), innerW)),
                     x, ly, Theme.C_MUTED, !Theme.lightSurface());
                 continue;
             }
             // Name left, note right-aligned, with the NAME giving way when the two collide -
             // the note carries the licence, which is the half that has to stay readable.
-            int noteW = font.width(row.note());
-            g.drawString(font, Component.literal(Theme.fit(font, row.name(), innerW - noteW - 8)),
+            // Both sides are resolved before measuring: a translated note is a different width.
+            String name = text(row.name());
+            String note = text(row.note());
+            int noteW = font.width(note);
+            g.drawString(font, Component.literal(Theme.fit(font, name, innerW - noteW - 8)),
                 x, ly, Theme.C_TEXT, !Theme.lightSurface());
-            g.drawString(font, Component.literal(row.note()),
+            g.drawString(font, Component.literal(note),
                 x + innerW - noteW, ly, Theme.C_FAINT, !Theme.lightSurface());
         }
     }

@@ -36,7 +36,7 @@ public final class LiveMonitorScreen extends Screen {
     private int listX, listY, listW, listH;
 
     public LiveMonitorScreen(Screen parent) {
-        super(Component.literal("Live Monitor"));
+        super(Component.translatable("voicespells.monitor.title"));
         this.parent = parent;
     }
 
@@ -94,9 +94,9 @@ public final class LiveMonitorScreen extends Screen {
 
         List<VoiceController.RecognitionEvent> events = VoiceController.recentEvents();
         if (events.isEmpty()) {
-            Theme.text(g, font, "Say a spell name — what the recogniser hears appears here.",
+            Theme.text(g, font, Component.translatable("voicespells.monitor.empty").getString(),
                 listX + 6, listY + 6, Theme.C_FAINT);
-            Theme.text(g, font, "E exact · F fuzzy · S substring · P phonetic",
+            Theme.text(g, font, Component.translatable("voicespells.monitor.legend").getString(),
                 listX + 6, listY + 6 + LINE_H, Theme.C_FAINT);
             return;
         }
@@ -110,10 +110,11 @@ public final class LiveMonitorScreen extends Screen {
             String outcome;
             if (e.matched() == null) {
                 color = Theme.F_NOMATCH;
-                outcome = "— no match";
+                outcome = Component.translatable("voicespells.monitor.no_match").getString();
             } else if (e.matched().endsWith("(deduped)")) {
                 color = Theme.F_DEDUP;
-                outcome = "↻ " + shortId(e.matched().replace(" (deduped)", "")) + " (dup)";
+                outcome = "↻ " + shortId(e.matched().replace(" (deduped)", "")) + " "
+                        + Component.translatable("voicespells.monitor.dup").getString();
             } else {
                 // Same distinction the Test Arena makes: a bare id is a cast, an id with a
                 // trailing reason was suppressed. Drawing both with the arrow made one utterance
@@ -125,7 +126,8 @@ public final class LiveMonitorScreen extends Screen {
                     outcome = "· " + shortId(raw.substring(0, sp)) + " " + raw.substring(sp + 1);
                 } else {
                     color = Theme.F_MATCH;
-                    outcome = "→ " + shortId(raw) + " CAST";
+                    outcome = "→ " + shortId(raw) + " "
+                            + Component.translatable("voicespells.monitor.cast").getString();
                 }
             }
             String line = String.format(Locale.ROOT, "%2ds  c%.2f  [%s]  \"%s\"  %s",

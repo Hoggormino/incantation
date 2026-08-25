@@ -104,7 +104,7 @@ public final class AudioDevicesScreen extends Screen {
     private int listX, listY, listW, listH, rowsVisible;
 
     public AudioDevicesScreen(Screen parent) {
-        super(Component.literal("Microphone & Sound"));
+        super(Component.translatable("voicespells.devices.title"));
         this.parent = parent;
     }
 
@@ -135,9 +135,9 @@ public final class AudioDevicesScreen extends Screen {
         int tabY = py + Theme.HEADER_H + 6;
         int tabW = 96;
         micTab = addRenderableWidget(NeonButton.of(px + Theme.PAD, tabY, tabW, 18,
-            Component.literal("Microphone"), b -> { showingOutputs = false; scroll = 0; rebuildWidgets(); }));
+            Component.translatable("voicespells.devices.tab_microphone"), b -> { showingOutputs = false; scroll = 0; rebuildWidgets(); }));
         outTab = addRenderableWidget(NeonButton.of(px + Theme.PAD + tabW + 4, tabY, tabW, 18,
-            Component.literal("Sound output"), b -> { showingOutputs = true; scroll = 0; rebuildWidgets(); }));
+            Component.translatable("voicespells.devices.tab_output"), b -> { showingOutputs = true; scroll = 0; rebuildWidgets(); }));
         // An inactive vanilla button renders sunken, which is exactly how vanilla shows a
         // selected tab. Reusing that is cheaper and more consistent than a bespoke tab widget.
         // Switching tabs mid-scan would rebuild the screen under the worker thread.
@@ -145,7 +145,7 @@ public final class AudioDevicesScreen extends Screen {
         outTab.active = !showingOutputs && !scanning;
 
         scanBtn = addRenderableWidget(NeonButton.of(px + Theme.PAD, py + panelH - 26, 110, 20,
-            Component.literal("Test all mics"), b -> startScan()));
+            Component.translatable("voicespells.devices.test_all"), b -> startScan()));
         scanBtn.active = !showingOutputs && !scanning;
 
         listX = px + Theme.PAD;
@@ -432,8 +432,9 @@ public final class AudioDevicesScreen extends Screen {
             String label;
             if (isDefaultRow) {
                 String suffix = defaultSuffix();
-                int room = nameMax - font.width("System default");
-                label = "System default" + (suffix.isEmpty() ? "" : trim(suffix, room));
+                String sysDefault = Component.translatable("voicespells.devices.system_default").getString();
+                int room = nameMax - font.width(sysDefault);
+                label = sysDefault + (suffix.isEmpty() ? "" : trim(suffix, room));
             } else {
                 label = trim(MicCapture.prettyName(raw), nameMax);
             }
@@ -459,8 +460,10 @@ public final class AudioDevicesScreen extends Screen {
             // Theme.fit, not trim(): trim() keeps the TAIL and prepends its own ellipsis,
             // which is right for a device row and wrong here - "Testing " + trim(..) + "..."
             // rendered as "Testing ...Audio Device)...", ellipsised at both ends.
-            int room = listW - font.width("Testing ");
-            Theme.text(g, font, "Testing " + Theme.fit(font, now.isEmpty() ? "devices" : now, room),
+            String testingPrefix = Component.translatable("voicespells.devices.testing").getString();
+            String fallback = Component.translatable("voicespells.devices.testing_fallback").getString();
+            int room = listW - font.width(testingPrefix);
+            Theme.text(g, font, testingPrefix + Theme.fit(font, now.isEmpty() ? fallback : now, room),
                 barX, y, Theme.C_WARN);
             return;
         }
@@ -477,13 +480,13 @@ public final class AudioDevicesScreen extends Screen {
         String note;
         int noteColor;
         if (VoiceController.deviceSilent()) {
-            note = "no signal - pick another";
+            note = Component.translatable("voicespells.devices.no_signal").getString();
             noteColor = Theme.C_DANGER;
         } else if (level > 0.02f) {
             note = String.format(Locale.ROOT, "hearing you (%.0f%%)", level * 100f);
             noteColor = Theme.C_SUCCESS;
         } else {
-            note = "say something";
+            note = Component.translatable("voicespells.devices.say_something").getString();
             noteColor = Theme.C_MUTED;
         }
         Theme.text(g, font, note, barX + barW + 6, y, noteColor);
@@ -504,9 +507,11 @@ public final class AudioDevicesScreen extends Screen {
         if (showingOutputs || raw == null || raw.isEmpty()) return "";
         Integer p = peaks.get(raw);
         if (p == null) return "";
-        if (p < 0) return "unavailable";
-        if (p == 0) return "silent";
-        return p >= SIGNAL_PEAK ? "signal" : "quiet";
+        if (p < 0) return Component.translatable("voicespells.devices.verdict_unavailable").getString();
+        if (p == 0) return Component.translatable("voicespells.devices.verdict_silent").getString();
+        return Component.translatable(p >= SIGNAL_PEAK
+            ? "voicespells.devices.verdict_signal"
+            : "voicespells.devices.verdict_quiet").getString();
     }
 
     private int verdictColor(String raw) {

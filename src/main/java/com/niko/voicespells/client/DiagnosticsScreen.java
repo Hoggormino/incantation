@@ -36,7 +36,7 @@ public final class DiagnosticsScreen extends Screen {
     private long flashUntil = 0L;
 
     public DiagnosticsScreen(Screen parent) {
-        super(Component.literal("Diagnostics"));
+        super(Component.translatable("voicespells.diagnostics.title"));
         this.parent = parent;
     }
 
@@ -85,9 +85,9 @@ public final class DiagnosticsScreen extends Screen {
         int btnW = (avail - gap * 2) / 3;
         int x0 = px + Theme.PAD;
         addRenderableWidget(NeonButton.of(x0, btnY, btnW, 20,
-            Component.literal("Re-run"), b -> rerun()));
+            Component.translatable("voicespells.diagnostics.rerun"), b -> rerun()));
         addRenderableWidget(NeonButton.of(x0 + btnW + gap, btnY, btnW, 20,
-            Component.literal("Copy report"), b -> copyReport()));
+            Component.translatable("voicespells.diagnostics.copy_report"), b -> copyReport()));
         // The last button absorbs the division remainder so the row ends flush.
         addRenderableWidget(NeonButton.of(x0 + (btnW + gap) * 2, btnY, avail - (btnW + gap) * 2, 20,
             CommonComponents.GUI_BACK, b -> onClose()));
@@ -132,7 +132,7 @@ public final class DiagnosticsScreen extends Screen {
             summaryLabel.setColor(summaryColor());
             flashUntil = 0L;
         } else if (flashUntil > 0) {
-            summaryLabel.setMessage(Component.literal("Report copied to clipboard."));
+            summaryLabel.setMessage(Component.translatable("voicespells.diagnostics.copied"));
             summaryLabel.setColor(Theme.C_SUCCESS);
         }
         // Vanilla backdrop first (blurred world in-game, dirt on the title screen, and it

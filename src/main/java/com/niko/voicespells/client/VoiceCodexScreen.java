@@ -34,7 +34,7 @@ public final class VoiceCodexScreen extends Screen {
     private TopList list;
 
     public VoiceCodexScreen(Screen parent) {
-        super(Component.literal("Voice Codex"));
+        super(Component.translatable("voicespells.codex.title"));
         this.parent = parent;
     }
 
@@ -96,18 +96,23 @@ public final class VoiceCodexScreen extends Screen {
         //   4. badge row: ✓ 10  ✓ 50  ▶ 200  ○ 1000 — communicates what's done vs upcoming
         int total = VoiceStats.totalCasts();
         int[] mileVals = { 10, 50, 200, 1000 };
-        String[] mileNames = { "Apprentice", "Adept", "Magus", "Archmage" };
+        String[] mileNames = {
+            Component.translatable("voicespells.codex.tier_apprentice").getString(),
+            Component.translatable("voicespells.codex.tier_adept").getString(),
+            Component.translatable("voicespells.codex.tier_magus").getString(),
+            Component.translatable("voicespells.codex.tier_archmage").getString() };
         int nextIdx = mileVals.length - 1;
         for (int i = 0; i < mileVals.length; i++) {
             if (total < mileVals[i]) { nextIdx = i; break; }
         }
         int next = mileVals[nextIdx];
         int progress = Math.min(total, next);
-        String currentTier = total >= 1000 ? "Archmage"
-                          : total >= 200  ? "Magus"
-                          : total >= 50   ? "Adept"
-                          : total >= 10   ? "Apprentice"
-                                          : "Novice";
+        String currentTier = Component.translatable(
+                            total >= 1000 ? "voicespells.codex.tier_archmage"
+                          : total >= 200  ? "voicespells.codex.tier_magus"
+                          : total >= 50   ? "voicespells.codex.tier_adept"
+                          : total >= 10   ? "voicespells.codex.tier_apprentice"
+                                          : "voicespells.codex.tier_novice").getString();
 
         int cardH = 70;
         Theme.well(g, x, y, colW, cardH);
@@ -116,16 +121,21 @@ public final class VoiceCodexScreen extends Screen {
         // label can be trimmed to what it leaves. Below about a 400px window these two ran
         // straight through each other and the row read "VOICE CASTIier: Adept" - the same
         // collision the stat rows below already solve.
-        String tierLabel = "Tier: " + currentTier;
+        String tierLabel = Component.translatable("voicespells.codex.tier").getString()
+            + ": " + currentTier;
         int tierW = font.width(tierLabel);
-        g.drawString(font, Component.literal(Theme.fit(font, "VOICE CASTING", colW - tierW - 22)),
+        g.drawString(font, Component.literal(Theme.fit(font,
+                Component.translatable("voicespells.codex.section_casting").getString(),
+                colW - tierW - 22)),
             x + 8, y + 5, Theme.C_MUTED, !Theme.lightSurface());
         g.drawString(font, Component.literal(tierLabel),
             x + colW - tierW - 8, y + 5, Theme.C_TEXT, !Theme.lightSurface());
 
         // Row 2: count + next, same rule.
-        String nextLabel = (total >= 1000) ? "max tier reached"
-            : "next: " + mileNames[nextIdx] + " (" + next + ")";
+        String nextLabel = (total >= 1000)
+            ? Component.translatable("voicespells.codex.max_tier").getString()
+            : Component.translatable("voicespells.codex.next").getString() + ": "
+              + mileNames[nextIdx] + " (" + next + ")";
         int nextW = font.width(nextLabel);
         g.drawString(font, Component.literal(Theme.fit(font, total + " casts", colW - nextW - 22)),
             x + 8, y + 18, Theme.C_TEXT, !Theme.lightSurface());
@@ -197,12 +207,12 @@ public final class VoiceCodexScreen extends Screen {
         this.rowWidth  = colW - 16;   // the well minus the 8px inset applied to x on both sides
 
         // Stat rows
-        line(g, x, y, "Total casts",       String.valueOf(VoiceStats.totalCasts())); y += rowH;
-        line(g, x, y, "Best streak",       String.valueOf(VoiceStats.longestStreak())); y += rowH;
-        line(g, x, y, "Schools touched",   String.valueOf(VoiceStats.distinctSchoolsCast())); y += rowH;
-        line(g, x, y, "Distinct spells",   String.valueOf(VoiceStats.snapshotAll().size())); y += rowH;
-        line(g, x, y, "First cast",        VoiceStats.fmtDate(VoiceStats.firstCastMs())); y += rowH;
-        line(g, x, y, "Last cast",         VoiceStats.fmtElapsed(VoiceStats.lastCastMs())); y += rowH;
+        line(g, x, y, "voicespells.codex.total_casts",     String.valueOf(VoiceStats.totalCasts())); y += rowH;
+        line(g, x, y, "voicespells.codex.best_streak",     String.valueOf(VoiceStats.longestStreak())); y += rowH;
+        line(g, x, y, "voicespells.codex.schools_touched", String.valueOf(VoiceStats.distinctSchoolsCast())); y += rowH;
+        line(g, x, y, "voicespells.codex.distinct_spells", String.valueOf(VoiceStats.snapshotAll().size())); y += rowH;
+        line(g, x, y, "voicespells.codex.first_cast",      VoiceStats.fmtDate(VoiceStats.firstCastMs())); y += rowH;
+        line(g, x, y, "voicespells.codex.last_cast",       VoiceStats.fmtElapsed(VoiceStats.lastCastMs())); y += rowH;
         double avgMs = VoiceController.averageLatencyMs();
         // "Speak to cast" — measured from first audio of the utterance to dispatch. Median,
         // not mean, so a hesitant cast every now and then doesn't blow the number up.
@@ -215,14 +225,15 @@ public final class VoiceCodexScreen extends Screen {
         // "Speak to cast (ses..." - a label that has to be cut to make room for its value is the
         // wrong label. The scope moves into the value, which has room for it, and the empty case
         // still says what to do about it rather than showing a bare dash.
-        line(g, x, y, "Speak to cast",
-            avgMs < 0 ? "after 1st cast"
+        line(g, x, y, "voicespells.codex.speak_to_cast",
+            avgMs < 0 ? Component.translatable("voicespells.codex.latency_pending").getString()
                       : String.format(Locale.ROOT, "%.0fms this session", avgMs)); y += rowH;
         int streak = VoiceStats.sotdStreak();
         // This counts consecutive days of completing the SPELL-OF-THE-DAY challenge, not days
         // the mod was used — "Daily streak" invited the second reading and then showed "—" to a
         // player casting every day, which looks like a bug rather than an uncompleted challenge.
-        line(g, x, y, "Daily challenge", streak > 0 ? streak + " day(s)" : "not done today"); y += rowH;
+        line(g, x, y, "voicespells.codex.daily_challenge", streak > 0 ? streak + " day(s)"
+            : Component.translatable("voicespells.codex.daily_none").getString()); y += rowH;
 
         // (Right-column heading is drawn inside TopList.renderWidget so it sits below the
         //  accent rule glow instead of overlapping it.)
@@ -238,7 +249,7 @@ public final class VoiceCodexScreen extends Screen {
     private int rowPitch = ROW_H;
     private int rowWidth = 0;
 
-    private void line(GuiGraphics g, int x, int y, String label, String value) {
+    private void line(GuiGraphics g, int x, int y, String labelKey, String value) {
         // A row that would draw below the well is dropped, not clipped. The pitch above already
         // compresses to fit, and at every window size Minecraft allows all eight rows survive -
         // this is the guard for the size that does not exist yet.
@@ -262,6 +273,7 @@ public final class VoiceCodexScreen extends Screen {
         // Trim the LABEL to whatever the value leaves, rather than letting the two overlap.
         // "Speak to cast (session)" against "after 1st cast" needs more than the column has, and
         // the two strings were drawn straight through each other.
+        String label = Component.translatable(labelKey).getString();
         String shown = Theme.fit(font, label, colW - vw - 6);
         g.drawString(font, Component.literal(shown), x, y, Theme.C_MUTED, !Theme.lightSurface());
         g.drawString(font, Component.literal(value), x + colW - vw, y, Theme.C_TEXT, !Theme.lightSurface());
@@ -281,14 +293,14 @@ public final class VoiceCodexScreen extends Screen {
             // No rule under it. It was the only horizontal separator in twelve screens, and the
             // 18px headerOffset below already supplies the gap it was drawing. x+8/y+5 matches
             // "VOICE CASTING" in the card to its left, which sat 4px further in and 1px lower.
-            g.drawString(font, Component.literal("MOST CAST"), x + 8, y + 5,
+            g.drawString(font, Component.translatable("voicespells.codex.most_cast"), x + 8, y + 5,
                 Theme.C_MUTED, !Theme.lightSurface());
 
             int headerOffset = 18;
             int rowsArea = h - 4 - headerOffset;
             List<Map.Entry<String, Integer>> top = VoiceStats.topSpells(Math.max(1, rowsArea / ROW_H));
             if (top.isEmpty()) {
-                g.drawString(font, Component.literal("(no casts yet — speak a spell!)"),
+                g.drawString(font, Component.translatable("voicespells.codex.empty"),
                     x + 8, y + headerOffset + 2, Theme.C_FAINT, !Theme.lightSurface());
                 return;
             }

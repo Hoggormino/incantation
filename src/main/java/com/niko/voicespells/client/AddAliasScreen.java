@@ -53,7 +53,7 @@ public final class AddAliasScreen extends Screen {
     }
 
     public AddAliasScreen(Screen parent, String spellId, String prefillAlias) {
-        super(Component.literal("Add Alias"));
+        super(Component.translatable("voicespells.alias.title"));
         this.parent = parent;
         this.spellId = spellId;
         this.prefillAlias = prefillAlias;
@@ -83,8 +83,9 @@ public final class AddAliasScreen extends Screen {
         // from 1.21 on; the 1.20.1 one draws it at full length wherever it lands, so a long
         // namespaced id ran straight out of the panel on Forge and stayed inside it on NeoForge.
         int labelW = panelW - Theme.PAD * 2;
+        String forPrefix = Component.translatable("voicespells.alias.for_spell").getString();
         StringWidget forLabel = new StringWidget(px + Theme.PAD, y, labelW, 9,
-            Component.literal(Theme.fit(font, "For:  " + spellId, labelW)), font);
+            Component.literal(Theme.fit(font, forPrefix + spellId, labelW)), font);
         forLabel.alignLeft();
         forLabel.setColor(Theme.C_MUTED);
         addRenderableWidget(forLabel);
@@ -92,8 +93,8 @@ public final class AddAliasScreen extends Screen {
 
         // Alias text field.
         phraseBox = new EditBox(font, px + Theme.PAD, y,
-            panelW - Theme.PAD * 2, 20, Component.literal("Alias phrase"));
-        phraseBox.setHint(Component.literal("e.g. abyss blast"));
+            panelW - Theme.PAD * 2, 20, Component.translatable("voicespells.alias.phrase_field"));
+        phraseBox.setHint(Component.translatable("voicespells.alias.phrase_hint"));
         phraseBox.setMaxLength(80);
         if (prefillAlias != null && !prefillAlias.isBlank()) {
             phraseBox.setValue(prefillAlias);
@@ -112,7 +113,7 @@ public final class AddAliasScreen extends Screen {
 
         // Section header for existing aliases.
         StringWidget sectionLabel = new StringWidget(px + Theme.PAD, y,
-            panelW - Theme.PAD * 2, 9, Component.literal("EXISTING ALIASES"), font);
+            panelW - Theme.PAD * 2, 9, Component.translatable("voicespells.alias.existing_heading"), font);
         sectionLabel.alignLeft();
         sectionLabel.setColor(Theme.C_MUTED);
         addRenderableWidget(sectionLabel);
@@ -126,7 +127,7 @@ public final class AddAliasScreen extends Screen {
         if (aliasRows.isEmpty()) {
             StringWidget emptyLabel = new StringWidget(px + Theme.PAD, y,
                 panelW - Theme.PAD * 2, 9,
-                Component.literal("(none — add one above)"), font);
+                Component.translatable("voicespells.alias.none"), font);
             emptyLabel.alignLeft();
             emptyLabel.setColor(Theme.C_FAINT);
             addRenderableWidget(emptyLabel);
@@ -179,7 +180,7 @@ public final class AddAliasScreen extends Screen {
         addRenderableWidget(NeonButton.of(px + Theme.PAD, btnY, btnW, 20,
             CommonComponents.GUI_CANCEL, b -> onClose()));
         addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - btnW, btnY, btnW, 20,
-            Component.literal("Save"), b -> save()));
+            Component.translatable("voicespells.alias.save"), b -> save()));
     }
 
     @Override
@@ -251,12 +252,12 @@ public final class AddAliasScreen extends Screen {
         String raw = phraseBox.getValue();
         String phrase = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
         if (phrase.isEmpty()) {
-            infoLabel.setMessage(Component.literal("Alias can't be empty"));
+            infoLabel.setMessage(Component.translatable("voicespells.alias.empty_error"));
             infoLabel.setColor(Theme.C_DANGER);
             return;
         }
         if (phrase.indexOf('=') >= 0) {
-            infoLabel.setMessage(Component.literal("'=' is not allowed in an alias"));
+            infoLabel.setMessage(Component.translatable("voicespells.alias.equals_error"));
             infoLabel.setColor(Theme.C_DANGER);
             return;
         }

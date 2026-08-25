@@ -49,7 +49,7 @@ public final class FirstRunScreen extends Screen {
     private NeonButton nextBtn;
 
     public FirstRunScreen(Screen parent) {
-        super(Component.literal("Welcome to Incantation"));
+        super(Component.translatable("voicespells.wizard.title"));
         this.parent = parent;
     }
 
@@ -91,17 +91,18 @@ public final class FirstRunScreen extends Screen {
 
         if (step > 0) {
             addRenderableWidget(NeonButton.of(backX, btnY, btnW, 20,
-                Component.literal("Back"), b -> { step--; rebuildWidgets(); }));
+                Component.translatable("voicespells.wizard.back"),
+                b -> { step--; rebuildWidgets(); }));
         }
         if (step < STEPS - 1) {
             addRenderableWidget(NeonButton.of(midX, btnY, btnW, 20,
-                Component.literal("Skip"), b -> finish()));
+                Component.translatable("voicespells.wizard.skip"), b -> finish()));
         }
         // On step 2 (Try a spell), offer a direct shortcut into the spell list since it's
         // the natural next destination.
         if (step == 2) {
             addRenderableWidget(NeonButton.of(midX, btnY, btnW, 20,
-                Component.literal("Spell List"),
+                Component.translatable("voicespells.config.spelllist"),
                 b -> {
                     if (minecraft != null) minecraft.setScreen(
                         new VoiceSpellsSpellListScreen(this));
@@ -118,15 +119,17 @@ public final class FirstRunScreen extends Screen {
             // Width from the text, not a guess: "Meter dead? Choose microphone..." measured 6px
             // wider than the 160 it was given, so vanilla drew the label straight through the
             // button's right edge.
+            Component micLabel = Component.translatable("voicespells.wizard.choose_microphone");
             int micBtnW = Math.min(panelW - Theme.PAD * 2,
-                font.width("Choose microphone...") + 24);
+                font.width(micLabel.getString()) + 24);
             addRenderableWidget(NeonButton.of(px + (panelW - micBtnW) / 2, btnY - 24, micBtnW, 20,
-                Component.literal("Choose microphone..."),
+                micLabel,
                 b -> { if (minecraft != null) minecraft.setScreen(new AudioDevicesScreen(this)); }));
         }
-        String nextLabel = (step == STEPS - 1) ? "Done" : "Next";
+        Component nextLabel = Component.translatable(
+            (step == STEPS - 1) ? "voicespells.wizard.done" : "voicespells.wizard.next");
         nextBtn = NeonButton.of(nextX, btnY, btnW, 20,
-            Component.literal(nextLabel), b -> {
+            nextLabel, b -> {
                 if (step == STEPS - 1) finish();
                 else { step++; rebuildWidgets(); }
             });
@@ -228,44 +231,53 @@ public final class FirstRunScreen extends Screen {
 
     // ------------------------------------------------------------------------ Step 0
     private void renderWelcome(GuiGraphics g, int x, int y) {
-        drawHeading(g, x, y, "What this does");
-        drawLines(g, x, y + 14, new String[] {
-            "Cast Iron's Spells by speaking their",
-            "names out loud — no other mod needed.",
-            "",
-            "You don't press anything to cast.",
-            "When you say a spell name you have",
-            "equipped, it casts.",
-            "",
-            "This wizard only opens once.",
-            "You can reopen it from the config screen.",
+        drawHeading(g, x, y, Component.translatable("voicespells.wizard.p1.heading"));
+        drawLines(g, x, y + 14, new Component[] {
+            Component.translatable("voicespells.wizard.p1.1"),
+            Component.translatable("voicespells.wizard.p1.2"),
+            Component.empty(),
+            Component.translatable("voicespells.wizard.p1.4"),
+            Component.translatable("voicespells.wizard.p1.5"),
+            Component.translatable("voicespells.wizard.p1.6"),
+            Component.empty(),
+            Component.translatable("voicespells.wizard.p1.8"),
+            Component.translatable("voicespells.wizard.p1.9"),
         });
     }
 
     // ------------------------------------------------------------------------ Step 1
     private void renderMicCheck(GuiGraphics g, int x, int y) {
-        drawHeading(g, x, y, "Mic + model check");
+        drawHeading(g, x, y, Component.translatable("voicespells.wizard.p2.heading"));
         y += 14;
 
         // Three live status pills: Model, microphone, Audio detected.
         String modelStatus = VoiceController.statusLine();
-        if (modelStatus == null || modelStatus.isEmpty()) modelStatus = "warming up";
+        if (modelStatus == null || modelStatus.isEmpty()) {
+            modelStatus = Component.translatable("voicespells.wizard.status_warming_up").getString();
+        }
         boolean modelReady = "READY".equals(modelStatus);
         boolean micLive    = VoiceController.isHearingNow();
 
         int pillW = (panelW - Theme.PAD * 2 - 8 * 2) / 3;
         int pillY = y;
-        drawPill(g, x,                       pillY, pillW, "Model",
-            modelReady ? modelStatus : modelStatus + "…", modelReady);
-        drawPill(g, x + (pillW + 8),         pillY, pillW, "Microphone",
-            micLive ? "transmitting" : "idle", micLive);
-        drawPill(g, x + (pillW + 8) * 2,     pillY, pillW, "Audio",
-            micDetectedThisVisit ? "detected" : "waiting", micDetectedThisVisit);
+        drawPill(g, x,                       pillY, pillW,
+            Component.translatable("voicespells.wizard.pill_model"),
+            Component.literal(modelReady ? modelStatus : modelStatus + "…"), modelReady);
+        drawPill(g, x + (pillW + 8),         pillY, pillW,
+            Component.translatable("voicespells.wizard.pill_microphone"),
+            Component.translatable(micLive
+                ? "voicespells.wizard.mic_transmitting"
+                : "voicespells.wizard.mic_idle"), micLive);
+        drawPill(g, x + (pillW + 8) * 2,     pillY, pillW,
+            Component.translatable("voicespells.wizard.pill_audio"),
+            Component.translatable(micDetectedThisVisit
+                ? "voicespells.wizard.audio_detected"
+                : "voicespells.wizard.audio_waiting"), micDetectedThisVisit);
         y += 28;
 
-        drawLines(g, x, y, new String[] {
-            "Talk into your mic now.",
-            "The meter below should move while you speak.",
+        drawLines(g, x, y, new Component[] {
+            Component.translatable("voicespells.wizard.p2.1"),
+            Component.translatable("voicespells.wizard.p2.2"),
         });
         y += 22;
 
@@ -281,24 +293,26 @@ public final class FirstRunScreen extends Screen {
         // can accumulate across a long utterance and otherwise bleed off-screen.
         String last = VoiceController.lastHeard();
         boolean empty = (last == null || last.isEmpty());
-        String prefix = "Last heard: ";
+        String prefix = Component.translatable("voicespells.wizard.last_heard").getString();
         int availW = panelW - Theme.PAD * 2 - font.width(prefix) - font.width("\"\"");
-        String shown = empty ? "(nothing yet)" : "\"" + Theme.fitFromRight(font, last, availW) + "\"";
+        String shown = empty
+            ? Component.translatable("voicespells.wizard.nothing_heard").getString()
+            : "\"" + Theme.fitFromRight(font, last, availW) + "\"";
         g.drawString(font, Component.literal(prefix + shown), x, y,
             empty ? Theme.C_FAINT : Theme.C_TEXT, !Theme.lightSurface());
     }
 
     // ------------------------------------------------------------------------ Step 2
     private void renderTrySpell(GuiGraphics g, int x, int y) {
-        drawHeading(g, x, y, "Try a spell");
+        drawHeading(g, x, y, Component.translatable("voicespells.wizard.p3.heading"));
         // Tightened from 7 lines to 4 — the original arrangement left a huge empty stretch
         // between the body and the feed box, which read as "broken layout" rather than
         // breathing room. The remaining hint is the actually-actionable part.
-        String[] body = {
-            "Equip a spellbook in your Curios slot",
-            "(or hold a spellbook / imbued weapon).",
-            "Then say a spell name — it casts.",
-            "Open Spell List below to see every phrase.",
+        Component[] body = {
+            Component.translatable("voicespells.wizard.p3.1"),
+            Component.translatable("voicespells.wizard.p3.2"),
+            Component.translatable("voicespells.wizard.p3.3"),
+            Component.translatable("voicespells.wizard.p3.4"),
         };
         drawLines(g, x, y + 14, body);
 
@@ -310,7 +324,7 @@ public final class FirstRunScreen extends Screen {
         int feedW = panelW - Theme.PAD * 2;
         int feedH = panelH - (feedY - py) - 40; // leave room for buttons + a real gap
         if (feedH > 30) {
-            g.drawString(font, Component.literal("Recent recognitions:"), feedX, feedY,
+            g.drawString(font, Component.translatable("voicespells.wizard.recent_heading"), feedX, feedY,
                 Theme.C_MUTED, !Theme.lightSurface());
             feedY += 13;                          // label text + ~4px gap before the box
             feedH -= 13;
@@ -318,7 +332,7 @@ public final class FirstRunScreen extends Screen {
 
             List<VoiceController.RecognitionEvent> events = VoiceController.recentEvents();
             if (events.isEmpty()) {
-                g.drawString(font, Component.literal("(say a spell — entries appear here)"),
+                g.drawString(font, Component.translatable("voicespells.wizard.empty_feed"),
                     feedX + 4, feedY + 4, Theme.C_FAINT, !Theme.lightSurface());
             } else {
                 long now = System.nanoTime();
@@ -331,7 +345,9 @@ public final class FirstRunScreen extends Screen {
                     int color = e.matched() == null ? Theme.F_NOMATCH : Theme.F_MATCH;
                     String text = String.format(java.util.Locale.ROOT, "%2ds  \"%s\"  %s",
                         ageSec, e.heard(),
-                        e.matched() == null ? "— no match" : "→ " + shortId(e.matched()));
+                        e.matched() == null
+                            ? "— " + Component.translatable("voicespells.wizard.no_match").getString()
+                            : "→ " + shortId(e.matched()));
                     // The heard string is whatever the recogniser produced and was drawn entirely
                     // unclipped - no truncation of any kind - so a long utterance ran straight out
                     // of the feed and across the wizard. This is the step whose Next button is
@@ -345,8 +361,8 @@ public final class FirstRunScreen extends Screen {
     }
 
     // ------------------------------------------------------------------------ Shared
-    private void drawHeading(GuiGraphics g, int x, int y, String text) {
-        g.drawString(font, Component.literal(text), x, y, Theme.C_HEADING, !Theme.lightSurface());
+    private void drawHeading(GuiGraphics g, int x, int y, Component text) {
+        g.drawString(font, text, x, y, Theme.C_HEADING, !Theme.lightSurface());
     }
 
     /**
@@ -358,7 +374,7 @@ public final class FirstRunScreen extends Screen {
      * refusing to draw a line that would still land on the buttons, keeps the navigation legible
      * on every window the panel fits in at all.
      */
-    private void drawLines(GuiGraphics g, int x, int y, String[] lines) {
+    private void drawLines(GuiGraphics g, int x, int y, Component[] lines) {
         // On the mic-check step there is an extra button row above the nav row, so the text has
         // to stop higher or it draws into it.
         int limit = py + panelH - 28 - 4 - (step == 1 ? 24 : 0);
@@ -366,8 +382,8 @@ public final class FirstRunScreen extends Screen {
         for (int i = 0; i < lines.length; i++) {
             int ly = y + i * lineH;
             if (ly + 8 > limit) break;
-            int color = lines[i].isEmpty() ? Theme.C_FAINT : Theme.C_TEXT;
-            g.drawString(font, Component.literal(lines[i]), x, ly, color, !Theme.lightSurface());
+            int color = lines[i].getString().isEmpty() ? Theme.C_FAINT : Theme.C_TEXT;
+            g.drawString(font, lines[i], x, ly, color, !Theme.lightSurface());
         }
     }
 
@@ -379,7 +395,7 @@ public final class FirstRunScreen extends Screen {
     }
 
     /** Status pill: label above, value below, on a vanilla button face. */
-    private void drawPill(GuiGraphics g, int x, int y, int w, String label, String value, boolean good) {
+    private void drawPill(GuiGraphics g, int x, int y, int w, Component label, Component value, boolean good) {
         int h = 24;
         Theme.rowFace(g, x, y, w, h);
         // Both strings are fitted to the pill. The value used to be drawn unclipped, and
@@ -388,9 +404,9 @@ public final class FirstRunScreen extends Screen {
         // Microphone pill beside it. That happens in exactly the state this screen exists to
         // diagnose: the player whose model failed cannot read whether their mic is working,
         // and Next is gated on the meter moving.
-        g.drawString(font, Component.literal(fit(label, w - 12)), x + 6, y + 3,
+        g.drawString(font, Component.literal(fit(label.getString(), w - 12)), x + 6, y + 3,
             Theme.C_MUTED, !Theme.lightSurface());
-        g.drawString(font, Component.literal(fit(value, w - 12)), x + 6, y + 13,
+        g.drawString(font, Component.literal(fit(value.getString(), w - 12)), x + 6, y + 13,
             good ? Theme.C_SUCCESS : Theme.C_TEXT, !Theme.lightSurface());
     }
 

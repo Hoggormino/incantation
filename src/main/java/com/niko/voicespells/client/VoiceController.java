@@ -430,15 +430,15 @@ public final class VoiceController {
      *  a final result matched no spell. Replaces the literal heard text in the miss toast
      *  for some misses (not all, so a real "I want to see what was heard" debug session still
      *  surfaces the raw phrase). */
-    private static final String[] SASS_LINES = {
-        "Was that a spell?",
-        "Try again, mortal.",
-        "The arcane shrugs.",
-        "Words have power. Find them.",
-        "Mumble harder.",
-        "Hmm. Not in the grimoire.",
-        "Did the mic catch a bird?",
-        "Speak with conviction.",
+    private static final String[] SASS_KEYS = {
+        "voicespells.hud.sass_1",
+        "voicespells.hud.sass_2",
+        "voicespells.hud.sass_3",
+        "voicespells.hud.sass_4",
+        "voicespells.hud.sass_5",
+        "voicespells.hud.sass_6",
+        "voicespells.hud.sass_7",
+        "voicespells.hud.sass_8",
     };
     private static final java.util.Random SASS_RNG = new java.util.Random();
     public static String lastMissText()  { return lastMissText;  }
@@ -749,7 +749,8 @@ public final class VoiceController {
         mc.execute(() -> {
             if (mc.player == null) return;
             Component line = isFinal
-                ? Component.literal("heard: ")
+                ? Component.translatable("voicespells.chat.heard")
+                    .append(Component.literal(": "))
                     .withStyle(net.minecraft.ChatFormatting.DARK_GRAY)
                     .append(Component.literal(phrase)
                         .withStyle(net.minecraft.ChatFormatting.AQUA))
@@ -1699,11 +1700,7 @@ public final class VoiceController {
                 + "speech model. The phrases are English and the model is not, so Vosk has "
                 + "dropped them from the grammar and recognition will not fire. Translate them "
                 + "in config/voicespells/phrasebook.json, or load an English model.", dead, total);
-            pendingChatWarning = Component.literal(
-                "§c[Incantation] §fThis speech model cannot say " + dead + " of "
-                + total + " spell phrases, so casting will not work. The phrases are English "
-                + "and the model is not — translate them in phrasebook.json, or use an "
-                + "English model. Run §e/voicespells vocab§f for the details.");
+            pendingChatWarning = Component.translatable("voicespells.warn.unsayable_grammar", dead, total);
         } catch (Throwable ignored) {
             // A diagnostic must never be the thing that breaks the load.
         }
@@ -1843,9 +1840,10 @@ public final class VoiceController {
      * a different event from "I did not understand you", and it is the one a player is most
      * likely to misread as the mod being broken - so it says which gate, rather than nothing.
      */
-    private static void noteGateRejection(String reason) {
+    private static void noteGateRejection(String reasonKey) {
         if (!VoiceSpellsConfig.cShowMisses) return;
-        lastMissText  = "blocked: " + reason;
+        lastMissText  = Component.translatable("voicespells.hud.blocked").getString()
+            + ": " + Component.translatable(reasonKey).getString();
         lastMissNanos = System.nanoTime();
     }
 
@@ -2061,7 +2059,8 @@ public final class VoiceController {
                 logRecog("Heard '{}' but no matching spell", phrase);
                 if (VoiceSpellsConfig.cShowMisses) {
                     lastMissText  = VoiceSpellsConfig.cSassMode && SASS_RNG.nextInt(3) == 0
-                        ? SASS_LINES[SASS_RNG.nextInt(SASS_LINES.length)]
+                        ? Component.translatable(
+                              SASS_KEYS[SASS_RNG.nextInt(SASS_KEYS.length)]).getString()
                         : phrase;
                     lastMissNanos = System.nanoTime();
                 }
@@ -2136,7 +2135,7 @@ public final class VoiceController {
             // Say so on the HUD. Every gate on this path used to reject in total silence, into a
             // ring buffer four debug screens read - so a blocked cast was indistinguishable from
             // a dead microphone, which is exactly how this bug was experienced.
-            noteGateRejection("out of combat");
+            noteGateRejection("voicespells.hud.gate_out_of_combat");
             return;
         }
         // AFK gate — pause recognition for stationary players (also saves a tick of CPU

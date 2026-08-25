@@ -27,91 +27,108 @@ public final class HelpScreen extends Screen {
     /** Top-left of the runtime panel + clamped dimensions; recomputed every {@link #init()}. */
     private int px, py, panelW, panelH;
 
-    /** Page content. Each page is a heading + body lines. Empty string lines = blank rows. */
+    /** Marks a page line as a lang key rather than copy to draw as-is. */
+    private static final String KEY_PREFIX = "voicespells.";
+
+    /**
+     * Page content. Each page is a heading key + body lines, and every line is a lang key so the
+     * guide can be translated. Two kinds of entry are not keys and are drawn verbatim: an empty
+     * string, which is a blank row, and the loadout sample on page 4, which is TOML syntax and
+     * spell ids rather than prose. {@link #line(String)} tells them apart.
+     */
     private static final String[][] PAGES = {
         {
-            "What this mod does",
-            "Incantation lets you cast Iron's Spells by",
-            "speaking their names out loud. It listens on",
-            "your microphone on its own — no other mod",
-            "is needed.",
+            "voicespells.help.p1.heading",
+            "voicespells.help.p1.1",
+            "voicespells.help.p1.2",
+            "voicespells.help.p1.3",
+            "voicespells.help.p1.4",
             "",
-            "You don't press anything to cast. Say the",
-            "spell name out loud — the recogniser hears",
-            "it and the server casts it for you.",
+            "voicespells.help.p1.6",
+            "voicespells.help.p1.7",
+            "voicespells.help.p1.8",
             "",
-            "Spellbook rules still apply: you need the",
-            "spell equipped (Curios slot or hand depending",
-            "on cast mode), and you need the mana/cooldown."
+            "voicespells.help.p1.10",
+            "voicespells.help.p1.11",
+            "voicespells.help.p1.12"
         },
         {
-            "How matching works",
-            "When Vosk hears you, the mod tries four",
-            "levels of matching, in order:",
+            "voicespells.help.p2.heading",
+            "voicespells.help.p2.1",
+            "voicespells.help.p2.2",
             "",
-            "  E - exact phrase",
-            "  F - fuzzy (±1-2 letter typos)",
-            "  S - substring (longer phrase contains a",
-            "      known spell name)",
-            "  P - phonetic (Soundex sound-alike fallback)",
+            "voicespells.help.p2.4",
+            "voicespells.help.p2.5",
+            "voicespells.help.p2.6",
+            "voicespells.help.p2.7",
+            "voicespells.help.p2.8",
             "",
-            "The Live Monitor in Config shows the tier",
-            "letter so you can see WHY a phrase matched.",
-            "Tune Fuzzy Tolerance + Substring Match in the",
-            "Recognition tab if you get false matches."
+            "voicespells.help.p2.10",
+            "voicespells.help.p2.11",
+            "voicespells.help.p2.12",
+            "voicespells.help.p2.13"
         },
         {
-            "Aliases + incantations",
-            "If Vosk can't pronounce a spell name (e.g.",
-            "'starfall', 'counterspell'), add a custom",
-            "phrase: open the Spell List, click the row,",
-            "press 'Add alias...' and type words the model",
-            "can say. Example: 'star fall'.",
+            "voicespells.help.p3.heading",
+            "voicespells.help.p3.1",
+            "voicespells.help.p3.2",
+            "voicespells.help.p3.3",
+            "voicespells.help.p3.4",
+            "voicespells.help.p3.5",
             "",
-            "Incantations are the same mechanism with a",
-            "flavor framing — say 'by the power of fire'",
-            "to cast fireball. Edit them in the toml or",
-            "via the alias screen.",
+            "voicespells.help.p3.7",
+            "voicespells.help.p3.8",
+            "voicespells.help.p3.9",
+            "voicespells.help.p3.10",
             "",
-            "If a near-miss happens, the HUD pops a hint",
-            "'? Spell Name [press Y]' — one keystroke",
-            "opens the alias screen pre-filled."
+            "voicespells.help.p3.12",
+            "voicespells.help.p3.13",
+            "voicespells.help.p3.14"
         },
         {
-            "Loadouts",
-            "Loadouts let you say a category name and",
-            "the mod picks the first castable spell from",
-            "the list. Configure in voicespells-client.toml:",
+            "voicespells.help.p4.heading",
+            "voicespells.help.p4.1",
+            "voicespells.help.p4.2",
+            "voicespells.help.p4.3",
             "",
             "  loadouts = [",
             "    \"offense=irons_spellbooks:fireball,",
             "      irons_spellbooks:lightning_lance\"",
             "  ]",
             "",
-            "Saying 'offense' picks the first one that's",
-            "not on cooldown and that you can afford.",
-            "Great for combat panic-casts."
+            "voicespells.help.p4.10",
+            "voicespells.help.p4.11",
+            "voicespells.help.p4.12"
         },
         {
-            "Troubleshooting",
-            "Config → More... → Diagnostics checks the",
-            "mic, Iron's Spells, Curios, the speech model",
-            "and its vocabulary, the spell index, and the",
-            "cast pipeline.",
+            "voicespells.help.p5.heading",
+            "voicespells.help.p5.1",
+            "voicespells.help.p5.2",
+            "voicespells.help.p5.3",
+            "voicespells.help.p5.4",
             "",
-            "Each check shows OK / WARN / FAIL with a",
-            "one-line reason. 'Copy report' bundles them",
-            "to your clipboard for sharing.",
+            "voicespells.help.p5.6",
+            "voicespells.help.p5.7",
+            "voicespells.help.p5.8",
             "",
-            "Achievements live in the vanilla L menu",
-            "under the 'Voice Casting' tab.",
+            "voicespells.help.p5.10",
+            "voicespells.help.p5.11",
             "",
-            "Stats live in Voice Codex under More..."
+            "voicespells.help.p5.13"
         }
     };
 
+    /**
+     * Resolves one page line. A lang key becomes translated text; anything else — a blank row,
+     * the loadout sample — is drawn exactly as written, because it carries ids and config syntax
+     * a translator must not touch.
+     */
+    private static Component line(String s) {
+        return s.startsWith(KEY_PREFIX) ? Component.translatable(s) : Component.literal(s);
+    }
+
     public HelpScreen(Screen parent) {
-        super(Component.literal("Incantation — Help"));
+        super(Component.translatable("voicespells.help.title"));
         this.parent = parent;
     }
 
@@ -134,10 +151,10 @@ public final class HelpScreen extends Screen {
         int btnW = 90;
 
         addRenderableWidget(NeonButton.of(px + Theme.PAD, btnY, btnW, 20,
-            Component.literal("← Prev"), b -> { if (page > 0) { page--; rebuildWidgets(); } }))
+            Component.translatable("voicespells.help.prev"), b -> { if (page > 0) { page--; rebuildWidgets(); } }))
             .active = page > 0;
         addRenderableWidget(NeonButton.of(px + Theme.PAD + btnW + 6, btnY, btnW, 20,
-            Component.literal("Next →"), b -> { if (page < PAGES.length - 1) { page++; rebuildWidgets(); } }))
+            Component.translatable("voicespells.help.next"), b -> { if (page < PAGES.length - 1) { page++; rebuildWidgets(); } }))
             .active = page < PAGES.length - 1;
         addRenderableWidget(NeonButton.of(px + panelW - Theme.PAD - 80, btnY, 80, 20,
             CommonComponents.GUI_BACK, b -> onClose()));
@@ -196,13 +213,13 @@ public final class HelpScreen extends Screen {
         int avail = bodyLimit - (y + 14);
         int lineH = Math.max(8, Math.min(11, avail / bodyCount));
         // Heading
-        g.drawString(font, Component.literal(lines[0]), x, y, Theme.C_HEADING, !Theme.lightSurface());
+        g.drawString(font, Component.translatable(lines[0]), x, y, Theme.C_HEADING, !Theme.lightSurface());
         y += 14;
         for (int i = 1; i < lines.length; i++) {
             int ly = y + (i - 1) * lineH;
             if (ly + 8 > bodyLimit) break;
             int color = lines[i].isEmpty() ? Theme.C_FAINT : Theme.C_TEXT;
-            g.drawString(font, Component.literal(lines[i]), x, ly, color, !Theme.lightSurface());
+            g.drawString(font, line(lines[i]), x, ly, color, !Theme.lightSurface());
         }
     }
 }

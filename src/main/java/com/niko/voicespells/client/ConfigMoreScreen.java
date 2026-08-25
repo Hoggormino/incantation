@@ -43,7 +43,7 @@ public final class ConfigMoreScreen extends Screen {
     private int gridWellX, gridWellY, gridWellW, gridWellH;
 
     public ConfigMoreScreen(Screen parent) {
-        super(Component.literal("More"));
+        super(Component.translatable("voicespells.more.title"));
         this.parent = parent;
     }
 
@@ -92,47 +92,48 @@ public final class ConfigMoreScreen extends Screen {
         // First slot, and it earns it: picking the wrong capture device is the most common reason
         // the mod appears to do nothing at all, and until this screen existed the only cure was
         // hand-editing a device name into the toml.
-        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Microphone & Sound"),
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.translatable("voicespells.more.audio_devices"),
             b -> { if (minecraft != null) minecraft.setScreen(new AudioDevicesScreen(this)); }));
-        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Welcome Wizard"),
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.translatable("voicespells.more.welcome_wizard"),
             b -> { if (minecraft != null) minecraft.setScreen(new FirstRunScreen(this)); }));
-        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Voice Codex"),
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.translatable("voicespells.more.voice_codex"),
             b -> { if (minecraft != null) minecraft.setScreen(new VoiceCodexScreen(this)); }));
-        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Diagnostics"),
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.translatable("voicespells.more.diagnostics"),
             b -> { if (minecraft != null) minecraft.setScreen(new DiagnosticsScreen(this)); }));
         // The Live Monitor moved off the config screen and onto its own, so it needs a door.
-        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Live Monitor"),
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.translatable("voicespells.more.live_monitor"),
             b -> { if (minecraft != null) minecraft.setScreen(new LiveMonitorScreen(this)); }));
-        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Help / Guide"),
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.translatable("voicespells.more.help"),
             b -> { if (minecraft != null) minecraft.setScreen(new HelpScreen(this)); }));
         // Next to Help because it is the other read-only, text-only screen, and because the
         // licences it carries should be findable without reading the jar.
-        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Credits"),
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.translatable("voicespells.more.credits"),
             b -> { if (minecraft != null) minecraft.setScreen(new CreditsScreen(this)); }));
         NeonButton arenaBtn = NeonButton.of(0, 0, colW, 20,
-            Component.literal(inWorld ? "Test Arena" : "Test Arena (in-world)"),
+            inWorld ? Component.translatable("voicespells.more.test_arena")
+                    : Component.translatable("voicespells.more.test_arena_in_world"),
             b -> { if (minecraft != null) minecraft.setScreen(new TestArenaScreen(this)); });
         arenaBtn.active = inWorld;
         grid.add(arenaBtn);
-        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Reload grammar"),
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.translatable("voicespells.more.reload_grammar"),
             b -> {
                 VoiceController.onConfigChanged();
-                flashStatus("Grammar reload requested", Theme.C_SUCCESS);
+                flashStatus(Component.translatable("voicespells.more.grammar_reloaded"), Theme.C_SUCCESS);
             }));
         calibBtn = NeonButton.of(0, 0, colW, 20,
-            Component.literal("Calibrate mic (5s)"),
+            Component.translatable("voicespells.more.calibrate_mic"),
             b -> {
                 if (!VoiceController.isCalibrating()) {
                     VoiceController.startNoiseGateCalibration();
                     // C_WARN, which means "in progress" - this used to use the theme accent,
                     // back when there was one.
-                    flashStatus("Calibrating — say a few spell names…", Theme.C_WARN);
+                    flashStatus(Component.translatable("voicespells.more.calibrating"), Theme.C_WARN);
                 }
             });
         grid.add(calibBtn);
-        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Export profile"),
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.translatable("voicespells.more.export_profile"),
             b -> exportProfile()));
-        grid.add(NeonButton.of(0, 0, colW, 20, Component.literal("Import profile"),
+        grid.add(NeonButton.of(0, 0, colW, 20, Component.translatable("voicespells.more.import_profile"),
             b -> importProfile()));
 
         // Stride derived from the space that actually exists, not the 24px this used to assume.
@@ -222,9 +223,15 @@ public final class ConfigMoreScreen extends Screen {
 
     }
 
+    /** Kept for the two status messages that still carry a runtime value in their text and so
+     *  cannot be a plain lang key. Everything else flashes a translatable component. */
     private void flashStatus(String text, int color) {
+        flashStatus(Component.literal(text), color);
+    }
+
+    private void flashStatus(Component text, int color) {
         if (statusLabel != null) {
-            statusLabel.setMessage(Component.literal(text));
+            statusLabel.setMessage(text);
             statusLabel.setColor(color);
         }
         // Cleared by tick() when the flash lapses, so the line does not sit there afterwards as
@@ -286,7 +293,7 @@ public final class ConfigMoreScreen extends Screen {
 
         if (minecraft != null) {
             minecraft.keyboardHandler.setClipboard(sb.toString());
-            flashStatus("Profile copied to clipboard", Theme.C_SUCCESS);
+            flashStatus(Component.translatable("voicespells.more.profile_copied"), Theme.C_SUCCESS);
         }
     }
 
@@ -294,7 +301,7 @@ public final class ConfigMoreScreen extends Screen {
         if (minecraft == null) return;
         String raw = minecraft.keyboardHandler.getClipboard();
         if (raw == null || raw.isBlank()) {
-            flashStatus("Clipboard is empty", Theme.C_DANGER);
+            flashStatus(Component.translatable("voicespells.more.clipboard_empty"), Theme.C_DANGER);
             return;
         }
         String[] lines = raw.split("\\r?\\n");
@@ -443,7 +450,7 @@ public final class ConfigMoreScreen extends Screen {
                     "Gate set: " + Math.round(VoiceController.lastCalibThreshold())));
             } else {
                 // Must fit the half-width grid button; the old full-width label spilled out.
-                calibBtn.setMessage(Component.literal("Calibrate mic (5s)"));
+                calibBtn.setMessage(Component.translatable("voicespells.more.calibrate_mic"));
             }
         }
         // Vanilla backdrop first (blurred world in-game, dirt on the title screen, and it

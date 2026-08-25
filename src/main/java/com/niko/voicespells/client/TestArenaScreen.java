@@ -42,7 +42,7 @@ public final class TestArenaScreen extends Screen {
     private final long openedAtNanos = System.nanoTime();
 
     public TestArenaScreen(Screen parent) {
-        super(Component.literal("Test Arena"));
+        super(Component.translatable("voicespells.arena.title"));
         this.parent = parent;
     }
 
@@ -109,9 +109,9 @@ public final class TestArenaScreen extends Screen {
         int discW = panelW - Theme.PAD * 2;
         int discH = 24;
         Theme.rowFace(g, x, y, discW, discH);
-        g.drawString(font, Component.literal("PRACTICE MODE — spells will NOT actually cast."),
+        g.drawString(font, Component.translatable("voicespells.arena.practice_warning"),
             x + 6, y + 3, Theme.C_TEXT, !Theme.lightSurface());
-        g.drawString(font, Component.literal("Close this screen to cast for real."),
+        g.drawString(font, Component.translatable("voicespells.arena.practice_hint"),
             x + 6, y + 13, Theme.C_MUTED, !Theme.lightSurface());
         y += discH + 6;
 
@@ -122,10 +122,10 @@ public final class TestArenaScreen extends Screen {
             int bannerW = panelW - Theme.PAD * 2;
             int bannerH = 24;
             Theme.rowFace(g, x, y, bannerW, bannerH);
-            g.drawString(font, Component.literal("⚠ Open a world first."), x + 6, y + 3,
+            g.drawString(font, Component.translatable("voicespells.arena.no_world"), x + 6, y + 3,
                 Theme.C_DANGER, !Theme.lightSurface());
             g.drawString(font,
-                Component.literal("Recognition only runs in-game, so nothing fires here."),
+                Component.translatable("voicespells.arena.no_world_hint"),
                 x + 6, y + 13, Theme.C_MUTED, !Theme.lightSurface());
             y += bannerH + 8;
         }
@@ -145,8 +145,9 @@ public final class TestArenaScreen extends Screen {
         // to attempt something specific rather than just stare at the meter.
         String suggestion = sessionSuggestion();
         if (!suggestion.isEmpty()) {
-            int prefixW = font.width("Try saying: ");
-            g.drawString(font, Component.literal("Try saying: "), x, y, Theme.C_MUTED, !Theme.lightSurface());
+            Component tryPrefix = Component.translatable("voicespells.arena.try_saying");
+            int prefixW = font.width(tryPrefix.getString());
+            g.drawString(font, tryPrefix, x, y, Theme.C_MUTED, !Theme.lightSurface());
             g.drawString(font,
                 Component.literal(Theme.fit(font, suggestion, panelW - Theme.PAD * 2 - prefixW)),
                 x + prefixW, y, Theme.C_TEXT, !Theme.lightSurface());
@@ -157,23 +158,30 @@ public final class TestArenaScreen extends Screen {
         // Vosk partials accumulate within an utterance, so a long continuous string of words
         // can pile up. Cap to the panel width so the line never bleeds off-screen.
         String last = VoiceController.lastHeard();
-        if (last == null || last.isEmpty()) last = "(say something)";
-        int labelW = font.width("Last heard:  ");
+        if (last == null || last.isEmpty()) {
+            last = Component.translatable("voicespells.arena.nothing_heard").getString();
+        }
+        Component lastLabel = Component.translatable("voicespells.arena.last_heard");
+        int labelW = font.width(lastLabel.getString());
         int availW = meterW - labelW - 12;   // 6px inset each side of the face
         last = Theme.fitFromRight(font, last, availW);
         // On a vanilla button face, like a setting on the config screen. These two lines are the
         // screen's live readouts and were bare text sitting on the backdrop.
         Theme.rowFace(g, x, y - 3, meterW, 15);
-        g.drawString(font, Component.literal("Last heard:  "), x + 6, y, Theme.C_MUTED, !Theme.lightSurface());
+        g.drawString(font, lastLabel, x + 6, y, Theme.C_MUTED, !Theme.lightSurface());
         g.drawString(font, Component.literal(last),
             x + 6 + labelW, y, Theme.C_TEXT, !Theme.lightSurface());
         y += 17;
 
         // Status + transmission badges.
         String status = VoiceController.statusLine();
-        String mic = VoiceController.isHearingNow() ? "transmitting" : "idle";
-        String statusLine = "Status: " + (status.isEmpty() ? "warming up" : status)
-            + "    Mic: " + mic;
+        String mic = Component.translatable(VoiceController.isHearingNow()
+            ? "voicespells.arena.mic_transmitting" : "voicespells.arena.mic_idle").getString();
+        String statusLine = Component.translatable("voicespells.arena.status_label").getString()
+            + (status.isEmpty()
+                ? Component.translatable("voicespells.arena.status_warming_up").getString()
+                : status)
+            + "    " + Component.translatable("voicespells.arena.mic_label").getString() + mic;
         Theme.rowFace(g, x, y - 3, meterW, 15);
         g.drawString(font, Component.literal(Theme.fit(font, statusLine, meterW - 12)), x + 6, y,
             Theme.C_TEXT, !Theme.lightSurface());
@@ -181,7 +189,7 @@ public final class TestArenaScreen extends Screen {
 
         // Recent recognition list — same source as the Live Monitor, narrower view. Entries
         // with the "(menu)" suffix are what *would have* cast; perfect for practice mode.
-        g.drawString(font, Component.literal("RECENT — would have cast:"), x, y,
+        g.drawString(font, Component.translatable("voicespells.arena.recent_heading"), x, y,
             Theme.C_MUTED, !Theme.lightSurface());
         y += 12;
         int listH = panelH - (y - py) - 36;
@@ -189,7 +197,7 @@ public final class TestArenaScreen extends Screen {
 
         List<VoiceController.RecognitionEvent> events = VoiceController.recentEvents();
         if (events.isEmpty()) {
-            g.drawString(font, Component.literal("(no recognitions yet — try saying a spell)"),
+            g.drawString(font, Component.translatable("voicespells.arena.empty_feed"),
                 x + 6, y + 6, Theme.C_FAINT, !Theme.lightSurface());
         } else {
             long now = System.nanoTime();
@@ -205,10 +213,11 @@ public final class TestArenaScreen extends Screen {
                 String outcome;
                 int color;
                 if (e.matched() == null) {
-                    outcome = "no match";
+                    outcome = Component.translatable("voicespells.arena.no_match").getString();
                     color = Theme.F_NOMATCH;
                 } else if (e.matched().contains("low conf")) {
-                    outcome = "rejected: " + e.matched();
+                    outcome = Component.translatable("voicespells.arena.rejected").getString()
+                        + e.matched();
                     color = Theme.F_DEDUP;
                 } else {
                     // Keep the qualifier. matched() is either a bare spell id (a real cast) or an
@@ -227,7 +236,8 @@ public final class TestArenaScreen extends Screen {
                     String dn = info.displayName().getString();
                     String name = (dn != null && !dn.isEmpty()) ? dn : prettyId(spellId);
                     if (reason.isEmpty()) {
-                        outcome = "→ " + name + "  CAST";
+                        outcome = "→ " + name + "  "
+                            + Component.translatable("voicespells.arena.cast_marker").getString();
                         color = Theme.F_MATCH;
                     } else {
                         // Suppressed: shown, but never in the colour that means "this fired".
@@ -248,7 +258,7 @@ public final class TestArenaScreen extends Screen {
                 shown++;
             }
             if (shown == 0) {
-                g.drawString(font, Component.literal("(speak — entries appear here)"),
+                g.drawString(font, Component.translatable("voicespells.arena.empty_feed_session"),
                     x + 6, y + 6, Theme.C_FAINT, !Theme.lightSurface());
             }
         }
