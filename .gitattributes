@@ -1,0 +1,28 @@
+# Line endings.
+#
+# The repository stores LF and every working tree gets LF, regardless of the
+# platform it is checked out on. Without this, moving the project between
+# Windows and Linux made all 25 source files that happened to be checked out
+# with CRLF appear rewritten end to end -- 7,646 insertions and 7,646
+# deletions whose content was byte-identical. Phantom changes of that size
+# hide the real ones, which is the actual cost.
+*               text=auto eol=lf
+
+# Exceptions, both load-bearing.
+#
+# gradlew is run by /bin/sh; a CR at the end of its shebang line makes the
+# kernel look for an interpreter named "sh\r" and the wrapper dies with a
+# confusing "bad interpreter" error.
+gradlew         text eol=lf
+# Batch files are the mirror image: cmd.exe needs CRLF, and gradlew.bat is
+# how this project is built on Windows.
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+
+# Binaries git must never line-ending-convert or try to merge. Listed by what
+# this repository actually tracks rather than a generic list: mod and wrapper
+# jars, the Vosk grapheme model, store gallery images and the mod icon.
+*.jar           binary
+*.png           binary
+*.bin           binary
+*.zip           binary
