@@ -4,6 +4,7 @@ import com.niko.voicespells.VoiceSpells;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -38,8 +39,8 @@ public final class SpellCaster {
     private static final String SPELL_CONTAINER   = "io.redspace.ironsspellbooks.api.spells.ISpellContainer";
     private static final String SPELL_DATA        = "io.redspace.ironsspellbooks.api.spells.SpellData";
     private static final String SPELLBOOK_MARKER  = "io.redspace.ironsspellbooks.api.item.ISpellbook";
-    /** Scrolls are ISpellContainer but not ISpellbook, so the imbued-weapon scan picks them up.
-     *  They must be cast as CastSource.SCROLL, not SWORD — see findHeldImbued. */
+    /** Scrolls are ISpellContainer but not ISpellbook, so the imbued-item scan picks them up.
+     *  They must be cast as CastSource.SCROLL, not SWORD — see findImbued. */
     private static final String SCROLL_MARKER     = "io.redspace.ironsspellbooks.api.item.IScroll";
     private static final String MAGIC_DATA_CLASS  = "io.redspace.ironsspellbooks.api.magic.MagicData";
     private static final String CURIOS_API        = "top.theillusivec4.curios.api.CuriosApi";
@@ -47,6 +48,20 @@ public final class SpellCaster {
     private static final String CURIOS_SLOT_RES   = "top.theillusivec4.curios.api.SlotResult";
 
     private SpellCaster() {}
+
+    /**
+     * The four worn-armor slots, in the order Iron's Spells' own scan reads them.
+     *
+     * <p>Iron's Spells lets a chestplate be imbued ({@code item.armor.ImbuableChestplateArmorItem}),
+     * and that stack is an {@code ISpellContainer} which is <i>not</i> an {@code ISpellbook} —
+     * indistinguishable from an imbued sword to {@link #findImbued}. Its own
+     * {@code SpellSelectionManager.init} reads HEAD/CHEST/LEGS/FEET right alongside the hands, this
+     * class never did, and so a spell imbued into armor was uncastable by voice. Reported on
+     * CurseForge as "For imbued armor like chestplates. It doesn't cast the spell."
+     */
+    private static final EquipmentSlot[] ARMOR_SLOTS = {
+        EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET
+    };
 
     /** Per-player rolling window of cast timestamps (nanos) for the server-side rate limiter.
      *  Pruned and checked under a per-deque lock in {@link #tryRecordCast(ServerPlayer)}. */
@@ -255,11 +270,13 @@ public final class SpellCaster {
                     match = findHeldSpellbook(player, spell, spellbookMark,
                         isContainer, getContainer, indexForSpell, getAtIndex, getLevel);
                 }
-                // Imbued weapons (swords/staves with spells embedded) carry an ISpellContainer
-                // but are NOT ISpellbook. Always check hands for those so a player wielding an
-                // imbued sword can voice-cast the imbued spell just like they'd right-click it.
+                // Imbued weapons and imbued armor (swords, staves and chestplates with spells
+                // embedded) carry an ISpellContainer but are NOT ISpellbook. Always check hands
+                // and worn armor for those so a player wielding an imbued sword — or wearing an
+                // imbued chestplate — can voice-cast the imbued spell just like they'd cast it
+                // from the spell wheel.
                 if (match == null) {
-                    match = findHeldImbued(player, spell, spellbookMark,
+                    match = findImbued(player, spell, spellbookMark,
                         isContainer, getContainer, indexForSpell, getAtIndex, getLevel);
                 }
                 if (match == null) {
@@ -562,12 +579,12 @@ public final class SpellCaster {
         SlotMatch(ItemStack stack, String slot, int level) { this(stack, slot, level, "SPELLBOOK"); }
     }
 
-    /** Imbued-weapon scan. Mirrors {@link #findHeldSpellbook} but accepts items that are
-     *  ISpellContainer but NOT ISpellbook — Iron's Spells swords/staves carry their imbued
-     *  spell in the same container API, just on a non-book item. We return CastSource.SWORD
-     *  so attemptInitiateCast goes through Iron's Spells' weapon-cast path (per-weapon
-     *  cooldown + imbued mana cost, same as right-clicking the weapon). */
-    private static SlotMatch findHeldImbued(
+    /** Imbued-item scan. Mirrors {@link #findHeldSpellbook} but accepts items that are
+     *  ISpellContainer but NOT ISpellbook — Iron's Spells swords, staves and armor carry their
+     *  imbued spell in the same container API, just on a non-book item. We return
+     *  CastSource.SWORD so attemptInitiateCast goes through Iron's Spells' imbued-item cast path
+     *  (per-item cooldown + imbued mana cost, same as casting it from the spell wheel). */
+    private static SlotMatch findImbued(
             ServerPlayer player, Object spell, Class<?> spellbookMark,
             Method isContainer, Method getContainer, Method indexForSpell,
             Method getAtIndex, Method getLevel) throws ReflectiveOperationException {
@@ -575,12 +592,25 @@ public final class SpellCaster {
         java.util.List<String>    slots  = new java.util.ArrayList<>();
         stacks.add(player.getMainHandItem()); slots.add("mainhand");
         stacks.add(player.getOffhandItem());  slots.add("offhand");
-        // Hands only, for the same reason as findHeldSpellbook — and here it mattered more.
-        // This scan is NOT gated by castMode, so while the hotbar was included an imbued sword
-        // or a scroll sitting unheld in the hotbar could be voice-cast even in CURIO_SPELLBOOK,
-        // the default and strictest mode. The method's own javadoc says "a player wielding an
-        // imbued sword", and right-clicking — the behaviour this mirrors — only ever works on
-        // what is actually in hand.
+        // Hands and worn armor — never the hotbar, for the same reason as findHeldSpellbook, and
+        // here it mattered more. This scan is NOT gated by castMode, so while the hotbar was
+        // included an imbued sword or a scroll sitting unheld in the hotbar could be voice-cast
+        // even in CURIO_SPELLBOOK, the default and strictest mode.
+        //
+        // Armor is not that mistake repeated: a worn chestplate is equipped in exactly the sense
+        // a Curios spellbook is, which is why Iron's Spells' own SpellSelectionManager.init reads
+        // HEAD/CHEST/LEGS/FEET right next to the hands. A container merely carried still does not
+        // count. Adding these four slots is the whole fix for the CurseForge report that an
+        // imbued chestplate never casts — see ARMOR_SLOTS.
+        //
+        // The slot ids come from EquipmentSlot.getName() ("head"/"chest"/"legs"/"feet") because
+        // those are the exact strings Iron's Spells hands attemptInitiateCast for an armor cast;
+        // MagicData stores the string and gives it back as the casting equipment slot, which the
+        // cast animation and a handful of spells read.
+        for (EquipmentSlot armorSlot : ARMOR_SLOTS) {
+            stacks.add(player.getItemBySlot(armorSlot));
+            slots.add(armorSlot.getName());
+        }
         for (int h = 0; h < stacks.size(); h++) {
             ItemStack stack = stacks.get(h);
             if (stack == null || stack.isEmpty()) continue;
@@ -599,6 +629,15 @@ public final class SpellCaster {
             // ItemStack.shrink(1) when the source is CastSource.SCROLL — so a single-use scroll
             // could be voice-cast without limit. SCROLL also matches right-click semantics:
             // CastSource.consumesMana() is true only for SPELLBOOK and (configurably) SWORD.
+            //
+            // Imbued ARMOR lands here too and casts as SWORD. That is not a guess and not a
+            // fallback: there is no ARMOR value to pick. CastSource is exactly
+            // SPELLBOOK/SCROLL/SWORD/MOB/COMMAND/NONE in both targeted builds, and Iron's Spells'
+            // own SpellSelectionManager.SelectionOption.getCastSource() reads
+            //     slot.startsWith(Curios.SPELLBOOK_SLOT) ? SPELLBOOK : SWORD
+            // while being handed EquipmentSlot.getName() for the four armor slots — so armor
+            // resolves to SWORD there too. Verified with javap against irons_spellbooks
+            // 1.20.1-3.15.4 and 1.21.1-3.16.2.
             String source = isScroll(stack) ? "SCROLL" : "SWORD";
             return new SlotMatch(stack, slots.get(h), (int) getLevel.invoke(data), source);
         }

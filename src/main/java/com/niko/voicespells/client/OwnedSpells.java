@@ -2,6 +2,7 @@ package com.niko.voicespells.client;
 
 import com.niko.voicespells.VoiceSpells;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -17,10 +18,10 @@ import java.util.function.Predicate;
  *
  * <p>Used by the "restrict to owned" feature: the controller's dispatch-time gate only lets a
  * voice cast through if its spell is in this set, so unequipped spells can't leak onto the HUD
- * as ghost casts. Only the actively-equipped slots count — main hand, off hand, and Curios —
- * mirroring Iron's Spells' own cast-time check. Imbued weapons (ISpellContainer but not
- * ISpellbook) count too. (This no longer narrows the Vosk grammar; the grammar stays broad and
- * enforcement happens at dispatch.)
+ * as ghost casts. Only the actively-equipped slots count — main hand, off hand, worn armor and
+ * Curios — mirroring Iron's Spells' own cast-time check. Imbued weapons and imbued armor
+ * (ISpellContainer but not ISpellbook) count too. (This no longer narrows the Vosk grammar; the
+ * grammar stays broad and enforcement happens at dispatch.)
  *
  * <p>All Iron's Spells / Curios access is reflective so the mod compiles and loads without
  * those mods on the classpath. Reflection resolution is cached statically; the scan itself
@@ -36,12 +37,29 @@ public final class OwnedSpells {
 
     private OwnedSpells() {}
 
+    /**
+     * The four worn-armor slots, in the order Iron's Spells' own scan reads them.
+     *
+     * <p>Iron's Spells lets a chestplate be imbued with a spell
+     * ({@code item.armor.ImbuableChestplateArmorItem}), and the resulting stack is an
+     * {@code ISpellContainer} that is <i>not</i> an {@code ISpellbook} — indistinguishable from an
+     * imbued sword to everything below. Its own {@code SpellSelectionManager.init} reads
+     * HEAD/CHEST/LEGS/FEET right alongside the hands and Curios; this class read only hands and
+     * Curios, so a player whose only container was a worn chestplate was missing from the owned
+     * set <i>and</i> never opened the microphone under the "Hold item" gate. Reported on
+     * CurseForge as "For imbued armor like chestplates. It doesn't cast the spell."
+     */
+    private static final EquipmentSlot[] ARMOR_SLOTS = {
+        EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET
+    };
+
     // --- Cached reflection ---------------------------------------------------
     private static volatile boolean reflectionReady = false;
     private static volatile boolean ironsAbsent     = false;
     private static volatile Class<?> containerCls;
     private static volatile Method   isContainer;     // (ItemStack) -> boolean
     private static volatile Method   getContainer;    // (ItemStack) -> ISpellContainer
+    private static volatile Method   containerIsEmpty;// (container)  -> boolean      -- may be null
     private static volatile Method   getAllSpells;    // (container)  -> SpellData[]  -- may be null
     private static volatile Method   getActiveCount;  // (container)  -> int          -- fallback API
     private static volatile Method   getAtIndex;      // (int)        -> SpellData
@@ -80,6 +98,11 @@ public final class OwnedSpells {
             Class<?> spellCls = Class.forName(SPELL_CLASS);
             isContainer     = containerCls.getMethod("isSpellContainer", ItemStack.class);
             getContainer    = containerCls.getMethod("get", ItemStack.class);
+            // Only holdingSpellFocus needs this, to tell an imbued chestplate from a bare one — see
+            // armorHoldsSpell. Both supported builds have it; null means "use the count-based
+            // fallback", never "fail".
+            try { containerIsEmpty = containerCls.getMethod("isEmpty"); }
+            catch (NoSuchMethodException noIsEmpty) { containerIsEmpty = null; }
             // Try several spell-listing APIs; different Iron's Spells builds expose different ones.
             for (String m : new String[]{ "getAllSpells", "getActiveSpells", "getSpells" }) {
                 try { getAllSpells = containerCls.getMethod(m); break; }
@@ -145,8 +168,8 @@ public final class OwnedSpells {
      *  genuinely has nothing castable equipped, which the caller fails CLOSED on.
      *
      *  <p>"Actively equipped" matches Iron's Spells' own cast-time check: only main hand,
-     *  off hand, and Curios slots count. A spellbook sitting in the backpack (or even an
-     *  unselected hotbar slot) does NOT count — casting it would fail server-side with
+     *  off hand, worn armor and Curios slots count. A spellbook sitting in the backpack (or even
+     *  an unselected hotbar slot) does NOT count — casting it would fail server-side with
      *  "No spellbook or imbued weapon with X equipped," which would then leak through as a
      *  ghost cast on the HUD streak/history. */
     public static Optional<Set<String>> scan() {
@@ -165,8 +188,14 @@ public final class OwnedSpells {
         try {
             addSpellsFrom(p.getMainHandItem(), out);
             addSpellsFrom(p.getOffhandItem(),  out);
+            // Worn armor. An imbued chestplate is as equipped as a Curios spellbook — Iron's
+            // Spells casts from it and this scan simply never looked, so the spell was excluded
+            // from the owned set and the "restrict to owned" gate dropped it. See ARMOR_SLOTS.
+            for (EquipmentSlot armorSlot : ARMOR_SLOTS) {
+                addSpellsFrom(p.getItemBySlot(armorSlot), out);
+            }
         } catch (Throwable t) {
-            VoiceSpells.LOGGER.debug("Hand scan failed: {}", t.toString());
+            VoiceSpells.LOGGER.debug("Hand/armor scan failed: {}", t.toString());
             reliable = false;
         }
 
@@ -231,6 +260,15 @@ public final class OwnedSpells {
             if (isSpellContainer(p.getMainHandItem()) || isSpellContainer(p.getOffhandItem())) {
                 return true;
             }
+            // Worn armor counts as "holding" for the same reason Curios does, below: a player
+            // whose only spell container is an imbued chestplate has nothing to draw, so under
+            // the default gating mode the microphone never opened at all and every spell they
+            // owned was silently unsayable. Checked before Curios only because it is cheaper.
+            // "Holds a spell", not "is a container" — every mage chestplate is a container. See
+            // armorHoldsSpell for why that distinction is the whole point.
+            for (EquipmentSlot armorSlot : ARMOR_SLOTS) {
+                if (armorHoldsSpell(p.getItemBySlot(armorSlot))) return true;
+            }
             // Curios counts as "holding". The default server castMode is CURIO_SPELLBOOK, so the
             // intended setup is a spellbook worn in the Curios slot rather than carried — gating
             // on hands alone meant the two defaults contradicted each other and the microphone
@@ -240,6 +278,34 @@ public final class OwnedSpells {
             VoiceSpells.LOGGER.debug("Held-focus probe failed: {}", t.toString());
             return true;
         }
+    }
+
+    /**
+     * Whether a worn armor piece actually carries a spell — not merely a container.
+     *
+     * <p>That is the difference between wearing a mage chestplate and wearing an imbued one, and
+     * it is not the difference {@link #isSpellContainer} draws. Iron's Spells' ItemStack mixin
+     * calls {@code IPresetSpellContainer.initializeSpellContainer} on every stack of an
+     * {@code ImbuableChestplateArmorItem}, which writes an <i>empty</i> one-slot container onto
+     * every chestplate in thirteen armor sets — Wizard, Pyromancer, Cryomancer and the rest. So
+     * {@code isSpellContainer} is true for essentially every chestplate a mage wears, imbued or
+     * not. Gating on it alone kept the microphone open for as long as such armor was worn and
+     * quietly turned {@code HOLD_KEY_AND_ITEM} into plain {@code HOLD_KEY}. An empty container is
+     * not a spell focus; only a non-empty one is.
+     *
+     * <p>Hands are deliberately not held to this standard: an empty spellbook in hand still opens
+     * the microphone, because drawing it is the gesture the gate is built on. Armor has no such
+     * gesture, which is exactly why it needs the stricter test.
+     */
+    private static boolean armorHoldsSpell(ItemStack stack) throws Throwable {
+        if (!isSpellContainer(stack)) return false;
+        Object container = getContainer.invoke(null, stack);
+        if (container == null) return false;
+        if (containerIsEmpty != null) return !(boolean) containerIsEmpty.invoke(container);
+        // No isEmpty() on this build: count active spells instead, and if even that is missing,
+        // fall back to the presence test rather than silently muting an imbued chestplate.
+        if (getActiveCount != null) return (int) getActiveCount.invoke(container) > 0;
+        return true;
     }
 
     /** Whether any Curios slot holds a spell container. Same reflective path as {@link #scan()},
