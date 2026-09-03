@@ -2,8 +2,31 @@
 
 Everything since 0.10.4.
 
-One release, one job: the mod speaks Russian now, and every other language becomes a file somebody
-can hand back rather than a fork of the source.
+Two fixes people reported, and then the big one: the mod speaks Russian now, and every other
+language becomes a file somebody can hand back rather than a fork of the source.
+
+---
+
+## Fixed
+
+**0.10.4 crashed on startup on Forge 1.20.1.** If you are on Forge, 0.10.4 crashed the moment the
+game tried to load the mod, and going back to 0.10.3 made it stop — so it looked like something
+0.10.4 changed. Nothing in the code did. The Forge build produces two jars with the same name, one
+that only runs inside a development environment and one that runs everywhere, and the release
+tooling uploaded the wrong one. 0.10.3 had been uploaded by hand, which is why it was fine. The
+tooling now picks the right jar, and the jar is checked before it goes out. Thanks to the person
+who reported it with full logs — the "i9-13900KF" theory in that report is not it; your CPU is
+fine. NeoForge was never affected.
+
+**Imbued armor never cast.** Iron's Spells lets you imbue a chestplate with a spell, and saying that
+spell did nothing — and if a worn chestplate was your only spell source, the microphone did not even
+open under the default "Hold item" setting. The mod checked your hands and your Curios slot for
+spell-carrying items and never looked at what you were wearing. It does now, for all four armor
+slots, and casts from armor the same way Iron's Spells itself does. One deliberate detail: wearing an
+ordinary mage chestplate with nothing imbued in it does not count as holding a spell focus. Every
+Iron's Spells chestplate carries an empty spell slot internally, and treating that as "holding a
+spellbook" would have left the microphone open for as long as the armor was on. Reported on
+CurseForge — thank you.
 
 ---
 
