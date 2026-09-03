@@ -224,6 +224,9 @@ public final class ClientEvents {
      *  screen is up — that's the first moment the wizard can demonstrate anything live. */
     private static boolean firstRunPopped = false;
     private static long    firstRunEligibleSinceMs = 0L;
+    /** Whether the last tick had a player, so leaving a world can be detected as an edge.
+     *  Client thread only, like the two above. */
+    private static boolean hadPlayer = false;
 //? if forge {
 /*
     /^* Prepend the player's voice-cast rank to outgoing chat messages when {@code chatRankTag}
@@ -271,14 +274,27 @@ public final class ClientEvents {
         // delivers no frames at all — see VoiceController.tickCalibration.
         VoiceController.tickCalibration();
         if (mc.player == null) {
+            // Non-null -> null is the client actually leaving: quit to title, disconnect, or a
+            // proxy moving us between servers. Respawn and dimension change replace the player
+            // inside one packet handler on this thread, so neither is ever seen as a null tick.
+            // Nothing else in the mod is told a world ended, which is why the cast queue and the
+            // dedup anchors used to survive one.
+            if (hadPlayer) {
+                hadPlayer = false;
+                VoiceController.onWorldLeave();
+            }
             firstRunEligibleSinceMs = 0L; // reset settle timer between worlds
             return;
         }
+        hadPlayer = true;
         VoiceController.tryDrainCastQueue();
         VoiceController.sampleWaveformIfDue();
         VoiceController.tickAfkPosition(mc.player);
         VoiceController.tickCombat(mc.player);
         VoiceController.refreshOwnedSpellsIfDue();
+        // After the owned-spell rescan on purpose: the preflight half of this snapshot is built
+        // from the equipped set that scan publishes.
+        VoiceController.tickGateSnapshots(mc);
 
         // First-run wizard: pop once in-world, after the Vosk model has finished loading and
         // the player has been stable on no-screen for ~1.5s. Doing it in-game means the

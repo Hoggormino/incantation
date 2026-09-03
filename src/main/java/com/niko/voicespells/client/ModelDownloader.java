@@ -15,7 +15,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.IntConsumer;
@@ -40,6 +39,19 @@ import java.util.zip.ZipInputStream;
 public final class ModelDownloader {
 
     private static final AtomicBoolean inProgress = new AtomicBoolean(false);
+
+    /**
+     * Hard ceiling on both the downloaded archive and everything extracted from it.
+     *
+     * <p>Neither loop had one. The download wrote every byte the connection produced — a body
+     * that streams past its declared Content-Length, or declares none at all, filled the disk
+     * until something else in the game failed for lack of space. Extraction had the matching
+     * hole: entries were streamed straight to disk with no running total, so a small archive of
+     * highly-compressed entries reached the same place faster, and {@code looksLikeModel} only
+     * runs afterwards. Catalogued models run from tens of MB to about 2 GB, so 4 GiB clears every
+     * legitimate one by a wide margin and still stops a runaway well short of a full disk.
+     */
+    private static final long MAX_MODEL_BYTES = 4L * 1024 * 1024 * 1024;
 
     private ModelDownloader() {}
 
@@ -149,12 +161,26 @@ public final class ModelDownloader {
                     VoiceSpells.LOGGER.error("Model download HTTP {}", resp.statusCode());
                     return false;
                 }
+                // What the body is allowed to be. A declared length is trusted only as far as a
+                // little slack past it; without one, the hard ceiling is all there is.
+                long limit = total > 0
+                    ? Math.min(MAX_MODEL_BYTES, total + (1 << 20))
+                    : MAX_MODEL_BYTES;
                 try (OutputStream out = Files.newOutputStream(tmpZip)) {
                     byte[] buf = new byte[1 << 16];
                     long read = 0;
                     int lastPct = -1;
                     int r;
                     while ((r = in.read(buf)) != -1) {
+                        if (read + r > limit) {
+                            VoiceSpells.LOGGER.warn(
+                                "Model download from {} exceeded {} bytes (content-length said {})"
+                                + " — abandoning it rather than filling the disk.",
+                                MODEL_URL, limit, total > 0 ? total : "nothing");
+                            out.close();
+                            Files.deleteIfExists(tmpZip);
+                            return false;
+                        }
                         out.write(buf, 0, r);
                         read += r;
                         if (total > 0) {
@@ -331,6 +357,7 @@ public final class ModelDownloader {
      * {@code modelDir}, so strip the first path segment of every entry.
      */
     private static void extractStrippingTopDir(Path zip, Path modelDir) throws Exception {
+        long written = 0;
         try (ZipInputStream zin = new ZipInputStream(Files.newInputStream(zip))) {
             ZipEntry e;
             while ((e = zin.getNextEntry()) != null) {
@@ -347,7 +374,25 @@ public final class ModelDownloader {
                     Files.createDirectories(dest);
                 } else {
                     if (dest.getParent() != null) Files.createDirectories(dest.getParent());
-                    Files.copy(zin, dest, StandardCopyOption.REPLACE_EXISTING);
+                    // Count what actually lands on disk, across all entries, and check it per
+                    // chunk rather than per entry. The declared size is not worth consulting: it
+                    // is written by whoever built the archive, which is the party a size cap
+                    // exists to distrust. Files.copy would not do either: it streams the WHOLE
+                    // entry before the total can be looked at, so a single-entry archive - the
+                    // cheapest bomb there is - would fill the disk exactly as if there were no cap.
+                    try (OutputStream out = Files.newOutputStream(dest)) {
+                        byte[] buf = new byte[1 << 16];
+                        int n;
+                        while ((n = zin.read(buf)) != -1) {
+                            written += n;
+                            if (written > MAX_MODEL_BYTES) {
+                                throw new java.io.IOException(
+                                    "Model archive expands past " + MAX_MODEL_BYTES + " bytes; "
+                                    + "refusing to extract the rest of it");
+                            }
+                            out.write(buf, 0, n);
+                        }
+                    }
                 }
             }
         }

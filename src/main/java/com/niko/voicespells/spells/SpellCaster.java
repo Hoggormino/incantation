@@ -984,14 +984,20 @@ public final class SpellCaster {
     /**
      * Drop the per-player state that has no meaning once a player is gone.
      *
-     * <p>Only the rate-limit window. {@code SUBSCRIBERS} is deliberately kept — a /voicespells
-     * follow subscription is documented to survive reconnect — and {@code PLAYER_TOTALS} /
-     * {@code PLAYER_NAMES} back the /voicespells top leaderboard, which would be pointless if it
-     * forgot everyone who logged off. Those are released on server stop instead.
+     * <p>The rate-limit window, the mod-present flag, the in-flight cast stamp and the cast
+     * streak. {@code SUBSCRIBERS} is deliberately kept — a /voicespells follow subscription is
+     * documented to survive reconnect — and {@code PLAYER_TOTALS} / {@code PLAYER_NAMES} back the
+     * /voicespells top leaderboard, which would be pointless if it forgot everyone who logged
+     * off. Those are released on server stop instead.
      */
     public static void forgetPlayer(UUID uuid) {
         if (uuid == null) return;
         RECENT_CASTS.remove(uuid);
+        // A streak is "casts in a row, just now" — it cannot span a logout. Left behind, a player
+        // who reconnects inside the 30s timeout resumes the streak they left with, and
+        // voice_combo / voice_maestro are awarded off a run that never happened.
+        PLAYER_STREAKS.remove(uuid);
+        PLAYER_STREAK_AT.remove(uuid);
         // The mod-present flag is per CONNECTION, not per server run. Leaving it set meant a
         // player who rejoined without the mod - uninstalled it, or came back on a vanilla
         // profile - still counted as able to speak, so under ALWAYS every spell they owned was
@@ -1021,6 +1027,11 @@ public final class SpellCaster {
         PLAYER_TOTALS.clear();
         VOICE_CLIENTS.clear();
         PLAYER_NAMES.clear();
+        // These are static, so on a client they outlive the integrated server exactly like the
+        // rest: quit to title and open another world within the 30s timeout and the old world's
+        // streak carried straight over.
+        PLAYER_STREAKS.clear();
+        PLAYER_STREAK_AT.clear();
         totalsFile = null;
         synchronized (RECENT_LOG) { RECENT_LOG.clear(); }
     }

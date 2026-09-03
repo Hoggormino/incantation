@@ -82,7 +82,8 @@ public final class ServerLifecycle {
     }
 
     /**
-     * Drops only the rate-limit window; see {@link SpellCaster#forgetPlayer}.
+     * Drops everything held for the connection - the rate-limit window, the mod-present flag,
+     * the in-flight voice-cast stamp and the streak; see {@link SpellCaster#forgetPlayer}.
      *
      * <p>Also flushes the learned-incantation store. It is written at server stop, which covers a
      * clean shutdown and nothing else - a crash or a killed process would take back every

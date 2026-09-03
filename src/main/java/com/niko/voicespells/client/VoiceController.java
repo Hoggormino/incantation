@@ -38,6 +38,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Threading: {@link #onMicFrame16k} runs on the capture thread; phrase callbacks arrive on the same
  * thread, and we hop to the Minecraft client thread before touching world state or sending
  * packets.
+ *
+ * <p>Everything the gates on the capture side need to know about the client — combat, the open
+ * screen, sneak, a held spell focus, and Iron's Spells' mana and cooldowns — is sampled on the
+ * client tick and published as a volatile snapshot for the capture thread to read. See
+ * {@link #tickGateSnapshots}. Reading any of it live from the capture thread races the tick that
+ * maintains it, and in the case of the entity query the combat gate used to run, the resulting
+ * ConcurrentModificationException could land on the client thread, uncaught. The one live read
+ * left is {@link #isClientCasting()}, which is a single boolean field behind two static reads —
+ * nothing to walk, nothing to mutate, and worst case one tick out of date.
  */
 public final class VoiceController {
 
@@ -128,7 +137,11 @@ public final class VoiceController {
         calibSum  += rms;
         calibCount++;
         if (rms > calibPeak) calibPeak = rms;
-        if (System.nanoTime() - calibStartNanos >= CALIB_DURATION_NANOS) finishCalibration();
+        // Only sample. The end-of-window check lives in tickCalibration, on the client tick.
+        // This runs on the capture thread, and finishCalibration writes the config to disk and
+        // then stops capture - which joins the capture thread, i.e. this thread, for up to
+        // 500ms. Whichever of the two noticed the deadline first used to close the window, and
+        // the capture thread won often enough for that stall to be routine.
     }
 
     /**
@@ -238,6 +251,16 @@ public final class VoiceController {
      *  the only field vanilla exposes for this is written on the server and never reaches us. */
     private static volatile long lastCombatNanos = 0L;
 
+    /** Whether a living hostile was within reach at the last sample. Written by
+     *  {@link #sampleHostiles} on the client thread, read by {@link #isInCombat()} on the capture
+     *  thread — see sampleHostiles for why the query itself cannot happen at cast time. */
+    private static volatile boolean hostileNearby = false;
+    /** Client-thread only, like {@link #lastOwnedScanNanos}. */
+    private static long lastHostileScanNanos = 0L;
+    /** Half a second between hostile scans. Nothing a gate decides changes meaningfully inside
+     *  that window, and it keeps the query off most ticks. */
+    private static final long HOSTILE_SCAN_INTERVAL_NANOS = 500_000_000L;
+
     /**
      * Sample combat state once per client tick.
      *
@@ -255,34 +278,59 @@ public final class VoiceController {
     public static void tickCombat(net.minecraft.world.entity.player.Player player) {
         if (player == null) return;
         if (player.hurtTime > 0) lastCombatNanos = System.nanoTime();
+        sampleHostiles(player);
+    }
+
+    /**
+     * Sample "is a hostile actually here" on the CLIENT thread, for {@link #isInCombat()} to read.
+     *
+     * <p>The query used to run at cast time, which means on the capture thread — and that is not
+     * merely untidy. {@code getEntitiesOfClass} reaches {@code ClassInstanceMultiMap.find}, which
+     * {@code computeIfAbsent}s a plain HashMap: a structural WRITE into vanilla's entity index,
+     * racing the client tick's own entity adds and removals. The ConcurrentModificationException
+     * that produces can land on either thread, and the one that lands on the client thread is
+     * uncaught — a crash. The catch below only ever covered the capture thread's half of it.
+     *
+     * <p>Sampled sparsely, and only while combatOnly is on. That is what the old comment here was
+     * buying by evaluating at cast time: with the option off (the default) this still costs
+     * nothing at all, and with it on it is two queries a second instead of one per recognised
+     * phrase. Half a second of staleness cannot decide a fight.
+     */
+    private static void sampleHostiles(net.minecraft.world.entity.player.Player player) {
+        if (!VoiceSpellsConfig.cCombatOnly) {
+            hostileNearby = false;
+            return;
+        }
+        long now = System.nanoTime();
+        if (now - lastHostileScanNanos < HOSTILE_SCAN_INTERVAL_NANOS) return;
+        lastHostileScanNanos = now;
+        try {
+            if (player.level() == null) { hostileNearby = false; return; }
+            boolean found = false;
+            for (net.minecraft.world.entity.monster.Monster m : player.level().getEntitiesOfClass(
+                    net.minecraft.world.entity.monster.Monster.class,
+                    player.getBoundingBox().inflate(12.0D))) {
+                if (m.isAlive()) { found = true; break; }
+            }
+            hostileNearby = found;
+        } catch (Throwable ignored) {
+            // A gate that throws must not become a second way to block every cast.
+            hostileNearby = true;
+        }
     }
 
     /** ~10 seconds, matching what the config has always claimed. */
     private static final long COMBAT_WINDOW_NANOS = 10L * 1_000_000_000L;
 
     private static boolean isInCombat() {
-        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-        if (mc.player == null || mc.player.level() == null) return false;
         // Taking damage counts for ten seconds after the fact.
         if (lastCombatNanos != 0L
                 && System.nanoTime() - lastCombatNanos < COMBAT_WINDOW_NANOS) return true;
         // So does a hostile actually being here. Damage alone is not enough: a player who opens
         // with a spell has not been hit yet, which is precisely the case reported - "it blocks
-        // all spellcasting even when fighting a zombie". Evaluated only when a phrase is
-        // recognised, not per tick, so the entity query costs nothing while nobody is speaking.
-        try {
-            java.util.List<net.minecraft.world.entity.monster.Monster> near =
-                mc.player.level().getEntitiesOfClass(
-                    net.minecraft.world.entity.monster.Monster.class,
-                    mc.player.getBoundingBox().inflate(12.0D));
-            for (net.minecraft.world.entity.monster.Monster m : near) {
-                if (m.isAlive()) return true;
-            }
-        } catch (Throwable ignored) {
-            // A gate that throws must not become a second way to block every cast.
-            return true;
-        }
-        return false;
+        // all spellcasting even when fighting a zombie". Read from the snapshot rather than
+        // queried here, because this runs on the capture thread — see sampleHostiles().
+        return hostileNearby;
     }
 
     /** Rolling history of recent audio levels for the debug-monitor waveform. Sampled at ~20Hz
@@ -401,7 +449,12 @@ public final class VoiceController {
     }
 
     /** Increment the streak counter on a successful dispatch, folding in any inactivity
-     *  reset so a long gap between casts starts the streak fresh at 1. */
+     *  reset so a long gap between casts starts the streak fresh at 1.
+     *
+     *  <p>Client thread only. This is a read-modify-write across two fields with no lock, and it
+     *  used to be called from the capture thread as well as from the queue drainer on the tick —
+     *  two threads, no ordering, so a drained cast landing alongside a spoken one could lose an
+     *  increment. Both callers are now on the client thread; keep it that way. */
     private static void bumpStreak(long now) {
         if (lastStreakNanos == 0L || (now - lastStreakNanos) > STREAK_TIMEOUT_NANOS) {
             castStreak = 1;
@@ -704,15 +757,18 @@ public final class VoiceController {
         if (VoiceSpellsConfig.cSuspendUnfocused && (!mc.isWindowActive() || mc.isPaused())) {
             return false;
         }
+        // holdingFocus is a snapshot, not a live probe. This method runs on the capture thread,
+        // ten times a second, and OwnedSpells.holdingSpellFocus() reads the player's hands, worn
+        // armor and Curios — live ItemStacks and their NBT, which the client tick is free to
+        // replace underneath it. Sampled on the client tick instead; see tickGateSnapshots().
         switch (VoiceSpellsConfig.cGatingMode) {
             case HOLD_KEY:  return ClientEvents.isPushToTalkDown();
-            case HOLD_ITEM: return com.niko.voicespells.client.OwnedSpells.holdingSpellFocus();
+            case HOLD_ITEM: return holdingFocus;
             // Both, and this is the default. See the config comment: holding a staff is not
             // evidence you meant to cast, because you are most likely to be talking to people
             // exactly when you are armed.
             case HOLD_KEY_AND_ITEM:
-                return ClientEvents.isPushToTalkDown()
-                    && com.niko.voicespells.client.OwnedSpells.holdingSpellFocus();
+                return ClientEvents.isPushToTalkDown() && holdingFocus;
             default:        return true;
         }
     }
@@ -988,143 +1044,242 @@ public final class VoiceController {
         }
     }
 
-    /** Client-side mana + cooldown check for a single spell. Mirrors the server-side
-     *  preflight in SpellCaster but runs on the client to avoid the network round-trip for
-     *  impossible casts. Permissive on reflection failure — the server's preflight is the
-     *  authoritative fallback. */
+    /**
+     * Client-side mana + cooldown check for a single spell. Mirrors the server-side preflight in
+     * SpellCaster but runs on the client to avoid the network round-trip for impossible casts.
+     *
+     * <p>Answered from the snapshot {@link #tickPreflightSnapshot()} publishes on the client
+     * tick. It used to ask ClientMagicData here, on the capture thread: its cooldown map is a
+     * plain HashMap that Iron's Spells' own client tick removes expired entries from, so the
+     * audio thread was reading a map being mutated underneath it. Permissive about anything the
+     * snapshot does not cover, exactly as the reflective version was about anything it could not
+     * read — the server's preflight is the authoritative gate.
+     */
     private static boolean clientCanCast(ResourceLocation spellId) {
         if (!VoiceSpellsConfig.cClientPreflight) return true;
-        try {
-            Class<?> cmdCls = Class.forName("io.redspace.ironsspellbooks.player.ClientMagicData");
-            Class<?> registryCls = Class.forName("io.redspace.ironsspellbooks.api.registry.SpellRegistry");
-            Class<?> spellCls = Class.forName("io.redspace.ironsspellbooks.api.spells.AbstractSpell");
-
-            // Cooldown
-            Object cooldowns = null;
-            for (String m : new String[]{ "getPlayerCooldowns", "getCooldowns" }) {
-                try {
-                    cooldowns = cmdCls.getMethod(m).invoke(null);
-                    break;
-                } catch (NoSuchMethodException ignored) {}
-            }
-            // Resolved up here because the cooldown lookup needs it: PlayerCooldowns exposes
-            // isOnCooldown(AbstractSpell), NOT isOnCooldown(String). The String probe that used
-            // to live here matched nothing on either 1.20.1 or 1.21.1 (javap, 3.16.2 both
-            // versions), threw NoSuchMethodException into an ignored catch, and left this
-            // preflight blind to cooldowns entirely.
-            Object spell = registryCls.getMethod("getSpell", String.class).invoke(null, spellId.toString());
-
-            if (cooldowns != null && spell != null) {
-                try {
-                    java.lang.reflect.Method onCd =
-                        cooldowns.getClass().getMethod("isOnCooldown", spellCls);
-                    if ((boolean) onCd.invoke(cooldowns, spell)) return false;
-                } catch (Throwable ignored) {}
-            }
-
-            // Mana
-            float mana = Float.MAX_VALUE;
-            for (String m : new String[]{ "getPlayerMana", "getMana" }) {
-                try {
-                    mana = ((Number) cmdCls.getMethod(m).invoke(null)).floatValue();
-                    break;
-                } catch (NoSuchMethodException ignored) {}
-            }
-            if (spell != null) {
-                try {
-                    // The level the spell is actually inscribed at, not a hardcoded 1. Using 1
-                    // under-counts the cost on any upgraded spellbook, so this waved the cast
-                    // through, the packet went out, and the server refused it - the player
-                    // speaks, nothing happens, and the only feedback is a failure toast.
-                    int level = OwnedSpells.levelOf(spellId.toString());
-                    int cost = ((Number) spellCls.getMethod("getManaCost", int.class)
-                        .invoke(spell, level)).intValue();
-                    if (cost > mana) return false;
-                } catch (Throwable ignored) {}
-            }
-            return true;
-        } catch (Throwable ignored) {
-            return true; // permissive — let the server's preflight be the authoritative gate
-        }
+        return !preflightBlocked.contains(spellId.toString());
     }
 
     /**
-     * From a loadout's ordered spell list, pick the first one that's actually castable —
-     * not on cooldown and within the player's current mana. Reflects against the client-side
-     * ClientMagicData / SpellRegistry classes; if any of that's missing we fall through to
-     * the first spell (best-effort) so the cast still happens.
+     * From a loadout's ordered spell list, pick the first one that's actually castable — equipped,
+     * not on cooldown, and within the player's current mana.
+     *
+     * <p>Reads the same client-tick snapshot the single-spell preflight does, and for the same
+     * reason: this runs on the capture thread. The snapshot is published whether or not
+     * {@code clientPreflight} is on - that option decides only whether a recognised spell is
+     * refused before its packet goes out, which is clientCanCast's call, and this picker skipped
+     * uncastable entries long before the option existed.
      */
     private static ResourceLocation pickCastableFromLoadout(List<ResourceLocation> ids) {
         if (ids == null || ids.isEmpty()) return null;
+        java.util.Set<String> blocked = preflightBlocked;
+        // A read, never a resolve: the handles are resolved by tickPreflightSnapshot on the client
+        // thread. Before its first tick this is false, which only skips the unknown-id check below
+        // - the permissive direction, for a window of one tick after entering a world.
+        boolean ironsPresent = preflightReflectionTried && pfGetSpell != null;
+        for (ResourceLocation rid : ids) {
+            String key = rid.toString();
+
+            // Unknown id? Skip. Loadout entries are only checked for being parseable when the
+            // config is read, so a typo names no spell at all and dispatching it would fail
+            // server-side in silence. SpellInfo caches the lookup and reads EMPTY for both an
+            // unknown id and Iron's own "none" sentinel; with Iron's Spells absent it reads EMPTY
+            // for everything, so only ask when there is a registry to ask.
+            if (ironsPresent && SpellInfo.of(key).name.isEmpty()) continue;
+
+            // Not equipped? Skip. Without this the loadout picks its first entry on
+            // cooldown/mana grounds alone, hands it to dispatch, and the equipped-only gate
+            // there rejects it — so a loadout whose first spell is not in the book cast
+            // nothing at all instead of falling through to the next entry. Mirrors the gate
+            // in onPhraseRecognized, including the ownedScanReliable trust check.
+            if (VoiceSpellsConfig.cRestrictToOwned && ownedScanReliable
+                    && !ownedSpellIds.contains(key)) continue;
+
+            // On cooldown, or costing more mana than the player has? Skip — that is what the
+            // snapshot holds. Both checks read the spell's real inscribed level, because level 1
+            // made a loadout pick a spell the player could not afford, which then failed
+            // server-side with no route to the next candidate.
+            if (blocked.contains(key)) continue;
+
+            return rid;
+        }
+        return null;
+    }
+
+    // ----- Client-thread snapshots the capture thread reads ---------------------------------
+    //
+    // onPhraseRecognized() and captureArmed() both run on the Vosk capture thread, and both used
+    // to read live client state straight from it: the open screen, the sneak key, whether a spell
+    // focus was in hand, and Iron's Spells' cooldown and mana state. None of that is safe to
+    // touch off the client thread — the entity query isInCombat() ran was a genuine crash, and
+    // the rest were races that could only ever answer for a moment that had already passed. The
+    // pattern is the one this class already used for combat and owned spells: sample on the
+    // client tick, publish a volatile, read the snapshot. Everything here is at most one tick
+    // stale, which is 50ms, which no gate in this mod can tell apart from now.
+
+    /** Is a screen open? Sampled every client tick; read by the menu gate. */
+    private static volatile boolean screenOpen = false;
+    /** Was there a world and a player at the last tick? Sampled every client tick and cleared by
+     *  {@link #onWorldLeave()}. The menu gate needs it because the sampler above only runs in a
+     *  world: with no world there is always a screen up (title, disconnect), but screenOpen would
+     *  be stuck on whatever it last saw. */
+    private static volatile boolean inWorld = false;
+    /** Is the player sneaking? Sampled every client tick; read by the sneak gate. */
+    private static volatile boolean sneaking = false;
+    /** Is a spell focus held/worn? Sampled every client tick; read by {@link #captureArmed()}. */
+    private static volatile boolean holdingFocus = false;
+
+    /**
+     * Spell ids the client believes cannot be cast right now — on cooldown, or costing more mana
+     * than the player has.
+     *
+     * <p>A BLOCKED set rather than a castable one, deliberately: an id the snapshot has never
+     * heard of reads as castable, so both preflight callers keep the permissive behaviour they
+     * had. A client-side guess that is wrong must be wrong in the direction of letting the cast
+     * through and leaving the verdict to the server.
+     */
+    private static volatile java.util.Set<String> preflightBlocked = java.util.Set.of();
+
+    /**
+     * The last scan's equipped-spell ids, kept whatever {@code restrictToOwned} is set to.
+     *
+     * <p>{@link #ownedSpellIds} cannot serve here: it is the gate's set and is deliberately
+     * emptied while the option is off, and the preflight has to keep working there. The scan
+     * itself already runs on the same 1s timer either way — see {@link #refreshOwnedSpellsIfDue}.
+     */
+    private static volatile java.util.Set<String> equippedSpellIds = java.util.Set.of();
+
+    /**
+     * Sample the client state the capture thread's gates depend on. Called every client tick from
+     * {@link ClientEvents}, after the owned-spell rescan so the preflight snapshot is built from
+     * the freshest equipped set.
+     */
+    public static void tickGateSnapshots(Minecraft mc) {
+        if (mc == null) return;
+        screenOpen = mc.screen != null;
+        inWorld    = mc.level != null && mc.player != null;
+        sneaking   = mc.player != null && mc.player.isShiftKeyDown();
+        // Only the two gating modes that consult it pay for the hands/armor/Curios walk.
+        VoiceSpellsConfig.GatingMode mode = VoiceSpellsConfig.cGatingMode;
+        holdingFocus = (mode == VoiceSpellsConfig.GatingMode.HOLD_ITEM
+                     || mode == VoiceSpellsConfig.GatingMode.HOLD_KEY_AND_ITEM)
+            && com.niko.voicespells.client.OwnedSpells.holdingSpellFocus();
+        tickPreflightSnapshot();
+    }
+
+    // Iron's Spells handles for the preflight snapshot, resolved once. The code this replaces
+    // re-ran Class.forName + getMethod on every recognised phrase; this runs every tick, so the
+    // lookup has to be paid for once rather than per call.
+    private static volatile boolean preflightReflectionTried = false;
+    private static volatile java.lang.reflect.Method pfCooldowns;    // ClientMagicData.getPlayerCooldowns()
+    private static volatile java.lang.reflect.Method pfMana;         // ClientMagicData.getPlayerMana()
+    private static volatile java.lang.reflect.Method pfGetSpell;     // SpellRegistry.getSpell(String)
+    private static volatile java.lang.reflect.Method pfManaCost;     // AbstractSpell.getManaCost(int)
+    private static volatile Class<?> pfSpellCls;
+    private static volatile Class<?> pfCooldownsCls;
+    private static volatile java.lang.reflect.Method pfIsOnCooldown; // isOnCooldown(AbstractSpell)
+
+    /** True when Iron's Spells is present and the preflight can ask it anything at all. */
+    private static boolean ensurePreflightReflection() {
+        if (preflightReflectionTried) return pfGetSpell != null;
+        preflightReflectionTried = true;
         try {
-            Class<?> cmdCls      = Class.forName("io.redspace.ironsspellbooks.player.ClientMagicData");
-            Class<?> registryCls = Class.forName("io.redspace.ironsspellbooks.api.registry.SpellRegistry");
-            Class<?> spellCls    = Class.forName("io.redspace.ironsspellbooks.api.spells.AbstractSpell");
-
-            // Mana — try a few likely accessor names (API has churned across versions).
-            float mana = Float.MAX_VALUE; // default to "enough" if we can't read
-            for (String m : new String[]{ "getPlayerMana", "getMana" }) {
-                try {
-                    java.lang.reflect.Method g = cmdCls.getMethod(m);
-                    mana = ((Number) g.invoke(null)).floatValue();
-                    break;
-                } catch (NoSuchMethodException ignored) { /* try next */ }
-            }
-
-            // Cooldown source — may be exposed as getCooldowns() or playerCooldowns field.
-            Object cooldowns = null;
+            Class<?> cmdCls =
+                Class.forName("io.redspace.ironsspellbooks.player.ClientMagicData");
+            Class<?> registryCls =
+                Class.forName("io.redspace.ironsspellbooks.api.registry.SpellRegistry");
+            pfSpellCls = Class.forName("io.redspace.ironsspellbooks.api.spells.AbstractSpell");
+            pfGetSpell = registryCls.getMethod("getSpell", String.class);
+            // Accessor names have churned across Iron's versions; try both, as this always has.
             for (String m : new String[]{ "getPlayerCooldowns", "getCooldowns" }) {
-                try {
-                    java.lang.reflect.Method g = cmdCls.getMethod(m);
-                    cooldowns = g.invoke(null);
-                    break;
-                } catch (NoSuchMethodException ignored) { /* try next */ }
+                try { pfCooldowns = cmdCls.getMethod(m); break; }
+                catch (NoSuchMethodException ignored) { /* try next */ }
             }
-
-            java.lang.reflect.Method getSpell = registryCls.getMethod("getSpell", String.class);
-
-            for (ResourceLocation rid : ids) {
-                Object spell = getSpell.invoke(null, rid.toString());
-                if (spell == null) continue;
-                String actualId = (String) spellCls.getMethod("getSpellId").invoke(spell);
-                if (!rid.toString().equals(actualId)) continue; // unknown spell sentinel
-
-                // Not equipped? Skip. Without this the loadout picks its first entry on
-                // cooldown/mana grounds alone, hands it to dispatch, and the equipped-only gate
-                // there rejects it — so a loadout whose first spell is not in the book cast
-                // nothing at all instead of falling through to the next entry. Mirrors the gate
-                // in onPhraseRecognized, including the ownedScanReliable trust check.
-                if (VoiceSpellsConfig.cRestrictToOwned && ownedScanReliable
-                        && !ownedSpellIds.contains(rid.toString())) continue;
-
-                // On cooldown? Skip. Uses the AbstractSpell overload — isOnCooldown(String)
-                // does not exist on either Iron's Spells version, so the previous probe always
-                // threw into the ignored catch and every entry looked ready.
-                if (cooldowns != null) {
-                    try {
-                        java.lang.reflect.Method onCd =
-                            cooldowns.getClass().getMethod("isOnCooldown", spellCls);
-                        if ((boolean) onCd.invoke(cooldowns, spell)) continue;
-                    } catch (Throwable ignored) { /* no isOnCooldown — proceed */ }
-                }
-
-                // Mana cost > current? Skip. At the spell's real inscribed level - the scan
-                // already reads it, and level 1 made a loadout pick a spell the player could not
-                // afford, which then failed server-side with no route to the next candidate.
-                try {
-                    java.lang.reflect.Method getCost = spellCls.getMethod("getManaCost", int.class);
-                    int cost = ((Number) getCost.invoke(spell, OwnedSpells.levelOf(rid.toString())))
-                        .intValue();
-                    if (cost > mana) continue;
-                } catch (Throwable ignored) { /* no manaCost — proceed */ }
-
-                return rid;
+            for (String m : new String[]{ "getPlayerMana", "getMana" }) {
+                try { pfMana = cmdCls.getMethod(m); break; }
+                catch (NoSuchMethodException ignored) { /* try next */ }
             }
-            return null;
+            // Resolved on its own, so a build without it still gets the cooldown half.
+            try { pfManaCost = pfSpellCls.getMethod("getManaCost", int.class); }
+            catch (NoSuchMethodException noCost) { pfManaCost = null; }
         } catch (Throwable t) {
-            // Reflection unavailable — fall back to the first id so the loadout still casts.
-            VoiceSpells.LOGGER.debug("Loadout castability check failed: {}", t.toString());
-            return ids.get(0);
+            pfGetSpell = null;
+            VoiceSpells.LOGGER.debug("Client preflight reflection unavailable: {}", t.toString());
+        }
+        return pfGetSpell != null;
+    }
+
+    /** PlayerCooldowns exposes isOnCooldown(AbstractSpell), NOT isOnCooldown(String) — the String
+     *  probe this replaces matched nothing on either 1.20.1 or 1.21.1 (javap, 3.16.2 both
+     *  versions) and left the preflight blind to cooldowns entirely. Resolved from the instance
+     *  because the class is internal, and cached against it. */
+    private static java.lang.reflect.Method isOnCooldownFor(Object cooldowns) {
+        if (cooldowns == null || pfSpellCls == null) return null;
+        Class<?> cls = cooldowns.getClass();
+        if (pfCooldownsCls == cls) return pfIsOnCooldown;
+        try {
+            pfIsOnCooldown = cls.getMethod("isOnCooldown", pfSpellCls);
+        } catch (Throwable t) {
+            pfIsOnCooldown = null;   // no such method — the mana half still works
+        }
+        pfCooldownsCls = cls;
+        return pfIsOnCooldown;
+    }
+
+    /**
+     * Recompute the "cannot cast this right now" set, on the client thread.
+     *
+     * <p>Bounded to the equipped spells: an unequipped spell cannot be cast for a reason this
+     * preflight never checked anyway, so there is nothing to learn by asking about it, and the
+     * loop stays a handful of lookups rather than one per spell in the game.
+     */
+    private static void tickPreflightSnapshot() {
+        // Computed regardless of clientPreflight. That option governs one thing - whether a
+        // recognised spell is refused client-side before the packet goes out, which is
+        // clientCanCast's decision - and the loadout picker was never part of it: it always
+        // skipped entries on cooldown or out of mana, option on or off. A player who turned the
+        // option off would otherwise find "offense" firing a spell that cannot cast instead of
+        // the next one that can.
+        // Resolve the Iron's Spells handles HERE, on the client thread, before anything else can
+        // want them. The loadout picker reads the result on the capture thread and must never be
+        // the one to do the resolving - so this runs before the candidates check, not behind it.
+        boolean ironsPresent = ensurePreflightReflection();
+        java.util.Set<String> candidates = equippedSpellIds;
+        if (candidates.isEmpty() || !ironsPresent) {
+            preflightBlocked = java.util.Set.of();
+            return;
+        }
+        try {
+            Object cooldowns = pfCooldowns == null ? null : pfCooldowns.invoke(null);
+            java.lang.reflect.Method onCd = isOnCooldownFor(cooldowns);
+            float mana = Float.MAX_VALUE;   // "could not read" — the same permissive default
+            if (pfMana != null) mana = ((Number) pfMana.invoke(null)).floatValue();
+
+            java.util.Set<String> blocked = null;
+            for (String key : candidates) {
+                Object spell = pfGetSpell.invoke(null, key);
+                if (spell == null) continue;
+                boolean block = false;
+                if (onCd != null) block = (boolean) onCd.invoke(cooldowns, spell);
+                if (!block && pfManaCost != null && mana != Float.MAX_VALUE) {
+                    // The level the spell is actually inscribed at, not a hardcoded 1. Using 1
+                    // under-counts the cost on any upgraded spellbook, so this waved the cast
+                    // through, the packet went out, and the server refused it — the player
+                    // speaks, nothing happens, and the only feedback is a failure toast.
+                    int cost = ((Number) pfManaCost.invoke(spell, OwnedSpells.levelOf(key)))
+                        .intValue();
+                    block = cost > mana;
+                }
+                if (block) {
+                    if (blocked == null) blocked = new java.util.HashSet<>(4);
+                    blocked.add(key);
+                }
+            }
+            preflightBlocked = blocked == null ? java.util.Set.of() : java.util.Set.copyOf(blocked);
+        } catch (Throwable t) {
+            // Permissive on failure, exactly as the per-call version was: an unreadable preflight
+            // must not become a second way to block every cast.
+            preflightBlocked = java.util.Set.of();
         }
     }
 
@@ -1177,7 +1332,11 @@ public final class VoiceController {
             if (idleNow - lastOwnedScanNanos >= OWNED_SCAN_INTERVAL_NANOS) {
                 lastOwnedScanNanos = idleNow;
                 try {
-                    com.niko.voicespells.client.OwnedSpells.scan();
+                    // The id SET is still discarded by the gate here, but the preflight snapshot
+                    // needs it: it is the only list of spells worth asking about, and it has to
+                    // keep arriving while "Only owned spells" is off.
+                    com.niko.voicespells.client.OwnedSpells.scan()
+                        .ifPresent(scanned -> equippedSpellIds = scanned);
                 } catch (Throwable ignored) { /* levels stay as they were */ }
             }
             return;
@@ -1197,6 +1356,7 @@ public final class VoiceController {
         }
         ownedScanReliable = true;
         java.util.Set<String> fresh = result.get();
+        equippedSpellIds = fresh;   // bounds the preflight snapshot — see tickPreflightSnapshot()
         int sig = fresh.hashCode(); // HashSet.hashCode is stable across iterations
         if (sig != lastOwnedSignature) {
             ownedSpellIds = fresh;
@@ -1485,6 +1645,72 @@ public final class VoiceController {
             dispatchCast(queued, vol, totalForTrigger, streakForTrigger);
             if (VoiceSpellsConfig.cEchoSfx) playEchoChime(queued);
         });
+    }
+
+    /**
+     * Drop everything that only means something inside the world we just left.
+     *
+     * <p>None of this state was ever cleared, because nothing told this class a world had ended:
+     * there is no client logout handler anywhere in the mod, and the tick handler merely skips
+     * the queue drain while {@code mc.player} is null. So a spell parked in the cast queue during
+     * a long channel survived quitting to the title screen, and on a proxy switch fast enough to
+     * beat the queue's 1.5s TTL it was dispatched at the server the player had just arrived at —
+     * a cast they spoke somewhere else. The dedup anchors, the streak and the gate snapshots
+     * carried over too, all of them describing a world that is gone.
+     *
+     * <p>Called from {@link ClientEvents} on the transition of {@code mc.player} from non-null to
+     * null, which is a genuine disconnect: respawn and dimension change REPLACE the player inside
+     * one packet handler on the client thread, so no tick ever observes a null between them.
+     * Driving it off the null transition rather than off a LoggingOut event is deliberate — that
+     * event class lives in a different package on each loader and would need a conditional block
+     * in shared code for no gain.
+     */
+    public static void onWorldLeave() {
+        synchronized (CAST_QUEUE) { CAST_QUEUE.clear(); }
+        // Dispatch/dedup anchors. lastDispatchedUtterance goes to -1, which no utterance id can
+        // equal. utteranceId itself keeps counting: it is an identity, not a clock, and resetting
+        // it here - on the client thread, while the capture thread may be between the gates and
+        // the anchor writes - would let an anchor from the old world collide with the new
+        // world's first utterance and drop a real cast.
+        lastDispatchedSpellId    = "";
+        lastDispatchedNanos      = 0L;
+        lastDispatchedFirstNanos = 0L;
+        lastDispatchedUtterance  = -1;
+        lastEventWasFinal        = false;
+        utteranceFirstHeardNanos = 0L;
+        speechStartNanos         = 0L;
+        castEndedNanos           = 0L;
+        lastHeard                = "";
+        // The HUD's last-cast toast and history strip describe the world being left. Without
+        // this, a cast recorded in the disconnect frame greeted the player in the next one.
+        lastCastDisplay = "";
+        lastCastNanos   = 0L;
+        synchronized (HISTORY) { HISTORY.clear(); }
+        // Streak: a cast in the old world must not extend into the next one.
+        castStreak      = 0;
+        lastStreakNanos = 0L;
+        // Gate state and snapshots. All of these are sampled from a player that no longer exists.
+        lastCombatNanos      = 0L;
+        hostileNearby        = false;
+        lastHostileScanNanos = 0L;
+        screenOpen           = false;
+        inWorld              = false;
+        sneaking             = false;
+        holdingFocus         = false;
+        preflightBlocked     = java.util.Set.of();
+        equippedSpellIds     = java.util.Set.of();
+        // AFK is measured from the last movement; keeping the old world's stamp would call a
+        // player who rejoins standing still "away" from the moment they land. Zero means "no
+        // reference yet", which tickAfkPosition re-stamps on its first tick back in a world.
+        lastMovementNanos = 0L;
+        // Owned spells are deliberately NOT cleared: ownedSpellIds and lastOwnedSignature are
+        // what the narrowed grammar was built from, and clearing the set without rebuilding
+        // leaves the recognizer listening for the old world's equipment. Dropping the trust flag
+        // fails the equipped-only gate OPEN until the next scan, and zeroing the timer makes that
+        // scan happen on the first tick back in a world — which rebuilds the grammar if the
+        // equipment actually changed.
+        ownedScanReliable  = false;
+        lastOwnedScanNanos = 0L;
     }
 
     /** Whole-word, case-insensitive containment ("cast" in "cast fireball" but not in
@@ -2136,14 +2362,26 @@ public final class VoiceController {
 
         // Don't cast while a screen is open (config/any menu). Still record it so the debug
         // monitor stays useful while you're tuning in the config screen.
-        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-        if (mc.screen != null) {
+        //
+        // Both of these read a client-tick snapshot rather than Minecraft directly — this method
+        // runs on the capture thread. See tickGateSnapshots().
+        //
+        // "No world" counts as a screen, and has to be stated rather than inferred: leaving a
+        // world is exactly when a flush started a moment earlier delivers its final result, and
+        // this gate is what quietly caught that before (the title screen IS a screen). The
+        // snapshot cannot see it on its own because the sampler only runs while in a world.
+        //
+        // The live null check is deliberate, and is the one Minecraft read this gate keeps. The
+        // snapshot is a tick old, and vanilla nulls the player on the very frame it disconnects,
+        // so a final result flushed in that frame slipped through here and was counted as a cast
+        // that never left. A plain reference read is safe from any thread; it is walking the
+        // level or the inventory that is not, and those stay behind the snapshots.
+        if (screenOpen || !inWorld || Minecraft.getInstance().player == null) {
             recordEvent(phrase, spellKey + " " + tr("voicespells.monitor.menu"), confidence);
             return;
         }
         // Optional sneak gate so casual talking doesn't fire spells.
-        if (VoiceSpellsConfig.cRequireSneak
-                && (mc.player == null || !mc.player.isShiftKeyDown())) {
+        if (VoiceSpellsConfig.cRequireSneak && !sneaking) {
             recordEvent(phrase, spellKey + " " + tr("voicespells.monitor.no_sneak"), confidence);
             return;
         }
@@ -2248,6 +2486,15 @@ public final class VoiceController {
             logRecog("Heard '{}' but client preflight failed for {}", phrase, spellId);
             return;
         }
+        // The dedup anchors stay HERE, on the capture thread, ahead of the hop below.
+        //
+        // They are written and read by this thread in sequence: the next partial or final result
+        // for the same utterance arrives on this same thread microseconds later and has to see
+        // them. Deferring them into the Minecraft.execute lambda would leave that follow-up event
+        // comparing against the previous cast's anchors, and a partial + final pair for one
+        // spoken word would dispatch twice — the "casts twice" bug the whole dedup block exists
+        // to prevent. Only the bookkeeping that touches Minecraft, Iron's Spells or the disk
+        // moves into the lambda.
         lastDispatchedSpellId    = spellKey;
         lastDispatchedNanos      = now;
         lastDispatchedFirstNanos = now;       // anchor echo lockout to this dispatch
@@ -2256,8 +2503,6 @@ public final class VoiceController {
         lastCastDisplay = displayNameFor(spellId);
         lastCastNanos   = now;
         lastCastSchool  = SpellInfo.of(spellKey).school;
-        bumpStreak(now);
-        VoiceStats.recordCast(spellKey, currentStreak());
         // Speak-to-cast latency for the Codex. Measured from the gate opening, not from the
         // first recognition event: Vosk buffers, so its first partial lands well after speech
         // began, and a cast that matches on the first event of an utterance measured itself as
@@ -2277,9 +2522,16 @@ public final class VoiceController {
             String.format(java.util.Locale.ROOT, "%.2f", confidence), spellId);
         ResourceLocation dispatched = spellId;
         float vol = Math.max(0f, Math.min(1f, audioLevel));
-        int totalForTrigger = VoiceStats.totalCasts(); // includes the cast we just recorded
-        int streakForTrigger = currentStreak();
         Minecraft.getInstance().execute(() -> {
+            // Streak and stats belong on this side of the hop. bumpStreak is a read-modify-write
+            // over two fields and the queue drainer calls it from the client tick, so running it
+            // on the capture thread too meant two threads racing an unsynchronised counter; and
+            // VoiceStats.recordCast writes the stats file to disk every fifth cast, which is not
+            // something to do on the thread that has 800ms of audio ring behind it.
+            bumpStreak(now);
+            VoiceStats.recordCast(spellKey, currentStreak());
+            int totalForTrigger  = VoiceStats.totalCasts(); // includes the cast just recorded
+            int streakForTrigger = currentStreak();
             // Move the spellbook's selected spell to the one we're casting so the HUD bar
             // reflects it and a follow-up manual cast uses the same spell.
             SpellSelector.select(dispatched);

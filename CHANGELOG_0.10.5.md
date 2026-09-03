@@ -28,6 +28,19 @@ Iron's Spells chestplate carries an empty spell slot internally, and treating th
 spellbook" would have left the microphone open for as long as the armor was on. Reported on
 CurseForge — thank you.
 
+**The recognizer no longer reaches into the game from its own thread.** Speech recognition runs on
+a thread of its own, and a handful of the checks it made right after hearing a phrase — is a
+hostile nearby, is a menu open, is that spell on cooldown, can you afford it — read the game world
+and Iron's Spells' cooldown tables directly from that thread. Minecraft and Iron's Spells both
+assume only the game thread does that. Most of the time it worked; when it didn't, the result could
+be anything from a cast that silently never happened to an error on the game thread. Every one of
+those checks now reads a snapshot the game thread refreshes each tick, and everything that changes
+game state after a recognized phrase happens on the game thread. Two smaller things fell out of the
+same pass: leaving a world now resets the voice state properly, so the last-cast display and the
+recognition history no longer carry into the next world, and the per-player cast streak the server
+tracks is dropped at logout instead of growing for the life of the server. The model downloader
+also refuses an archive that claims, or expands to, more than 4 GB rather than filling the disk.
+
 ---
 
 ## The interface can be translated
@@ -38,7 +51,7 @@ edit the source and rebuild.
 
 Every user-facing string is now a lang key: all of the config screens, the HUD, the guide, the
 welcome wizard, the credits, the spell list, the test arena, the live monitor, and both `/voicespells`
-command trees. That is **450 keys**, and every one of them is referenced by the code — no reference
+command trees. That is **486 keys**, and every one of them is referenced by the code — no reference
 without a string, no string without a reference.
 
 Lines that carry a number take a placeholder instead of being glued together in Java, which is what
