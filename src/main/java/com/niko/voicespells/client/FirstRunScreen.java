@@ -342,12 +342,22 @@ public final class FirstRunScreen extends Screen {
                 for (int i = 0; i < events.size() && i < maxRows; i++) {
                     VoiceController.RecognitionEvent e = events.get(i);
                     long ageSec = TimeUnit.NANOSECONDS.toSeconds(now - e.nanoTime());
-                    int color = e.matched() == null ? Theme.F_NOMATCH : Theme.F_MATCH;
+                    // matched() is null (no match), a bare spell id (a real cast), or an id with a
+                    // trailing reason (suppressed: queued, not equipped, low confidence...). This
+                    // used to colour every non-null value as a cast, so on the one screen whose
+                    // Next button waits for the player to see casting work, a rejection drew
+                    // green with an arrow - the wrong lesson at exactly the wrong moment. Same
+                    // split as the Live Monitor and the Test Arena.
+                    String raw = e.matched();
+                    int sp = raw == null ? -1 : raw.indexOf(' ');
+                    int color = raw == null ? Theme.F_NOMATCH : sp > 0 ? Theme.F_DEDUP : Theme.F_MATCH;
+                    String outcome = raw == null
+                        ? "— " + Component.translatable("voicespells.wizard.no_match").getString()
+                        : sp > 0
+                            ? "· " + shortId(raw.substring(0, sp)) + " " + raw.substring(sp + 1)
+                            : "→ " + shortId(raw);
                     String text = String.format(java.util.Locale.ROOT, "%2ds  \"%s\"  %s",
-                        ageSec, e.heard(),
-                        e.matched() == null
-                            ? "— " + Component.translatable("voicespells.wizard.no_match").getString()
-                            : "→ " + shortId(e.matched()));
+                        ageSec, e.heard(), outcome);
                     // The heard string is whatever the recogniser produced and was drawn entirely
                     // unclipped - no truncation of any kind - so a long utterance ran straight out
                     // of the feed and across the wizard. This is the step whose Next button is

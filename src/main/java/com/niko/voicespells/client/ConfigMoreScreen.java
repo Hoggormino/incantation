@@ -330,7 +330,8 @@ public final class ConfigMoreScreen extends Screen {
         VoiceSpellsConfig.saveToDisk();
         VoiceSpellsConfig.refreshCache();
         VoiceController.onConfigChanged();
-        flashStatus("Applied " + applied + " setting(s)", Theme.C_SUCCESS);
+        flashStatus(Component.translatable("voicespells.more.profile_applied", applied).getString(),
+            Theme.C_SUCCESS);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

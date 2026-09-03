@@ -108,13 +108,12 @@ public final class LiveMonitorScreen extends Screen {
             long ageSec = TimeUnit.NANOSECONDS.toSeconds(now - e.nanoTime());
             int color;
             String outcome;
+            // No dedup row: the controller drops a repeated phrase before recordEvent, so there
+            // is nothing to draw for it. A branch that matched a "(deduped)" suffix lived here
+            // for a long time after the last thing that produced it was removed.
             if (e.matched() == null) {
                 color = Theme.F_NOMATCH;
                 outcome = Component.translatable("voicespells.monitor.no_match").getString();
-            } else if (e.matched().endsWith("(deduped)")) {
-                color = Theme.F_DEDUP;
-                outcome = "↻ " + shortId(e.matched().replace(" (deduped)", "")) + " "
-                        + Component.translatable("voicespells.monitor.dup").getString();
             } else {
                 // Same distinction the Test Arena makes: a bare id is a cast, an id with a
                 // trailing reason was suppressed. Drawing both with the arrow made one utterance
