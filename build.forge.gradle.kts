@@ -191,7 +191,16 @@ java { withSourcesJar() }
 //   * CURSEFORGE_TOKEN / MODRINTH_TOKEN in the environment
 // Without them the tasks are skipped rather than failing, so an ordinary build is unaffected.
 publishMods {
-    file = tasks.named<Jar>("jar").flatMap { it.archiveFile }
+    // reobfJar, NOT jar. ModDevGradle's legacyforge plugin redirects the plain jar task's output
+    // into build/devlibs/ (official Mojang names, loadable only in a dev environment) and hands
+    // build/libs/ to reobfJar, which remaps to the SRG names a real Forge 1.20.1 runtime uses.
+    // Both archives carry the same file name, so nothing looks wrong. 0.10.4 was the first
+    // release to go through this block and it uploaded the devlibs jar: every Forge user got
+    //   NoSuchMethodError: CriteriaTriggers.register(CriterionTrigger)
+    // at mod construction, because the runtime only knows that method as m_10595_. It had worked
+    // in runClient, which is deobfuscated, and 0.10.3 had been uploaded by hand from build/libs.
+    // Verified against the bytes Modrinth served: 23 official-named Minecraft calls, 0 SRG.
+    file = tasks.named<Jar>("reobfJar").flatMap { it.archiveFile }
     displayName = "Incantation ${property("mod.version")} for Forge 1.20.1"
     version = property("mod.version") as String
     type = STABLE
