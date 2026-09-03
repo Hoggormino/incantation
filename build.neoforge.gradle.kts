@@ -146,7 +146,13 @@ val tokens = mapOf(
     "mod_version"             to property("mod.version") as String,
     "mod_authors"             to property("mod.authors") as String,
     "mod_description"         to property("mod.description") as String,
-    // pack_format differs per Minecraft version (15 on 1.20.1, 46 on 1.21.x).
+    // pack_format differs per Minecraft version, and 1.21.1 splits it: the RESOURCE format is 34
+    // and the DATA format is 48. The 34 shipped here is the resource one (the comment used to
+    // claim "46 on 1.21.x", which is neither). One number is still correct for both halves,
+    // because NeoForge hides a mod's own pack and parents it under a synthetic always-compatible
+    // pack, so the data side is never gated on this value — the voicespells advancements load on
+    // 1.21.1 exactly as they should. On 1.20.1 the two formats are both 15 and the question
+    // does not arise.
     // Templating it keeps ONE shared pack.mcmeta instead of a per-node copy,
     // which also removes a duplicate-entry clash in sourcesJar.
     "pack_format"             to property("deps.pack_format") as String,

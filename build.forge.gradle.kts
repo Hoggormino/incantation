@@ -156,7 +156,10 @@ val tokens = mapOf(
     "mod_version"             to property("mod.version") as String,
     "mod_authors"             to property("mod.authors") as String,
     "mod_description"         to property("mod.description") as String,
-    // pack_format differs per Minecraft version (15 on 1.20.1, 46 on 1.21.x).
+    // pack_format differs per Minecraft version. On 1.20.1 the resource and data formats are
+    // both 15, so the single number here is exactly right; 1.21.1 is where they split (34
+    // resource / 48 data) and that node's build script explains why one value still serves.
+    // The comment used to say "46 on 1.21.x", which is neither of them.
     // Templating it keeps ONE shared pack.mcmeta instead of a per-node copy,
     // which also removes a duplicate-entry clash in sourcesJar.
     "pack_format"             to property("deps.pack_format") as String,
