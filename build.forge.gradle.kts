@@ -190,6 +190,54 @@ java { withSourcesJar() }
 //   * publish.curseforge.id / publish.modrinth.id in gradle.properties (project ids, not slugs)
 //   * CURSEFORGE_TOKEN / MODRINTH_TOKEN in the environment
 // Without them the tasks are skipped rather than failing, so an ordinary build is unaffected.
+//
+// ---------------------------------------------------------------------------------------------
+// Guard: never ship a Forge jar that is not reobfuscated.
+//
+// Two same-named jars come out of this build (see the comment on `file` below). Telling them
+// apart by eye is impossible, and 0.10.4 proved nobody would. So this task opens the jar that is
+// about to be published and checks that a couple of classes reference Minecraft methods by their
+// SRG names. The dev jar references them by their official names and fails here, instead of on
+// every player's machine.
+//
+// The two probes are methods this mod calls unconditionally, so they exist in every build:
+//   ModTriggers     -> CriteriaTriggers.register, which is m_10595_ once remapped
+//   VoiceController -> Entity.getX,               which is m_20185_ once remapped
+// Wired into `check`, so every build runs it, and into every publish task, so no route to a
+// store skips it.
+val verifyForgeReobf by tasks.registering {
+    group = "verification"
+    description = "Fails if the Forge jar still carries dev (official) Minecraft method names instead of SRG."
+    val jar = tasks.named<Jar>("reobfJar").flatMap { it.archiveFile }
+    // zipTree, not java.util.zip: inside a build script `java` is the JavaPluginExtension accessor
+    // (see `java { withSourcesJar() }` above), so `java.util.zip.ZipFile` does not even resolve.
+    val classes = project.zipTree(jar)
+    inputs.file(jar)
+    doLast {
+        val archive = jar.get().asFile
+        val probes = mapOf(
+            "com/niko/voicespells/advancements/ModTriggers.class" to "m_10595_",
+            "com/niko/voicespells/client/VoiceController.class"   to "m_20185_",
+        )
+        probes.forEach { (entry, srg) ->
+            val cls = classes.matching { include(entry) }.files.singleOrNull()
+                ?: throw GradleException("verifyForgeReobf: $entry is missing from ${archive.name}")
+            val text = String(cls.readBytes(), Charsets.ISO_8859_1)
+            if (!text.contains(srg)) {
+                throw GradleException(
+                    "verifyForgeReobf: ${archive.name} is NOT reobfuscated - $entry does not reference " +
+                    "$srg. This is the dev jar (build/devlibs); publishing it crashes every Forge " +
+                    "user at mod construction, as 0.10.4 did. The publishable jar is reobfJar's " +
+                    "output in build/libs.")
+            }
+        }
+        logger.lifecycle("verifyForgeReobf: ${archive.name} carries SRG names (${probes.size} classes checked)")
+    }
+}
+tasks.named("check") { dependsOn(verifyForgeReobf) }
+tasks.matching { it.name == "publishMods" || it.name == "publishModrinth" || it.name == "publishCurseforge" }
+    .configureEach { dependsOn(verifyForgeReobf) }
+
 publishMods {
     // reobfJar, NOT jar. ModDevGradle's legacyforge plugin redirects the plain jar task's output
     // into build/devlibs/ (official Mojang names, loadable only in a dev environment) and hands
