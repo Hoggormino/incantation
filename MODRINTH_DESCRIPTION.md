@@ -15,9 +15,10 @@ straight to a Vosk recognizer whose grammar is built from the spell names your i
 actually register. Anything that isn't a spell name resolves to "unknown" rather than snapping to
 the nearest spell, so background noise doesn't fire anything.
 
-Casting is then gated on what you actually have equipped: a spellbook in your Curios slot, or an
-imbued weapon you're holding. Saying the name of a spell you don't have does nothing. Servers that
-would rather let you cast from a spellbook held in hand can set `castMode = ANY_SPELLBOOK`.
+Casting is then gated on what you actually have equipped: a spellbook in your Curios slot, an
+imbued weapon you're holding, or imbued armor you're wearing. Saying the name of a spell you don't
+have does nothing. Servers that would rather let you cast from a spellbook held in hand can set
+`castMode = ANY_SPELLBOOK`.
 
 Recognition runs entirely on your machine. No accounts, no telemetry, and your microphone audio is
 never transmitted, never recorded, never written to disk. The one time Incantation touches the
@@ -26,8 +27,9 @@ the model yourself if you would rather it didn't.
 
 ## When it listens
 
-**By default the microphone is only open while you have a spellbook, staff or imbued weapon —
-in either hand, or in your Curios slot.** Stow it and the mic closes. No keybind involved.
+**By default the microphone is only open while you have a spellbook, staff, imbued weapon or
+imbued armor — in either hand, worn, or in your Curios slot.** Stow or remove it and the mic
+closes. No keybind involved.
 
 That means conversation with your spellbook stowed can never cast anything, which matters because
 a lot of people run a voice-chat mod on the same microphone. **But if you keep a spellbook in your
@@ -39,7 +41,7 @@ Set `gatingMode` to taste:
 
 | Mode | Microphone is open |
 |---|---|
-| `HOLD_ITEM` | while a spell focus is in your hands **or Curios slot** *(default)* |
+| `HOLD_ITEM` | while a spell focus is in your hands, worn, **or in your Curios slot** *(default)* |
 | `HOLD_KEY_AND_ITEM` | while holding the cast key **and** a spell focus |
 | `HOLD_KEY` | while holding the cast key |
 | `ALWAYS_ON` | whenever you are in a world — fully hands-free |
@@ -58,8 +60,8 @@ beside it.
   registers spells through Iron's API.
 - **Equipped-only casting** *(default ON)* — a spell only fires if you actually have it on you.
   Anything else is rejected before it leaves your client.
-- **Imbued weapons supported** — hold an imbued sword or staff, say the spell it carries, it casts
-  via the same mechanism as right-clicking.
+- **Imbued weapons and armor supported** — hold an imbued sword or staff, or wear an imbued
+  chestplate, say the spell it carries, it casts via the same mechanism as right-clicking.
 - **HUD chip** — corner-anchored chips showing a live mic indicator and level meter, plus last
   cast, recent cast history, queued spells, miss toast, the last phrase heard, and "did you
   mean…?" alias suggestions.
@@ -80,8 +82,12 @@ beside it.
 
   **The model is only half of it.** The recogniser only listens for words its model knows, so the
   spell phrases have to be translated too — a Russian model against English spell names hears
-  nothing at all. A Spanish phrasebook contributed by the community, and a Russian one part-filled
-  from Iron's Spells' own translation, are both in the repository's `contrib/` folder.
+  nothing at all. The repository's `contrib/` folder has a Spanish phrasebook contributed by the
+  community, translated and ready to use. The Russian one is a blank template: 294 entries with
+  every override empty, because the machine-translated version that used to fill it had never been
+  spoken into a microphone, and a wrong phrase gets trusted where a blank one asks to be filled.
+  Russian recognition therefore needs that file filled in first. `/voicespells vocab` tells you
+  which of your phrases the loaded model can actually pronounce.
 
   **German does not work yet**, and not for want of a model: Iron's Spells ships no German
   translation, so there are no German spell names to start from. It needs a hand-written phrase
@@ -147,7 +153,7 @@ Most settings are accessible in-game from **Mods → Iron's Spells: Incantation 
   dedup window, debug monitor.
 - **HUD tab** — corner, offset, opacity.
 - **More menu** — welcome wizard, Voice Codex, Diagnostics, Test Arena, reload grammar, profile
-  export/import, auto-calibrate noise gate.
+  export/import, calibrate mic.
 
 Client commands: `/voicespells devices` lists every capture device the game can see and which one
 is selected — start there if the microphone looks dead.
@@ -158,14 +164,14 @@ Server settings (`config/voicespells-server.toml`): cast mode (`CURIO_SPELLBOOK`
 ## Troubleshooting
 
 - **Nothing happens when you speak** — check the gating mode first. By default the mic is only
-  open while a spellbook, staff or imbued weapon is in your hands or Curios slot. The HUD mic dot
-  tells you: dim means closed.
+  open while a spellbook, staff, imbued weapon or imbued armor is in your hands, worn, or in your
+  Curios slot. The HUD mic dot tells you: dim means closed.
 - **Chat says "Vosk model not found"** (or Diagnostics shows `Vosk model: FAIL`) — no model under
   `config/voicespells/model/`. Recheck the layout: `am/`, `conf/`, `graph/` should sit directly
   under that path.
 - **Microphone looks dead** — run `/voicespells devices` to see what the game can find, and set
   `captureDevice` if the default isn't the one you want.
-- **Recognition feels slow** — open More → **Auto-calibrate noise gate** and say a few spell names.
+- **Recognition feels slow** — open More → **Calibrate mic** and say a few spell names.
   Or use the **Diagnostics** screen to verify each prerequisite.
 - **Test Arena doesn't cast** — by design. It records would-be casts so you can practice safely.
 
