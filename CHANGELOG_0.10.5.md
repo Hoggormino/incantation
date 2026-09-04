@@ -51,8 +51,8 @@ edit the source and rebuild.
 
 Every user-facing string is now a lang key: all of the config screens, the HUD, the guide, the
 welcome wizard, the credits, the spell list, the test arena, the live monitor, and both `/voicespells`
-command trees. That is **486 keys**, and every one of them is referenced by the code — no reference
-without a string, no string without a reference.
+command trees. That is **486 keys**, and every string the interface puts on your screen now comes
+from that file rather than from the Java.
 
 Lines that carry a number take a placeholder instead of being glued together in Java, which is what
 made the command output translatable at all.
@@ -70,8 +70,8 @@ config keys such as `castMode=`, which are not words to translate.
 ## The diagnostics screen too
 
 Worth calling out separately, because it is the screen you open exactly when something has gone
-wrong. Leaving it in English would have defeated the point of translating the rest. All 46 checks —
-names and one-line reasons — now come from the lang file.
+wrong. Leaving it in English would have defeated the point of translating the rest. Every check on
+it — names and one-line reasons — now comes from the lang file.
 
 Two things stay as machine values on purpose: the microphone state and the model state. The code
 compares them against fixed strings to decide whether the mic is healthy, so they are translated at
@@ -95,7 +95,7 @@ you which of your phrases the loaded model can actually pronounce, and it takes 
 ## For anyone who wants to translate it
 
 Copy `assets/voicespells/lang/en_us.json` out of the jar, rename it to your locale, translate the
-values and leave the keys alone. [`contrib/README.md`](contrib/README.md) has the three things that
+values and leave the keys alone. [`contrib/README.md`](https://github.com/Hoggormino/incantation/blob/main/contrib/README.md) has the three things that
 will bite you — what `%s` and `§` mean, and why the guide screens need each paragraph re-wrapped
 rather than translated line by line.
 
