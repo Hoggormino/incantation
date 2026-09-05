@@ -406,6 +406,7 @@
   "voicespells.monitor.queue_ack": "принято в очередь (%s)",
   "voicespells.monitor.queue_cleared": "очередь очищена (%s)",
   "voicespells.monitor.queued": "(в очереди)",
+  "voicespells.monitor.repeat_too_soon": "(повтор слишком рано)",
   "voicespells.monitor.title": "Монитор",
   "voicespells.more.audio_devices": "Микрофон и звук",
   "voicespells.more.calibrate_mic": "Калибровка микрофона (5 с)",

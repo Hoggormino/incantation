@@ -2135,10 +2135,21 @@ public final class VoiceController {
         // Dropped rather than prevented: the flush still has to happen, and its result still has
         // to be discarded, so the buffer is genuinely empty when listening resumes.
         if (!listeningEnabled) return;
-        // Utterance-boundary detection: a partial that follows a final is the start of a new
-        // utterance. Bump the counter so the dedup check below can tell "still the same thing
-        // I was just hearing" from "the player said it again".
-        boolean newUtterance = lastEventWasFinal && !isFinal;
+        // Utterance-boundary detection: an utterance ENDS at a final, so whatever arrives next -
+        // partial or final - belongs to the next one. Bump the counter so the dedup check below
+        // can tell "still the same thing I was just hearing" from "the player said it again".
+        //
+        // This used to require the next event to be a partial (`lastEventWasFinal && !isFinal`),
+        // which quietly broke every utterance that produces no partial at all. In grammar mode
+        // Vosk often keeps `getPartialResult()` empty until it commits at the endpoint, and
+        // VoskSession drops empty and unchanged partials before they ever reach this method - so
+        // a short spell name can arrive as a lone final with nothing before it. Two such
+        // utterances in a row left the counter frozen, `sameUtterance` permanently true, and the
+        // spell could never be cast a second time; the only escape was saying a DIFFERENT spell,
+        // which rewrites lastDispatchedSpellId. That is the "refuses to cast the same spell
+        // twice" report, and it looked like a dead microphone because the dedup branch below
+        // returned without recording anything.
+        boolean newUtterance = lastEventWasFinal;
         if (newUtterance) {
             utteranceId++;
             utteranceFirstHeardNanos = 0L;
@@ -2427,6 +2438,16 @@ public final class VoiceController {
                 // Nothing is lost: sameUtterance already catches a slow partial→final span
                 // exactly (by identity, not by timing), and inEchoLockout still bounds repeats
                 // absolutely from lastDispatchedFirstNanos.
+                //
+                // Say so, once per utterance. This branch used to return in total silence, which
+                // is indistinguishable from a microphone that stopped working - the Live Monitor
+                // showed nothing at all, and that is how the one bug this branch ever had got
+                // reported ("not even on the live monitor"). Finals only, so a suppressed
+                // utterance costs one line rather than one per partial frame.
+                if (isFinal) {
+                    recordEvent(phrase, spellKey + " " + tr("voicespells.monitor.repeat_too_soon"),
+                        confidence, matchTier);
+                }
                 return;
             }
         }

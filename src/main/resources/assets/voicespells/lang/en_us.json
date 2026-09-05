@@ -406,6 +406,7 @@
   "voicespells.monitor.queue_ack": "queue ack (%s)",
   "voicespells.monitor.queue_cleared": "queue cleared (%s)",
   "voicespells.monitor.queued": "(queued)",
+  "voicespells.monitor.repeat_too_soon": "(repeat too soon)",
   "voicespells.monitor.title": "Live Monitor",
   "voicespells.more.audio_devices": "Microphone & Sound",
   "voicespells.more.calibrate_mic": "Calibrate mic (5s)",
