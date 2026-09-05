@@ -11,7 +11,9 @@ import net.minecraft.resources.ResourceLocation;
  *
  * Fields:
  *   - {@code spellId}     : which spell to cast
- *   - {@code volumeScale} : client's current audio RMS (0..1). Optional spellbook-level scaling.
+ *   - {@code volumeScale} : how loudly the spell was said, 0..1, relative to the client's own
+ *                           calibrated speaking level. Under {@code voiceVolumeScaling} the
+ *                           server scales the voice level bonus by it.
  *   - {@code totalCasts}  : client's lifetime voice-cast count (from VoiceStats)
  *   - {@code streak}      : current consecutive-cast streak (resets after inactivity)
  *
@@ -39,10 +41,24 @@ public record CastSpellPayload(ResourceLocation spellId, float volumeScale,
      * which DISCONNECTS the player on their first cast. There is no way to fix that from the new
      * side once the format has changed.
      *
-     * <p>The sign costs nothing and degrades correctly in both directions. An older server reads a
-     * negative volume and clamps it to zero, which it already does; the only consequence is that a
-     * repeat casts at level 1 while {@code voiceVolumeScaling} is on, a non-default option. An
-     * older client never sends a negative, so it reads as spoken, which is what it always was.
+     * <p>The sign costs nothing and degrades correctly in both directions: an older client never
+     * sends a negative, so it reads as spoken, which is what it always was.
+     *
+     * <p>The MAGNITUDE needs the same care, because 0.10.6 redefined what it means without
+     * changing a byte of the format. Three cases, all harmless:
+     *
+     * <ul>
+     *   <li>A pre-0.10.5 server clamps a negative magnitude to zero, as it always did, so a repeat
+     *       casts at level 1 while its {@code voiceVolumeScaling} is on - a non-default option.</li>
+     *   <li>A 0.10.5 server multiplies the SPELLBOOK's level by the magnitude, which is the contract
+     *       it was written against. A 0.10.6 server scales only the level BONUS by it and never
+     *       touches the inscribed level.</li>
+     *   <li>A 0.10.5 client sends the level it read after the player had stopped speaking - close to
+     *       zero - for a spoken cast, and a fixed 1.0 for a quick-recast. Against a 0.10.6 server it
+     *       therefore earns almost none of the level bonus when it speaks and all of it when it
+     *       repeats, until it updates. Neither is worth guarding against: the inscribed level is the
+     *       floor, so nothing a client sends can make a cast weaker than the item it came from.</li>
+     * </ul>
      */
     public boolean spoken() {
         return volumeScale >= 0f;

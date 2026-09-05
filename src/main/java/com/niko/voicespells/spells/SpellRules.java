@@ -335,6 +335,51 @@ public final class SpellRules {
     }
 
     /**
+     * Whether ANY level bonus is configured on this server, for anybody.
+     *
+     * <p>Asked by {@link SpellCaster} so it can say once, in the log, that {@code
+     * voiceVolumeScaling} is on with nothing to scale - which from the player's chair is
+     * indistinguishable from the scaling being broken, because whispering and raising your voice
+     * produce identical casts.
+     *
+     * <p>Deliberately a question about the CONFIG rather than about one player's effective bonus.
+     * {@link #advantagesFor} returns 0 for a player excepted with {@code !Alex} or overridden to
+     * {@code level:0}, and those players are being denied a bonus that exists and works - warning
+     * about the setting because one such player cast a spell would be false. The parsing below
+     * mirrors {@code advantagesFor}'s: same key, same {@code name=level:N} shape, exceptions
+     * ignored because an exception cannot grant anything.
+     */
+    public static boolean anyLevelBonusConfigured() {
+        try {
+            if (VoiceSpellsServerConfig.SERVER.voiceLevelBonus.get() > 0) return true;
+        } catch (Throwable configUnreadable) {
+            return false;   // config unreadable: never claim a bonus exists
+        }
+        try {
+            java.util.List<? extends String> list =
+                VoiceSpellsServerConfig.SERVER.playerAdvantages.get();
+            if (list == null) return false;
+            for (String raw : list) {
+                if (raw == null) continue;
+                String entry = raw.trim();
+                int eq = entry.indexOf('=');
+                if (eq <= 0 || entry.startsWith("!")) continue;
+                for (String part : entry.substring(eq + 1).split(",")) {
+                    String[] kv = part.trim().split(":", 2);
+                    if (kv.length != 2) continue;
+                    if (!kv[0].trim().toLowerCase(java.util.Locale.ROOT).equals("level")) continue;
+                    try {
+                        if (Integer.parseInt(kv[1].trim()) > 0) return true;
+                    } catch (NumberFormatException notANumber) { /* as advantagesFor: skip it */ }
+                }
+            }
+        } catch (Throwable t) {
+            // A malformed list must not turn into a claim either way; fall through to false.
+        }
+        return false;
+    }
+
+    /**
      * Whether a cast that did NOT come from voice should be blocked.
      *
      * @param spellId the spell being cast, as {@code namespace:path}

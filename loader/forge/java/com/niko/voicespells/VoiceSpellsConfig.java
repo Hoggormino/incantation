@@ -161,6 +161,8 @@ public final class VoiceSpellsConfig {
         public final ForgeConfigSpec.BooleanValue alwaysShowHeard;
         public final ForgeConfigSpec.BooleanValue handsFreeConfirm;
         public final ForgeConfigSpec.DoubleValue  noiseGateRms;
+        /** How loudly this player normally speaks, learned by "Calibrate mic"; 0 = never run. */
+        public final ForgeConfigSpec.DoubleValue  speechPeakRms;
         /** When the mic is allowed to feed the recognizer. */
         public final ForgeConfigSpec.EnumValue<GatingMode> gatingMode;
         /** Release the mic while the window is unfocused or the game is paused. */
@@ -320,6 +322,20 @@ public final class VoiceSpellsConfig {
                       "Raise this if you see phantom casts on background noise; lower if",
                       "soft speech is being missed. Set to 0 to disable the gate entirely.");
             noiseGateRms = b.defineInRange("noiseGateRms", 350.0, 0.0, 6000.0);
+            b.comment("How loud you normally speak: the level heard during the last 'Calibrate mic'",
+                      "run, as a microphone frame RMS. Voice casts are judged against it when the",
+                      "server has voiceVolumeScaling on - speaking at this level earns about half",
+                      "the voice level bonus, a quarter of it (a whisper) none of it, and 1.5x",
+                      "(a raised voice) all of it.",
+                      "Measured relative to your own voice on purpose: the same raised voice is a",
+                      "different RMS on every microphone and at every gain setting.",
+                      "The bonus itself is whole levels, so with voiceLevelBonus = 1 there is no",
+                      "gradient to hear - your normal speaking voice already earns it, and only",
+                      "dropping clearly below it (a whisper) loses it.",
+                      "0 = never calibrated, in which case a typical microphone (3000) is assumed.",
+                      "Set by Config -> More... -> Calibrate mic; there is no reason to type a",
+                      "number here by hand.");
+            speechPeakRms = b.defineInRange("speechPeakRms", 0.0, 0.0, 32767.0);
             b.comment("When the microphone is allowed to listen.",
                       "ALWAYS_ON         - live whenever you are in a world.",
                       "HOLD_KEY          - only while the push-to-talk keybind is held.",
@@ -438,6 +454,7 @@ public final class VoiceSpellsConfig {
     public static volatile boolean cAlwaysShowHeard = false;
     public static volatile boolean cHandsFreeConfirm = false;
     public static volatile double  cNoiseGateRms    = 350.0;
+    public static volatile double  cSpeechPeakRms   = 0.0;
     public static volatile String  cModelId         =
         com.niko.voicespells.speech.ModelCatalog.DEFAULT_ID;
     public static volatile GatingMode cGatingMode    = GatingMode.HOLD_ITEM;
@@ -497,6 +514,7 @@ public final class VoiceSpellsConfig {
         cAlwaysShowHeard  = c.alwaysShowHeard.get();
         cHandsFreeConfirm = c.handsFreeConfirm.get();
         cNoiseGateRms     = c.noiseGateRms.get();
+        cSpeechPeakRms    = c.speechPeakRms.get();
         cModelId          = c.modelId.get();
         cGatingMode       = c.gatingMode.get();
         cSuspendUnfocused = c.suspendWhenUnfocused.get();

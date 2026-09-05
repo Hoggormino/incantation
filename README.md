@@ -70,9 +70,10 @@ custom phrases (see Configuration).
 - **Voice commands.** With hands-free confirm on, say `no` to clear spells waiting in the cast
   queue, or `yes` to accept a "did you mean…?" alias suggestion.
 - **Voice advantages** *(server, off by default).* Reward speaking: scale the cooldown of a
-  voice cast, add spell levels to it, or both — with the extra levels charged at the spell's
-  ordinary mana cost. Configurable per player via `playerAdvantages`, including `!name` to hold
-  one player to the ordinary rules while everyone else gets the bonus.
+  voice cast, add spell levels to it, or both — and, with `voiceVolumeScaling`, make how much of
+  the level bonus a cast earns depend on how loudly it was said — with the extra levels charged at
+  the spell's ordinary mana cost. Configurable per player via `playerAdvantages`, including
+  `!name` to hold one player to the ordinary rules while everyone else gets the bonus.
 - **Incantation-only mode** *(server, off by default).* Require spells to be spoken —
   either always, or once per spell before it can be clicked.
 - **Server-side controls.** Per-player whitelist, blocklist, rate limit, broadcast-nearby,

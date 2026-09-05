@@ -8,13 +8,31 @@ import net.minecraft.resources.ResourceLocation;
  *
  * Fields:
  *   - {@code spellId}     : which spell to cast
- *   - {@code volumeScale} : client's current audio RMS (0..1). Optional spellbook-level scaling.
+ *   - {@code volumeScale} : how loudly the spell was said, 0..1, relative to the client's own
+ *                           calibrated speaking level. Under {@code voiceVolumeScaling} the
+ *                           server scales the voice level bonus by it.
  *   - {@code totalCasts}  : client's lifetime voice-cast count (from VoiceStats)
  *   - {@code streak}      : current consecutive-cast streak (resets after inactivity)
  *
  * <p>{@code volumeScale} carries a second meaning in its SIGN: negative means the cast came from
  * the quick-recast keybind rather than from speech. See the 1.21.1 twin for why it is encoded
  * there instead of as a fifth field.
+ *
+ * <p>The MAGNITUDE needs care across versions, because 0.10.6 redefined what it means without
+ * changing a byte of the format. Three cases, all harmless:
+ *
+ * <ul>
+ *   <li>A pre-0.10.5 server clamps a negative magnitude to zero, as it always did, so a repeat
+ *       casts at level 1 while its {@code voiceVolumeScaling} is on - a non-default option.</li>
+ *   <li>A 0.10.5 server multiplies the SPELLBOOK's level by the magnitude, which is the contract
+ *       it was written against. A 0.10.6 server scales only the level BONUS by it and never
+ *       touches the inscribed level.</li>
+ *   <li>A 0.10.5 client sends the level it read after the player had stopped speaking - close to
+ *       zero - for a spoken cast, and a fixed 1.0 for a quick-recast. Against a 0.10.6 server it
+ *       therefore earns almost none of the level bonus when it speaks and all of it when it
+ *       repeats, until it updates. Neither is worth guarding against: the inscribed level is the
+ *       floor, so nothing a client sends can make a cast weaker than the item it came from.</li>
+ * </ul>
  *
  * The two count fields exist so the server can fire the {@link com.niko.voicespells.advancements.VoiceCastTrigger}
  * with accurate per-player numbers without maintaining its own persistent counter — the client

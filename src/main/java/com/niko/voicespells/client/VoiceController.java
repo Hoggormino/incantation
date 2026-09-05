@@ -93,19 +93,74 @@ public final class VoiceController {
      * answer: that is when the player started speaking.
      */
     private static volatile long speechStartNanos = 0L;
-    /** Loudest normalised frame level (0..1) heard since the noise gate last opened, i.e. the
-     *  peak of the utterance in progress. This is what a cast reports as its volume, and it has
-     *  to be a peak captured DURING speech: the level at dispatch time is useless, because most
-     *  casts dispatch on the final result, which is produced by the flush that fires after the
-     *  gate has closed - by then {@link #audioLevel} has decayed through several quiet frames
-     *  and been multiplied by 0.2 on the closing edge, so it always read as a whisper and
-     *  {@code voiceVolumeScaling} capped every cast at level 1. Written on the capture thread in
-     *  the mic-frame path, read on the capture and flush threads at dispatch; volatile is enough. */
-    private static volatile float utterancePeakLevel = 0f;
+    /** Loudest raw frame RMS heard since the noise gate last opened, i.e. the peak of the
+     *  utterance in progress. This is what a cast reports as its volume, and it has to be a peak
+     *  captured DURING speech: the level at dispatch time is useless, because most casts dispatch
+     *  on the final result, which is produced by the flush that fires after the gate has closed -
+     *  by then {@link #audioLevel} has decayed through several quiet frames and been multiplied by
+     *  0.2 on the closing edge, so it always read as a whisper and {@code voiceVolumeScaling}
+     *  capped every cast at level 1.
+     *
+     *  <p>Raw RMS rather than the meter's normalised level, which is the second half of the same
+     *  bug: the meter saturates at {@link #FULL_SCALE_RMS}, so an ordinary sentence from a hot mic
+     *  and a genuine shout were both exactly 1.0, and "louder than you normally speak" cannot be
+     *  expressed by a number that is already pinned at the top. {@link #loudnessOf(double)} turns
+     *  it into the 0..1 loudness that goes on the wire, measured against this player's own
+     *  calibrated speaking level.
+     *
+     *  <p>Two things reset it. The primary one is the gate's closed-&gt;open edge below: a new
+     *  utterance starts with a new peak. The fallback is in {@link #onPhraseRecognized}, which
+     *  clears it as soon as a final result has consumed it - because that gate edge never arrives
+     *  if the gate never closes, and it never closes when {@code noiseGateRms} is 0 (a documented
+     *  setting) or when calibration put the threshold below the room's own noise floor. Without
+     *  the fallback, the loudest moment of the session would be charged to every cast made after
+     *  it. Written on the capture thread in the mic-frame path and on the capture/flush threads at
+     *  dispatch, read on the same; volatile is enough.  */
+    private static volatile double utterancePeakRms = 0.0;
     /** RMS that counts as "full scale" for the level meter and the cast volume. 16-bit PCM tops
      *  out at 32767; normal speech RMS lives around 1500-6000, so this maps speech to roughly
      *  0..1 with loud speech saturating at 1. */
     private static final double FULL_SCALE_RMS = 6000.0;
+    /** Where "your own voice" sits on the loudness curve, and how far either side of it counts.
+     *
+     *  <p>The cast-side peak and the calibration reference are the same estimator - the largest
+     *  frame RMS of an utterance - so their ratio is unit-free and survives any microphone gain
+     *  once the player has calibrated. A quarter of the reference (about -12dB, a whisper) earns
+     *  nothing; one and a half times it (about +3.5dB, a raised voice) earns all of it. The
+     *  player's own normal level therefore lands at 0.6 rather than 0.5, which is deliberate:
+     *  the server rounds {@code maxBonus * loudness} to a whole number of levels, and a normal
+     *  speaking voice sitting exactly on the rounding edge would flip between two outcomes on
+     *  microphone noise alone. With {@code voiceLevelBonus = 1} the result is all-or-nothing
+     *  around your normal volume - the gradient only becomes visible at a bonus of 2 or more. */
+    private static final double LOUDNESS_WHISPER_RATIO = 0.25;
+    private static final double LOUDNESS_SHOUT_RATIO   = 1.5;
+    /** Speaking level assumed for a player who has never run "Calibrate mic". A level inside the
+     *  1500-6000 RMS that ordinary speech occupies, i.e. roughly the span the old fixed scale
+     *  covered, so an uncalibrated player still gets a usable spread instead of always 0 or 1. */
+    private static final double DEFAULT_SPEECH_PEAK_RMS = 3000.0;
+
+    /** The reference the loudness curve is currently measured against: the calibrated speaking
+     *  level, or {@link #DEFAULT_SPEECH_PEAK_RMS} for a player who has never calibrated. */
+    private static double loudnessReference() {
+        double ref = VoiceSpellsConfig.cSpeechPeakRms;
+        return ref > 0 ? ref : DEFAULT_SPEECH_PEAK_RMS;
+    }
+
+    /**
+     * Turn an utterance's peak RMS into the 0..1 loudness the cast payload carries.
+     *
+     * <p>Relative, never absolute: the same raised voice is a different RMS on every microphone
+     * and at every gain setting, so the only meaningful question is how this utterance compares
+     * with how loudly this player normally speaks. Runs on the capture and flush threads, so it
+     * reads nothing but its argument and one volatile config cache - no world, no inventory, no
+     * Minecraft at all.
+     */
+    private static float loudnessOf(double peakRms) {
+        double ratio = peakRms / loudnessReference();
+        double loudness = (ratio - LOUDNESS_WHISPER_RATIO)
+            / (LOUDNESS_SHOUT_RATIO - LOUDNESS_WHISPER_RATIO);
+        return (float) Math.max(0.0, Math.min(1.0, loudness));
+    }
     /** How long the noise gate stays open after the last loud frame. Generous enough to span
      *  phoneme transitions in slow speech without re-opening for stray noise. */
     private static final long NOISE_GATE_STICKY_NANOS = 450_000_000L; // 450ms
@@ -120,7 +175,24 @@ public final class VoiceController {
     private static volatile double  calibSum   = 0;
     private static volatile int     calibCount = 0;
     private static volatile double  calibPeak  = 0;
+    /** Every sampled frame's RMS during the window, so {@link #finishCalibration} can look at the
+     *  distribution and not merely the loudest moment. One keyboard click, chair creak or cough is
+     *  louder than speech, and a speaking reference set from that single frame would make every
+     *  real utterance a whisper for as long as the player kept the value. Ring rather than a list
+     *  so the capture thread allocates nothing; 64 slots is more than a five-second window
+     *  produces, and if a slower frame size ever overruns it the newest samples win.
+     *
+     *  <p>The element is written BEFORE {@link #calibRingCount} is incremented. The ring is filled
+     *  on the capture thread and read on the client tick, and a count that ran ahead of its data
+     *  would hand finishCalibration a zero that never was a frame. */
+    private static final int CALIB_RING_LEN = 64;
+    private static final double[] CALIB_RING = new double[CALIB_RING_LEN];
+    private static volatile int calibRingCount = 0;
     private static volatile double  lastCalibThreshold = -1;
+    /** Speaking reference the last calibration wrote, or -1 if it refused to write one (nothing
+     *  loud enough was heard). The More screen shows both numbers, so a player can see whether
+     *  their voice reference was actually updated. */
+    private static volatile double  lastCalibReference = -1;
     public static final long CALIB_DURATION_NANOS = 5_000_000_000L;
 
     public static boolean isCalibrating() { return calibrating; }
@@ -130,11 +202,12 @@ public final class VoiceController {
             : 0L;
     }
     public static double lastCalibThreshold() { return lastCalibThreshold; }
+    public static double lastCalibReference() { return lastCalibReference; }
 
     /** Begin a 5-second calibration window. The mic-frame path samples RMS into the running
      *  totals; when the window ends, a threshold is derived and saved to the config. */
     public static void startNoiseGateCalibration() {
-        calibSum = 0; calibCount = 0; calibPeak = 0;
+        calibSum = 0; calibCount = 0; calibPeak = 0; calibRingCount = 0;
         calibStartNanos = System.nanoTime();
         calibrating = true;
         // Calibration is started from a screen, and in single player an open screen pauses the
@@ -150,6 +223,9 @@ public final class VoiceController {
         calibSum  += rms;
         calibCount++;
         if (rms > calibPeak) calibPeak = rms;
+        int n = calibRingCount;
+        CALIB_RING[n % CALIB_RING_LEN] = rms;
+        calibRingCount = n + 1;   // element first, count second - see CALIB_RING
         // Only sample. The end-of-window check lives in tickCalibration, on the client tick.
         // This runs on the capture thread, and finishCalibration writes the config to disk and
         // then stops capture - which joins the capture thread, i.e. this thread, for up to
@@ -200,16 +276,63 @@ public final class VoiceController {
         // observed speech for typical mics. Clamped to a sensible range so a calibration in
         // total silence doesn't disable the gate, and a noisy mic doesn't blow past it.
         double threshold = Math.max(100, Math.min(3000, mean * 0.5));
+
+        // How loudly this player speaks, for the loudness curve the cast volume rides on.
+        //
+        // Not calibPeak. The peak is one frame, and the loudest single frame of a five-second
+        // window is as likely to be a keyboard click, a chair creak or a cough as it is to be
+        // speech - and a reference set from a transient sits so far above the player's real voice
+        // that every subsequent cast reads as a whisper, permanently and invisibly. So take the
+        // frames that cleared the gate threshold (the ones that plausibly were speech), require
+        // enough of them to be a voice rather than an accident, and use the median of the loudest
+        // eight: a peak-like estimator, matching the one the cast side uses, that a single spike
+        // cannot move.
+        double reference = -1;
+        int seen = Math.min(calibRingCount, CALIB_RING_LEN);
+        double[] loud = new double[seen];
+        int loudCount = 0;
+        for (int i = 0; i < seen; i++) {
+            if (CALIB_RING[i] >= threshold) loud[loudCount++] = CALIB_RING[i];
+        }
+        if (loudCount < 8) {
+            // Fewer than eight speech-loud frames in five seconds is someone who stayed quiet, or
+            // a microphone delivering nothing. Keep whatever reference they already had: a wrong
+            // one is far worse than an old one, because nothing tells the player it is wrong.
+            VoiceSpells.LOGGER.warn("Calibration heard too little speech to set a voice reference "
+                + "({} loud frame(s) of {}); the existing reference is kept. Say a few spell names "
+                + "at your normal volume for the whole five seconds.", loudCount, seen);
+        } else {
+            java.util.Arrays.sort(loud, 0, loudCount);
+            // Median of the loudest eight = the mean of the 4th and 5th largest.
+            double median = (loud[loudCount - 4] + loud[loudCount - 5]) * 0.5;
+            if (median < 2 * threshold) {
+                // Speech sits well clear of the gate; something hovering just above it is room
+                // noise that happened to qualify, and calibrating to noise would make ordinary
+                // speech a shout.
+                VoiceSpells.LOGGER.warn("Calibration found only noise hovering at the gate "
+                    + "(median {} vs threshold {}); the existing voice reference is kept.",
+                    String.format("%.0f", median), String.format("%.0f", threshold));
+            } else {
+                reference = Math.min(32767.0, median);
+            }
+        }
+
         try {
             VoiceSpellsConfig.CLIENT.noiseGateRms.set(threshold);
+            if (reference > 0) VoiceSpellsConfig.CLIENT.speechPeakRms.set(reference);
             // A calibration the player has to redo every launch is worse than none.
             VoiceSpellsConfig.saveToDisk();
             VoiceSpellsConfig.refreshCache();
         } catch (Throwable ignored) {}
         lastCalibThreshold = threshold;
-        VoiceSpells.LOGGER.info("Noise gate calibrated: mean={}, peak={}, set threshold={}",
+        lastCalibReference = reference;
+        // Mean, peak, threshold and reference on one line on purpose: a reference that disagrees
+        // wildly with the peak is exactly the transient this estimator exists to survive, and
+        // seeing the four numbers together is what makes that visible in a log.
+        VoiceSpells.LOGGER.info("Noise gate calibrated: mean={}, peak={}, set threshold={}, voice reference={}",
             String.format("%.0f", mean), String.format("%.0f", calibPeak),
-            String.format("%.0f", threshold));
+            String.format("%.0f", threshold),
+            reference > 0 ? String.format("%.0f", reference) : "unchanged");
     }
 
     /** Last position the player moved through, and the nanotime of that move. Used by the
@@ -379,8 +502,9 @@ public final class VoiceController {
     private static volatile long   lastCastNanos   = 0L;
     /** School of the last cast spell — drives the toast color and the echo chime instrument. */
     private static volatile String lastCastSchool  = "";
-    /** Volume the last voice cast was sent with, so the quick-recast key repeats it at the same
-     *  level under {@code voiceVolumeScaling} instead of a hardcoded full-volume shout. */
+    /** Loudness (0..1) the last voice cast earned its level bonus with, so the quick-recast key
+     *  repeats it as loudly as it was originally said instead of at a hardcoded full-volume
+     *  shout. Relative to the player's own speaking level - see {@link #loudnessOf(double)}. */
     private static volatile float  lastCastVolume  = 1.0f;
 
     /** Spell-id dedup. Vosk in grammar mode tends to emit the same recognized phrase several
@@ -420,9 +544,9 @@ public final class VoiceController {
 
     /** Cast queue entries (FIFO). Each holds the spell id + the nanotime it was queued so the
      *  drainer can drop stale entries. */
-    /** {@code volume} is the peak level of the utterance that queued the spell, captured at queue
-     *  time - by the time the drainer fires, possibly seconds later, the live peak belongs to
-     *  whatever the player said next. */
+    /** {@code volume} is the loudness (0..1) of the utterance that queued the spell, captured at
+     *  queue time - by the time the drainer fires, possibly seconds later, the live peak belongs
+     *  to whatever the player said next. */
     public record QueueEntry(ResourceLocation id, long atNanos, float volume) {}
     /** Multi-slot cast queue. While the player is casting, additional recognized spells get
      *  pushed onto the back; the tick drainer pops one off the front each time the player
@@ -888,13 +1012,14 @@ public final class VoiceController {
                 || (now - lastLoudFrameNanos) > NOISE_GATE_STICKY_NANOS;
             if (wasClosed) {
                 speechStartNanos   = now;
-                utterancePeakLevel = 0f;   // new utterance, new peak
+                utterancePeakRms   = 0.0;  // new utterance, new peak
             }
             lastLoudFrameNanos = now;
             // Peak, not the smoothed level: a shout is defined by its loudest moment, and this
             // runs while the speech is actually happening rather than after it has stopped.
-            float frameLevel = (float) Math.min(1.0, rms / FULL_SCALE_RMS);
-            if (frameLevel > utterancePeakLevel) utterancePeakLevel = frameLevel;
+            // Raw RMS, uncapped: the meter's normalised level saturates at FULL_SCALE_RMS and
+            // could never tell a shout from an ordinary sentence. See utterancePeakRms.
+            if (rms > utterancePeakRms) utterancePeakRms = rms;
         }
         boolean gateOpen = lastLoudFrameNanos != 0L
             && (now - lastLoudFrameNanos) <= NOISE_GATE_STICKY_NANOS;
@@ -1709,7 +1834,7 @@ public final class VoiceController {
         lastEventWasFinal        = false;
         utteranceFirstHeardNanos = 0L;
         speechStartNanos         = 0L;
-        utterancePeakLevel       = 0f;
+        utterancePeakRms         = 0.0;
         lastCastVolume           = 1.0f;
         castEndedNanos           = 0L;
         lastHeard                = "";
@@ -2142,6 +2267,17 @@ public final class VoiceController {
      * casting via a greedy substring grab.
      */
     private static void onPhraseRecognized(String phrase, boolean isFinal, double confidence) {
+        // Take the utterance's peak once, here, and retire it as soon as a final has consumed it.
+        //
+        // The peak is normally cleared when the noise gate opens for the next utterance, and that
+        // is still the primary reset - but the edge never arrives if the gate never closes, which
+        // is the case whenever noiseGateRms is 0 (a documented way to disable the gate) or a
+        // calibrated threshold sits under the room's own noise floor. In that state the loudest
+        // moment of the whole session would be charged to every cast made after it, silently and
+        // forever. Clearing it here, before the early returns, means a consumed peak never
+        // outlives its utterance. Everything below uses the local; the field is not read again.
+        double utterancePeak = utterancePeakRms;
+        if (isFinal) utterancePeakRms = 0.0;
         // Calibration mode short-circuits everything: report what the model heard and cast nothing.
         if (transcription) {
             reportTranscription(phrase, isFinal, confidence);
@@ -2521,7 +2657,7 @@ public final class VoiceController {
                     // matters most" while still preserving FIFO ordering of the survivors.
                     CAST_QUEUE.pollFirst();
                 }
-                CAST_QUEUE.offerLast(new QueueEntry(spellId, now, utterancePeakLevel));
+                CAST_QUEUE.offerLast(new QueueEntry(spellId, now, loudnessOf(utterancePeak)));
             }
             lastDispatchedSpellId    = spellKey;
             lastDispatchedNanos      = now;
@@ -2570,11 +2706,21 @@ public final class VoiceController {
             while (HISTORY.size() > HISTORY_MAX) HISTORY.removeLast();
         }
         recordEvent(phrase, spellKey, confidence, matchTier);
-        logRecog("Heard '{}' ({}, conf {}) -> dispatching {}",
+        float vol = loudnessOf(utterancePeak);
+        // Everything a "it cast the wrong thing" or "it cast at the wrong level" report needs,
+        // on one line. The tier letter says which matcher fired - an exact match and a phonetic
+        // one are very different bugs, and the letter is otherwise only visible in the Live
+        // Monitor, which nobody has open when the thing they are reporting happens. The peak and
+        // reference are there because the loudness on its own is undiagnosable: 0.0 means
+        // "quieter than a quarter of your speaking level", and whether that is a quiet player or
+        // a reference calibrated off a cough is only answerable from the two numbers it came
+        // from. Diagnostic only; nothing reads this line. Needs debugMonitor to reach INFO.
+        logRecog("Heard '{}' ({}, conf {}, tier {}) -> dispatching {} at loudness {} (peak {} / ref {})",
             phrase, isFinal ? "final" : "partial",
-            String.format(java.util.Locale.ROOT, "%.2f", confidence), spellId);
+            String.format(java.util.Locale.ROOT, "%.2f", confidence), matchTier, spellId,
+            String.format(java.util.Locale.ROOT, "%.2f", vol),
+            Math.round(utterancePeak), Math.round(loudnessReference()));
         ResourceLocation dispatched = spellId;
-        float vol = Math.max(0f, Math.min(1f, utterancePeakLevel));
         lastCastVolume = vol;
         Minecraft.getInstance().execute(() -> {
             // Streak and stats belong on this side of the hop. bumpStreak is a read-modify-write

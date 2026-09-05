@@ -145,8 +145,16 @@ public final class SpellRuleEvents {
      * "the hook is installed" and "the hook did something", and it is what a server owner needs to
      * answer "is this feature on?". Everything after the first is debug, so it cannot become spam.
      */
-    /** The level bonus is applied in SpellCaster, not from an event, so it needs a door in. */
-    public static void proveLevelOnce(String detail) { proveOnce("level", detail); }
+    /**
+     * The level bonus is applied in SpellCaster, not from an event, so it needs a door in.
+     *
+     * <p>Keyed, unlike the other two. The cooldown and mana hooks either work or do not, so one
+     * line each is the whole story; the level bonus now has an outcome per loudness band, and a
+     * host checking that voiceVolumeScaling really does something needs to see whisper, ordinary
+     * speech and a raised voice each announce themselves. The key is the outcome
+     * ({@code "1/2"}), so the run logs at most one line per distinct band.
+     */
+    public static void proveLevelOnce(String key, String detail) { proveOnce("level " + key, detail); }
 
     private static void proveOnce(String what, String detail) {
         if (PROVEN.add(what)) {
@@ -235,6 +243,19 @@ public final class SpellRuleEvents {
     /** Latched so a broken reflective contract is reported once, loudly, instead of per cast at
      *  DEBUG - which is exactly how a dead feature went unnoticed. */
     private static final java.util.Set<String> WARNED = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /**
+     * Say once that the SERVER'S CONFIG contradicts itself, as opposed to that a reflective hook
+     * broke. Deliberately not an overload of {@link #warnOnce}: that one exists for "Iron's Spells
+     * changed under us", it prints a message about retrying against this build, and a config
+     * mistake reported in those words would send a host looking in entirely the wrong place.
+     * Shares the same latch set, so keys must not collide.
+     */
+    public static void warnConfigOnce(String key, String detail) {
+        if (WARNED.add(key)) {
+            VoiceSpells.LOGGER.warn("Voice config: {}", detail);
+        }
+    }
 
     private static void warnOnce(String hook, Throwable t) {
         if (WARNED.add(hook)) {

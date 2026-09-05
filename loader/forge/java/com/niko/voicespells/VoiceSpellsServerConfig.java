@@ -10,7 +10,6 @@ import org.apache.commons.lang3.tuple.Pair;
  */
 public final class VoiceSpellsServerConfig {
 
-    /** Where the spoken spell must be available before voice will cast it. */
     /** Whether spells may be cast without speaking them. See the config comments. */
     public enum IncantationRule { OFF, FIRST_CAST, ALWAYS }
 
@@ -20,8 +19,9 @@ public final class VoiceSpellsServerConfig {
         CURIO_SPELLBOOK,
         /** As above, but a spellbook in mainhand/offhand counts too. */
         ANY_SPELLBOOK,
-        /** No spellbook needed: cast at level 1 via COMMAND source — no mana, no cooldown.
-         *  Handy for testing or a "just let me yell spells" playstyle. */
+        /** No spellbook needed: cast at level 1 - plus any voice level bonus - via COMMAND
+         *  source, so no mana and no cooldown. Handy for testing or a "just let me yell
+         *  spells" playstyle. */
         FREE
     }
 
@@ -57,7 +57,8 @@ public final class VoiceSpellsServerConfig {
             b.comment("How voice casting validates a spell before casting it.",
                       "CURIO_SPELLBOOK - spellbook in the Curios spellbook slot (default).",
                       "ANY_SPELLBOOK   - Curios slot OR a spellbook held in main/off hand.",
-                      "FREE            - no spellbook needed; level 1, no mana or cooldown.");
+                      "FREE            - no spellbook needed; level 1 plus any voice level",
+                      "                  bonus, and no mana or cooldown.");
             castMode = b.defineEnum("castMode", CastMode.CURIO_SPELLBOOK);
             b.comment("Max successful voice casts per second per player (0 = unlimited).",
                       "Server-side anti-spam — excess casts are silently dropped.");
@@ -75,10 +76,21 @@ public final class VoiceSpellsServerConfig {
             b.comment("Append every voice-cast to logs/voicespells-casts.log (player + spell + time).",
                       "Useful for admin auditing on shared servers.");
             logVoiceCasts = b.define("logVoiceCasts", false);
-            b.comment("Scale the effective spellbook level by the client's voice volume.",
-                      "Speaking quietly -> level 1, shout -> max level on the equipped spellbook.",
-                      "Trusts the client to report its own RMS — not a security boundary, but a",
-                      "fun expressivity toggle. Off by default.");
+            b.comment("Make the voice level bonus depend on how loudly the spell was said.",
+                      "Off: every spoken cast gets the full voiceLevelBonus (or the player's",
+                      "     playerAdvantages level) on top of the spell's inscribed level.",
+                      "On:  that bonus has to be earned - a whisper earns none of it, your normal",
+                      "     speaking voice about half, a raised voice all of it.",
+                      "The spell's inscribed level - on the spellbook, the imbued item or the",
+                      "scroll, and 1 under FREE - is always the FLOOR. Loudness only decides how",
+                      "much is added on top of it, so a bad reading can never make a cast weaker",
+                      "than the item it came from.",
+                      "Loudness is measured on the client, against that player's own calibrated",
+                      "speaking level (Config -> More... -> Calibrate mic), so this is not a",
+                      "security boundary - it is a fun expressivity toggle. It does nothing unless",
+                      "voiceLevelBonus (under [voiceAdvantage] below) or a playerAdvantages level",
+                      "entry is above 0; the server logs one warning per run if it is on with",
+                      "nothing to scale. Off by default.");
             voiceVolumeScaling = b.define("voiceVolumeScaling", false);
             b.comment("When on, every successful voice cast broadcasts a small chat line to",
                       "players within broadcastRadius blocks: 'Niko cast Fireball'.",
@@ -96,14 +108,19 @@ public final class VoiceSpellsServerConfig {
             voiceCooldownPercent = b.defineInRange("voiceCooldownPercent", 100, 0, 300);
             b.comment("Extra spell levels granted to a spell cast BY VOICE. 0 = no change.",
                       "Spell level is what Iron's Spells scales damage, duration and count from,",
-                      "so this is the 'voice casts hit harder' knob.");
+                      "so this is the 'voice casts hit harder' knob.",
+                      "With voiceVolumeScaling on this is the MAXIMUM, and how much of it a cast",
+                      "earns depends on how loudly it was said. Earned levels are whole numbers,",
+                      "so a maximum of 1 is all-or-nothing: a normal speaking voice earns it, a",
+                      "whisper does not.");
             voiceLevelBonus = b.defineInRange("voiceLevelBonus", 0, 0, 5);
             b.comment("Per-player overrides for the two settings above. Empty means everybody",
                       "gets the values above, which by default are normal Iron's Spells",
                       "behaviour - no discount, no bonus, nothing changed.",
                       "",
                       "One entry per player, by name or UUID:",
-                      "  \"Steve=cooldown:50,level:2\"  Steve casts at half cooldown, +2 levels",
+                      "  \"Steve=cooldown:50,level:2\"  Steve casts at half cooldown, up to +2",
+                      "                                 levels",
                       "  \"Steve=level:1\"              only the level differs; cooldown is the",
                       "                                 server value above",
                       "  \"!Alex\"                      Alex is EXCEPTED - plain Iron's Spells",

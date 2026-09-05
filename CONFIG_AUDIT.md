@@ -1,12 +1,13 @@
 # Config audit — what to keep, merge and delete
 
-57 options were reviewed across the client and server configs. 31 earn their place
+57 options were reviewed across the client and server configs. 32 earn their place
 unchanged. The rest are below, with what breaks if they go.
 
-Two of these turned out to be **live bugs**, not just clutter — see the notes.
+One of these turned out to be a **live bug**; another was struck from the delete list
+entirely instead of being removed — see the notes.
 
 
-## Delete (6)
+## Delete (5)
 
 | Option | Side | Why |
 |---|---|---|
@@ -15,7 +16,6 @@ Two of these turned out to be **live bugs**, not just clutter — see the notes.
 | `recognition.sassMode` | client | It is a joke option that sabotages the feature it rides on. It only fires inside `if (cShowMisses)`, and showMisses exists precisely so the player can read the raw phrase that failed - so a third of the time the diagnostic is replaced with 'The arcane shrugs.' It is toml-only, off by default, and no |
 | `recognition.combatOnly` | client | It cannot work as written, so turning it on silently disables voice casting entirely. isInCombat() compares level().getGameTime() - world age, millions of ticks in any real save - against getLastHurtByMobTimestamp(), which vanilla assigns from the entity's own tickCount (verified in LivingEntity byt |
 | `internal.firstRun` | client | It is a duplicate of a latch that already works better. The wizard pops only when firstRun AND !VoiceStats.wizardSeen(), and stats.dat is written immediately while the toml write is the one that historically failed - the code comment says outright that 'the stats latch is the only reason the wizard  |
-| `casting.voiceVolumeScaling` | server | It cannot deliver what it promises, and the new [voiceAdvantage] block now covers the same ground properly. Three separate reasons: (1) the number it scales by is systematically wrong - audioLevel is multiplied by 0.2 at the very gate-close edge that triggers the flush producing the final result, th |
 
 ## Merge into another option (6)
 
@@ -47,7 +47,7 @@ Two of these turned out to be **live bugs**, not just clutter — see the notes.
 | `recognition.chatRankTag` | client | Purely cosmetic, off by default, and it rewrites the player's outgoing chat - including a length guard that silently drops the tag near the 256-char cap. That is a set-once vanity flag with a sharp edge, not something to advertise on a tab. It is already toml- |
 | `recognition.voiceHotbarSelect` | client | A real feature with real cost: enabling it injects nine two-word phrases into the grammar, and the recogniser force-fits noise onto the nearest entry, so it directly competes with the spell names it sits beside. Same argument as handsFreeConfirm - worth having |
 
-## The two that were bugs
+## The bug, and the reprieve
 
 **`combatOnly` blocked every cast.** `isInCombat()` compared the player's
 `getLastHurtByMobTimestamp()` — which vanilla assigns from the entity's own `tickCount` — against
@@ -56,17 +56,18 @@ so the check was always false and turning the option on silently disabled voice 
 It was toml-only until this release, which is probably why nobody reported it; it is now a
 one-click toggle on the Behaviour tab. **Fixed** — both sides read `tickCount`.
 
-**`voiceVolumeScaling` cannot deliver what it promises.** It scales the cast level by the
-client-reported microphone RMS, but that number is multiplied by 0.2 at gate-close before it is
-sent, so "shout" never reaches the top of the range. The new `[voiceAdvantage]` block covers the
-same ground properly, which is the argument for cutting it rather than repairing it.
+**`voiceVolumeScaling` was struck from the delete list in 0.10.6, not fixed the way
+`combatOnly` was.** It was redefined instead: it no longer scales the cast level directly, it
+scales how much of `voiceLevelBonus` a spoken cast earns (see `CHANGELOG_0.10.6.md`). The 0.2
+gate-close multiplier it was accused of still exists — it still feeds the HUD meter — but the cast
+volume no longer passes through it on the way to a spell's level.
 
 ## Recommendation
 
-Deleting the six and merging the six takes the config from 57 options to 45, and takes two
-settings off the UI that cannot do what their labels claim. Nothing in the delete list is load
+Deleting the five and merging the six takes the config from 57 options to 46, and takes one slider
+(`dedupMillis`) off the UI that does nothing at its defaults. Nothing in the delete list is load
 bearing: two draw nothing at their defaults, one is a joke that sabotages the diagnostic it rides
-on, one is a duplicate latch, one is broken, one is superseded.
+on, one is a duplicate latch, one was broken and is now fixed.
 
 The merges are the more interesting half — `dedupMillis` in particular is a slider sitting next to
 `echoLockoutMillis` that does nothing at the shipped defaults, because both measure from the same

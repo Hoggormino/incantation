@@ -270,6 +270,10 @@ public final class ConfigMoreScreen extends Screen {
         // Visual / palette
         // Recognition tuning + modes added in newer builds
         sb.append("noiseGateRms=").append(c.noiseGateRms.get()).append('\n');
+        // Carried with the gate threshold because they are written by the same calibration run:
+        // a profile that took one and dropped the other would leave the new machine judging how
+        // loudly you speak against whatever it happened to have.
+        sb.append("speechPeakRms=").append(c.speechPeakRms.get()).append('\n');
         sb.append("handsFreeConfirm=").append(c.handsFreeConfirm.get()).append('\n');
         sb.append("alwaysShowHeard=").append(c.alwaysShowHeard.get()).append('\n');
         sb.append("combatOnly=").append(c.combatOnly.get()).append('\n');
@@ -365,6 +369,10 @@ public final class ConfigMoreScreen extends Screen {
             // profile importable instead of failing on its first line.
             case "themePreset", "uiPalette": return true;
             case "noiseGateRms":      c.noiseGateRms.set(Double.parseDouble(val.trim())); return true;
+            // Clamped to the config's own range: a pasted profile is text a human can edit, and
+            // defineInRange throws on an out-of-range set, which would abort the import halfway
+            // through and leave the screen half-applied.
+            case "speechPeakRms":     c.speechPeakRms.set(Math.max(0.0, Math.min(32767.0, Double.parseDouble(val.trim())))); return true;
             case "handsFreeConfirm":  c.handsFreeConfirm.set(Boolean.parseBoolean(val)); return true;
             case "alwaysShowHeard":   c.alwaysShowHeard.set(Boolean.parseBoolean(val)); return true;
             case "combatOnly":        c.combatOnly.set(Boolean.parseBoolean(val)); return true;
@@ -449,8 +457,18 @@ public final class ConfigMoreScreen extends Screen {
                 calibBtn.setMessage(Component.translatable("voicespells.more.listening", remainingS));
             } else if (VoiceController.lastCalibThreshold() > 0
                     && System.currentTimeMillis() < calibResultUntil) {
-                calibBtn.setMessage(Component.translatable("voicespells.more.gate_set",
-                    Math.round(VoiceController.lastCalibThreshold())));
+                // Both numbers, because a calibration now writes two: the noise gate threshold
+                // and the speaking level a voice cast's loudness is measured against. The second
+                // one can be refused - a window with too little speech in it keeps the old value
+                // rather than believing a cough - and a player told only about the gate has no
+                // way to tell that refusal from a success, which is exactly the case where a
+                // stale or wrong reference would go on being used without them knowing.
+                double ref = VoiceController.lastCalibReference();
+                calibBtn.setMessage(ref > 0
+                    ? Component.translatable("voicespells.more.gate_set_voice",
+                        Math.round(VoiceController.lastCalibThreshold()), Math.round(ref))
+                    : Component.translatable("voicespells.more.gate_set_voice_kept",
+                        Math.round(VoiceController.lastCalibThreshold())));
             } else {
                 // Must fit the half-width grid button; the old full-width label spilled out.
                 calibBtn.setMessage(Component.translatable("voicespells.more.calibrate_mic"));

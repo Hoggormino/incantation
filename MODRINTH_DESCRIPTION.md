@@ -108,9 +108,12 @@ beside it.
   ]
   ```
 
-  Out of the box nothing is changed — the defaults are plain Iron's Spells. `voiceVolumeScaling`
-  goes the other way: whisper a spell and it casts at level 1, shout it and it casts at the full
-  level of your spellbook.
+  Out of the box nothing is changed — the defaults are plain Iron's Spells. Turn on
+  `voiceVolumeScaling` and the bonus has to be earned: the spell's inscribed level — on the
+  spellbook, the imbued item, or the scroll (level 1 under FREE) — is always the floor, and how
+  much of `voiceLevelBonus` a cast adds on top depends on how loudly you said it: a whisper earns
+  none, your normal speaking voice about half, a raised voice all of it — rounded to a whole
+  level, judged against your own calibrated speaking voice.
 - **Incantation-only mode** *(server, off by default)* — require spells to be spoken. `FIRST_CAST`
   makes a player voice-cast a spell once before they can click it, so learning the incantation
   unlocks it; `ALWAYS` means spells can only ever be spoken.

@@ -47,14 +47,21 @@ them. Genuine near-misses are a character or two apart and still match; a word h
 the spell name no longer does. Reported against Invisibility, which is long enough to be the worst
 case of it — thank you.
 
-**Voice volume scaling capped every cast at level 1.** `voiceVolumeScaling` is a server option
-that is meant to make a whispered spell cast at level 1 and a shouted one at the full level of your
-spellbook. Turning it on did the first half only: every spoken cast came out at level 1, however
-loudly you said it. The volume was being read at the moment the cast was sent, and most casts are
-sent on the recogniser's final answer — which arrives after you have stopped talking and the
-microphone gate has closed, when the level has already fallen back to silence. The mod now keeps
-the loudest moment of the utterance and sends that. A spell repeated with the quick-recast key
-repeats at the volume it was originally said, as it was always supposed to.
+**Voice volume scaling now earns the voice level bonus instead of shrinking your spellbook.**
+`voiceVolumeScaling` used to promise "whisper for level 1, shout for your spellbook's level," and
+in practice every spoken cast came out at level 1 however loudly you said it, because the volume
+was being read after you had already stopped talking. It now means something better. The spell's
+inscribed level — on the spellbook, the imbued item, or the scroll (level 1 under FREE) — is
+always the floor; a voice cast never lands below it. `voiceLevelBonus` (or a player's
+`playerAdvantages` level) is the most a spoken cast can add on top, and with `voiceVolumeScaling`
+on, how much of it you earn depends on how loudly you said the spell: your normal speaking voice
+earns about half, a raised voice all of it, a whisper none. The bonus always lands on a whole
+level, never a fraction of one. Loudness is judged against your own voice: run
+Config → More… → Calibrate mic once, speaking at your normal volume, and the mod remembers how
+loud that is; until you do, it assumes a typical microphone. The extra levels are still charged at
+the spell's ordinary mana cost. A spell repeated with the quick-recast key repeats at the loudness
+it was originally said, and a queued spell fires at the loudness of the words that queued it. With
+the option off, every spoken cast gets the full bonus, as before.
 
 ---
 
@@ -66,8 +73,9 @@ which is why people have been asking for them in the comments since:
 - `incantationOnly` — `FIRST_CAST` makes each spell voice-cast once before it can be clicked, so
   learning the incantation unlocks it; `ALWAYS` means spells can only ever be spoken. Off by
   default. Players without the mod on their client are exempt rather than locked out.
-- `voiceVolumeScaling` — the whisper-to-shout level scaling described above, now working. Off by
-  default.
+- `voiceVolumeScaling` — scales the voice level bonus by how loudly you speak, as described
+  above. Off by default, and it does nothing unless `voiceLevelBonus` (or a `playerAdvantages`
+  level) is above 0.
 
 Both live in `config/voicespells-server.toml`.
 

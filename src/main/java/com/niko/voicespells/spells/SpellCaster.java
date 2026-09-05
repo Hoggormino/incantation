@@ -119,6 +119,12 @@ public final class SpellCaster {
     }
 
     /**
+     * @param volumeScale how loudly the spell was said, 0..1, measured on the client against that
+     *               player's own calibrated speaking level; the SIGN is the {@code spoken} flag,
+     *               so only the magnitude is the loudness. Under {@code voiceVolumeScaling} it
+     *               decides how much of the voice level bonus the cast earns - never the level
+     *               the spell is cast at on its own, which is why a wrong or hostile value can
+     *               only cost the caster levels it would have granted.
      * @param spoken false when this came from the quick-recast keybind rather than from speech.
      *               Under {@code incantationOnly = ALWAYS} that is the difference between a
      *               legitimate cast and a way to bypass the rule entirely - speak once, then
@@ -300,19 +306,6 @@ public final class SpellCaster {
                 castStack       = match.stack;
                 castLevel       = match.level;
                 castSlot        = match.slot;
-                // Optional volume scaling: whisper -> level 1, shout -> level N. Clamps to
-                // [1, spellbookLevel]; only active when the server config opts in.
-                try {
-                    if (com.niko.voicespells.VoiceSpellsServerConfig.SERVER.voiceVolumeScaling.get()
-                            && match.level > 1) {
-                        // abs: the SIGN of volumeScale carries "was this spoken", so the
-                        // magnitude is the actual level. Without this a quick-recast would
-                        // always scale to 1 rather than to how loudly it was originally said.
-                        float clamped = Math.max(0f, Math.min(1f, Math.abs(volumeScale)));
-                        int scaled = Math.max(1, Math.round(match.level * clamped));
-                        castLevel = scaled;
-                    }
-                } catch (Throwable ignored) {}
                 // Imbued weapons cast via CastSource.SWORD — Iron's Spells treats them the
                 // same as a player right-clicking the weapon, which respects per-weapon
                 // cooldowns and the imbued-spell mana cost. Spellbooks use SPELLBOOK. If a
@@ -355,27 +348,76 @@ public final class SpellCaster {
             // Iron's Spells derives mana cost from the level it is handed, so untouched,
             // voiceLevelBonus = 5 roughly doubles what a cast costs - "voice casts hit harder, and
             // drain you twice as fast" is not the advantage the host who asked for this wanted,
-            // and nothing in the game would have told the player it was happening.
-            int baseLevel  = castLevel;
-            int levelBonus = SpellRules.configuredLevelBonus(player);
-            if (levelBonus > 0) {
-                int before = castLevel;
-                castLevel = Math.min(castLevel + levelBonus, 10);
+            // and nothing in the game would have told the player it was happening. That is why
+            // manaDelta below measures from the floor rather than from the level actually cast.
+            //
+            // What voiceVolumeScaling means, since 0.10.6: it scales the BONUS, not the item. The
+            // spell's inscribed level - on the spellbook, the imbued item or the scroll, and 1
+            // under FREE - is the floor, and no volume reading can push a cast below it. The
+            // option used to multiply the inscribed level instead, which is how it came to promise
+            // "whisper for level 1, shout for your spellbook's level" and deliver level 1 however
+            // loudly the spell was said: the volume it was handed was sampled after the player had
+            // stopped talking, so it was always near zero. Scaling the bonus means a bad reading
+            // can only cost the extra levels it would have granted.
+            int floor    = castLevel;
+            int maxBonus = SpellRules.configuredLevelBonus(player);
+            boolean scaling;
+            try {
+                scaling = com.niko.voicespells.VoiceSpellsServerConfig.SERVER.voiceVolumeScaling.get();
+            } catch (Throwable configUnreadable) {
+                // Same rule as every other config read in this file: when the config cannot be
+                // read, do the thing the default does. voiceVolumeScaling is off by default, so
+                // that is "award the whole bonus".
+                scaling = false;
+            }
+            // abs: the SIGN of volumeScale carries "was this spoken", so the magnitude is the
+            // loudness. Without this a quick-recast would read as silence rather than as the
+            // loudness the spell was originally said at.
+            float loudness = Math.max(0f, Math.min(1f, Math.abs(volumeScale)));
+            // Math.round(float) rounds .5 up, and the result is a whole number of levels: with
+            // voiceLevelBonus = 1 the bonus is all-or-nothing either side of half loudness, which
+            // an ordinary speaking voice sits just above.
+            int earned = scaling ? Math.round(maxBonus * loudness) : maxBonus;
+            // max(floor, ...) so the cap cannot break the floor guarantee: an addon spell whose
+            // getMaxLevel() runs past 10 can be inscribed above 10, and clamping such an item to
+            // 10 would make a voice cast WEAKER than the item it came from - the one thing this
+            // whole path promises never happens.
+            castLevel  = Math.max(floor, Math.min(floor + earned, 10));
+            if (maxBonus > 0) {
                 // Same reason the other two advantages announce themselves once: a level bonus
                 // that silently does nothing is indistinguishable from one that works, and this
                 // one already shipped dead once when it was hung off ModifySpellLevelEvent, which
-                // never fires on the voice path.
-                if (castLevel != before) {
-                    com.niko.voicespells.spells.SpellRuleEvents.proveLevelOnce(
-                        spellId + " level " + before + " -> " + castLevel);
-                }
+                // never fires on the voice path. Keyed by the outcome rather than by the feature,
+                // so a host verifying the scaling sees a line for each of whisper, ordinary speech
+                // and a raised voice - at most maxBonus + 1 lines per distinct maximum in play,
+                // since playerAdvantages can hand different players different maxima - instead
+                // of one line that proves only that some bonus once applied. Logged even when
+                // nothing was earned, because "the loudest thing you said earned 0 of 2" is
+                // exactly the answer somebody asking "why is my voice cast not stronger" needs.
+                SpellRuleEvents.proveLevelOnce(earned + "/" + maxBonus,
+                    spellId + " level " + floor + " -> " + castLevel
+                        + " (bonus " + earned + "/" + maxBonus
+                        + (scaling ? ", loudness " + String.format(Locale.ROOT, "%.2f", loudness) : "")
+                        + ")");
+            } else if (scaling && spoken && !SpellRules.anyLevelBonusConfigured()) {
+                // voiceVolumeScaling with nothing to scale is a config mistake that looks exactly
+                // like a broken feature from the player's chair: they whisper, they raise their
+                // voice, and every cast comes out the same. The cast is never refused or altered
+                // over it - this only says so, once per run. Asked of the CONFIG rather than
+                // of this player's effective bonus so that a host who excepted somebody with
+                // "!Alex", or gave them "level:0", does not get a warning about a setting that is
+                // working perfectly well for everybody else.
+                SpellRuleEvents.warnConfigOnce("volume-scaling-idle",
+                    "voiceVolumeScaling is on but voiceLevelBonus is 0 and no playerAdvantages "
+                        + "entry grants levels - there is nothing to scale, so voice casts run at "
+                        + "the spellbook's inscribed level (level 1 under FREE)");
             }
             // How much the bonus inflated the price. Carried on the voice stamp and subtracted by
             // the SpellOnCastEvent hook at the instant Iron's Spells charges for it - not credited
             // back afterwards, which is what this did first and was exploitable: mana is deducted
             // when the spell RESOLVES, so a credit issued at initiation arrived before the charge
             // and an interrupted cast kept it.
-            int manaDiscount = manaDelta(spell, spellClass, player, baseLevel, castLevel);
+            int manaDiscount = manaDelta(spell, spellClass, player, floor, castLevel);
             // The preflight below still checks against the BOOSTED level, so nobody can start a
             // cast they could not have afforded outright; the discount applies at the till.
 
@@ -418,7 +460,7 @@ public final class SpellCaster {
                 feedback(player, "voicespells.cast.failed",
                     SpellInfo.of(spellId.toString()).displayName());
             } else {
-                appendCastLog(player, spellId);
+                appendCastLog(player, spellId, castLevel);
                 broadcastNearby(player, spellId);
                 // Count on the SERVER first, then award from the server's number.
                 //
@@ -894,19 +936,29 @@ public final class SpellCaster {
 
     /** Append-only audit log of every successful voice cast. Gated on
      *  {@link com.niko.voicespells.VoiceSpellsServerConfig.Server#logVoiceCasts} so the file
-     *  doesn't fill up by default. One line per cast: ISO timestamp, player name, UUID, spell id. */
-    private static void appendCastLog(ServerPlayer player, ResourceLocation spellId) {
+     *  doesn't fill up by default. One line per cast: ISO timestamp, player name, UUID, spell id,
+     *  and the level it was actually cast at.
+     *
+     *  <p>The level column is here because it is the only always-on, per-cast view of what
+     *  voiceLevelBonus and voiceVolumeScaling did. The one-line-per-outcome INFO from
+     *  {@code SpellRuleEvents} deliberately does not repeat itself, so it cannot answer "what
+     *  level did that particular cast land at" - and a quick-recast or a queued cast, the two
+     *  cases where the loudness is not the one you just spoke at, are exactly the ones worth
+     *  checking. Appended as a fifth tab-separated column so anything reading the first four by
+     *  index keeps working. */
+    private static void appendCastLog(ServerPlayer player, ResourceLocation spellId, int castLevel) {
         // The in-memory mirror is built first and unconditionally. It used to be populated at
         // the bottom of this method — behind the logVoiceCasts gate AND behind a successful file
         // write — so on a default server (logVoiceCasts is off) /voicespells diag always
         // answered "No voice casts logged this session", including while casts were plainly
         // happening. An admin diagnostic that reports nothing by default is worse than none: it
         // reads as evidence the mod is broken.
-        String entry = String.format(java.util.Locale.ROOT, "%s\t%s\t%s\t%s",
+        String entry = String.format(java.util.Locale.ROOT, "%s\t%s\t%s\t%s\tlevel=%s",
             java.time.Instant.now(),
             player.getName().getString(),
             player.getUUID(),
-            spellId);
+            spellId,
+            castLevel);
         synchronized (RECENT_LOG) {
             RECENT_LOG.addFirst(entry);
             while (RECENT_LOG.size() > 50) RECENT_LOG.removeLast();
