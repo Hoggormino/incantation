@@ -212,7 +212,11 @@ publishMods {
             modLoaders.add("neoforge")
             clientRequired = true
             serverRequired = true
-            requires("irons-spells-n-spellbooks")
+            // Optional, not required: both mods.toml files declare irons_spellbooks as an
+            // optional dependency and the mod loads and behaves sanely without it, so a store
+            // page that says "required" contradicts the jar and makes launchers pull in a mod
+            // the user may not want. Addon spell mods register into the same registry.
+            optional("irons-spells-n-spellbooks")
             optional("curios")
         }
     }
@@ -222,7 +226,11 @@ publishMods {
             accessToken = mrToken
             minecraftVersions.add("1.21.1")
             modLoaders.add("neoforge")
-            requires("irons-spells-n-spellbooks")
+            // Optional, not required: both mods.toml files declare irons_spellbooks as an
+            // optional dependency and the mod loads and behaves sanely without it, so a store
+            // page that says "required" contradicts the jar and makes launchers pull in a mod
+            // the user may not want. Addon spell mods register into the same registry.
+            optional("irons-spells-n-spellbooks")
             optional("curios")
         }
     }
