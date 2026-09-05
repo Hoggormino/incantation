@@ -47,9 +47,29 @@ them. Genuine near-misses are a character or two apart and still match; a word h
 the spell name no longer does. Reported against Invisibility, which is long enough to be the worst
 case of it — thank you.
 
+**Voice volume scaling capped every cast at level 1.** `voiceVolumeScaling` is a server option
+that is meant to make a whispered spell cast at level 1 and a shouted one at the full level of your
+spellbook. Turning it on did the first half only: every spoken cast came out at level 1, however
+loudly you said it. The volume was being read at the moment the cast was sent, and most casts are
+sent on the recogniser's final answer — which arrives after you have stopped talking and the
+microphone gate has closed, when the level has already fallen back to silence. The mod now keeps
+the loudest moment of the utterance and sends that. A spell repeated with the quick-recast key
+repeats at the volume it was originally said, as it was always supposed to.
+
 ---
 
 ## Also
+
+**Two server options that were never announced.** They went into 0.10.5 without a changelog line,
+which is why people have been asking for them in the comments since:
+
+- `incantationOnly` — `FIRST_CAST` makes each spell voice-cast once before it can be clicked, so
+  learning the incantation unlocks it; `ALWAYS` means spells can only ever be spoken. Off by
+  default. Players without the mod on their client are exempt rather than locked out.
+- `voiceVolumeScaling` — the whisper-to-shout level scaling described above, now working. Off by
+  default.
+
+Both live in `config/voicespells-server.toml`.
 
 The store pages said Iron's Spells 'n Spellbooks was a **required** dependency. It never has been:
 the mod loads and behaves sanely without it, finds no spells, and casts nothing, which is the

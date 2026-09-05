@@ -93,6 +93,19 @@ public final class VoiceController {
      * answer: that is when the player started speaking.
      */
     private static volatile long speechStartNanos = 0L;
+    /** Loudest normalised frame level (0..1) heard since the noise gate last opened, i.e. the
+     *  peak of the utterance in progress. This is what a cast reports as its volume, and it has
+     *  to be a peak captured DURING speech: the level at dispatch time is useless, because most
+     *  casts dispatch on the final result, which is produced by the flush that fires after the
+     *  gate has closed - by then {@link #audioLevel} has decayed through several quiet frames
+     *  and been multiplied by 0.2 on the closing edge, so it always read as a whisper and
+     *  {@code voiceVolumeScaling} capped every cast at level 1. Written on the capture thread in
+     *  the mic-frame path, read on the capture and flush threads at dispatch; volatile is enough. */
+    private static volatile float utterancePeakLevel = 0f;
+    /** RMS that counts as "full scale" for the level meter and the cast volume. 16-bit PCM tops
+     *  out at 32767; normal speech RMS lives around 1500-6000, so this maps speech to roughly
+     *  0..1 with loud speech saturating at 1. */
+    private static final double FULL_SCALE_RMS = 6000.0;
     /** How long the noise gate stays open after the last loud frame. Generous enough to span
      *  phoneme transitions in slow speech without re-opening for stray noise. */
     private static final long NOISE_GATE_STICKY_NANOS = 450_000_000L; // 450ms
@@ -366,6 +379,9 @@ public final class VoiceController {
     private static volatile long   lastCastNanos   = 0L;
     /** School of the last cast spell — drives the toast color and the echo chime instrument. */
     private static volatile String lastCastSchool  = "";
+    /** Volume the last voice cast was sent with, so the quick-recast key repeats it at the same
+     *  level under {@code voiceVolumeScaling} instead of a hardcoded full-volume shout. */
+    private static volatile float  lastCastVolume  = 1.0f;
 
     /** Spell-id dedup. Vosk in grammar mode tends to emit the same recognized phrase several
      *  times — partial → final, plus the occasional residual partial after an utterance
@@ -404,7 +420,10 @@ public final class VoiceController {
 
     /** Cast queue entries (FIFO). Each holds the spell id + the nanotime it was queued so the
      *  drainer can drop stale entries. */
-    public record QueueEntry(ResourceLocation id, long atNanos) {}
+    /** {@code volume} is the peak level of the utterance that queued the spell, captured at queue
+     *  time - by the time the drainer fires, possibly seconds later, the live peak belongs to
+     *  whatever the player said next. */
+    public record QueueEntry(ResourceLocation id, long atNanos, float volume) {}
     /** Multi-slot cast queue. While the player is casting, additional recognized spells get
      *  pushed onto the back; the tick drainer pops one off the front each time the player
      *  isn't casting. Bounded by {@link VoiceSpellsConfig#cCastQueueSize} — when full, the
@@ -607,7 +626,7 @@ public final class VoiceController {
         int streakForTrigger = currentStreak();
         Minecraft.getInstance().execute(() -> {
             SpellSelector.select(dispatched);
-            dispatchCast(dispatched, 1.0f, totalForTrigger, streakForTrigger, false);
+            dispatchCast(dispatched, lastCastVolume, totalForTrigger, streakForTrigger, false);
             if (VoiceSpellsConfig.cEchoSfx) playEchoChime(dispatched);
         });
     }
@@ -867,8 +886,15 @@ public final class VoiceController {
             // timestamp, or the transition can never be detected.
             boolean wasClosed = lastLoudFrameNanos == 0L
                 || (now - lastLoudFrameNanos) > NOISE_GATE_STICKY_NANOS;
-            if (wasClosed) speechStartNanos = now;
+            if (wasClosed) {
+                speechStartNanos   = now;
+                utterancePeakLevel = 0f;   // new utterance, new peak
+            }
             lastLoudFrameNanos = now;
+            // Peak, not the smoothed level: a shout is defined by its loudest moment, and this
+            // runs while the speech is actually happening rather than after it has stopped.
+            float frameLevel = (float) Math.min(1.0, rms / FULL_SCALE_RMS);
+            if (frameLevel > utterancePeakLevel) utterancePeakLevel = frameLevel;
         }
         boolean gateOpen = lastLoudFrameNanos != 0L
             && (now - lastLoudFrameNanos) <= NOISE_GATE_STICKY_NANOS;
@@ -992,7 +1018,7 @@ public final class VoiceController {
         long sumSq = 0;
         for (short v : pcm) sumSq += (long) v * v;
         double rms = Math.sqrt((double) sumSq / pcm.length);
-        float normalized = (float) Math.min(1.0, rms / 6000.0);
+        float normalized = (float) Math.min(1.0, rms / FULL_SCALE_RMS);
         audioLevel = 0.55f * audioLevel + 0.45f * normalized;
         return rms;
     }
@@ -1637,7 +1663,11 @@ public final class VoiceController {
             HISTORY.addFirst(new HistoryEntry(lastCastDisplay, now));
             while (HISTORY.size() > HISTORY_MAX) HISTORY.removeLast();
         }
-        float vol = Math.max(0f, Math.min(1f, audioLevel));
+        // The peak of the utterance that queued it, not the live level: the drainer runs from
+        // the client tick, possibly seconds after the words, and by then audioLevel is whatever
+        // the room sounds like now.
+        float vol = Math.max(0f, Math.min(1f, entry.volume()));
+        lastCastVolume = vol;
         int totalForTrigger = VoiceStats.totalCasts();
         int streakForTrigger = currentStreak();
         Minecraft.getInstance().execute(() -> {
@@ -1679,6 +1709,8 @@ public final class VoiceController {
         lastEventWasFinal        = false;
         utteranceFirstHeardNanos = 0L;
         speechStartNanos         = 0L;
+        utterancePeakLevel       = 0f;
+        lastCastVolume           = 1.0f;
         castEndedNanos           = 0L;
         lastHeard                = "";
         // The HUD's last-cast toast and history strip describe the world being left. Without
@@ -2489,7 +2521,7 @@ public final class VoiceController {
                     // matters most" while still preserving FIFO ordering of the survivors.
                     CAST_QUEUE.pollFirst();
                 }
-                CAST_QUEUE.offerLast(new QueueEntry(spellId, now));
+                CAST_QUEUE.offerLast(new QueueEntry(spellId, now, utterancePeakLevel));
             }
             lastDispatchedSpellId    = spellKey;
             lastDispatchedNanos      = now;
@@ -2542,7 +2574,8 @@ public final class VoiceController {
             phrase, isFinal ? "final" : "partial",
             String.format(java.util.Locale.ROOT, "%.2f", confidence), spellId);
         ResourceLocation dispatched = spellId;
-        float vol = Math.max(0f, Math.min(1f, audioLevel));
+        float vol = Math.max(0f, Math.min(1f, utterancePeakLevel));
+        lastCastVolume = vol;
         Minecraft.getInstance().execute(() -> {
             // Streak and stats belong on this side of the hop. bumpStreak is a read-modify-write
             // over two fields and the queue drainer calls it from the client tick, so running it

@@ -108,7 +108,9 @@ beside it.
   ]
   ```
 
-  Out of the box nothing is changed — the defaults are plain Iron's Spells.
+  Out of the box nothing is changed — the defaults are plain Iron's Spells. `voiceVolumeScaling`
+  goes the other way: whisper a spell and it casts at level 1, shout it and it casts at the full
+  level of your spellbook.
 - **Incantation-only mode** *(server, off by default)* — require spells to be spoken. `FIRST_CAST`
   makes a player voice-cast a spell once before they can click it, so learning the incantation
   unlocks it; `ALWAYS` means spells can only ever be spoken.
