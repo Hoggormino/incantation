@@ -99,7 +99,11 @@ public final class SpellIndex {
     /** Soundex code (per-word, hyphen-joined) → spell ids that hash to that code. Computed once
      *  after the phrase index is built; powers {@link #phoneticLookup(String)} as the final
      *  fallback after exact/fuzzy/substring all miss. */
-    private static volatile Map<String, List<ResourceLocation>> phraseSoundex = Map.of();
+    /** One phrase in a Soundex bucket. The phrase text is kept beside the id because the code
+     *  alone is four characters and says nothing about how long the phrase was — see the length
+     *  plausibility check in {@link #phoneticLookup(String)}. */
+    private record SoundexEntry(String phrase, ResourceLocation id) {}
+    private static volatile Map<String, List<SoundexEntry>> phraseSoundex = Map.of();
 
     private SpellIndex() {}
 
@@ -397,13 +401,55 @@ public final class SpellIndex {
         if (phrase == null || phrase.length() < 4) return Optional.empty(); // too short to safely match
         String code = soundexPhrase(phrase);
         if (code.isEmpty()) return Optional.empty();
-        List<ResourceLocation> candidates = phraseSoundex.get(code);
+        List<SoundexEntry> candidates = phraseSoundex.get(code);
         if (candidates == null || candidates.isEmpty()) return Optional.empty();
-        java.util.Set<ResourceLocation> distinct = new java.util.HashSet<>(candidates);
+        java.util.Set<ResourceLocation> distinct = new java.util.HashSet<>();
+        for (SoundexEntry e : candidates) distinct.add(e.id());
         if (distinct.size() != 1) return Optional.empty(); // phonetic collision
-        ResourceLocation hit = candidates.iterator().next();
+        // Length plausibility. Soundex is FOUR characters - an initial letter and three consonant
+        // classes - no matter how long the word was, so "invisibility" and "invasive" are both
+        // I512 and the bucket cannot tell them apart. That is fine for the near-misses this tier
+        // exists to rescue ("fire boltz" -> "fire bolt", one character apart) and badly wrong for
+        // anything else: a player reported a spell being matched from "random words that are
+        // nothing like it", and a long name is exactly the one that collects them, because the
+        // eight letters past the code are simply not compared. So require the two to be of
+        // roughly the same size before trusting a code they agree on.
+        boolean plausible = false;
+        for (SoundexEntry e : candidates) {
+            if (lengthsAreComparable(phrase, e.phrase())) { plausible = true; break; }
+        }
+        if (!plausible) {
+            VoiceSpells.LOGGER.debug("Phonetic match \"{}\" ({}) rejected - length implausible",
+                phrase, code);
+            return Optional.empty();
+        }
+        ResourceLocation hit = distinct.iterator().next();
         VoiceSpells.LOGGER.debug("Phonetic match \"{}\" ({}) -> {}", phrase, code, hit);
         return Optional.of(hit);
+    }
+
+    /**
+     * Whether two phrases are close enough in length for a shared Soundex code to mean anything.
+     *
+     * <p>Counts letters only, so spacing and punctuation cannot swing it. The tolerance grows with
+     * the shorter phrase — a quarter of it, never less than two — because a longer word has more
+     * room for a plausible mishearing to add or drop a syllable, while two characters keeps the
+     * plural and trailing-consonant cases this tier was built for ("fire boltz" / "fire bolt").
+     */
+    private static boolean lengthsAreComparable(String heard, String candidate) {
+        int a = letterCount(heard);
+        int b = letterCount(candidate);
+        if (a == 0 || b == 0) return false;
+        int tolerance = Math.max(2, Math.min(a, b) / 4);
+        return Math.abs(a - b) <= tolerance;
+    }
+
+    private static int letterCount(String s) {
+        int n = 0;
+        for (int i = 0; i < s.length(); i++) {
+            if (Character.isLetter(s.charAt(i))) n++;
+        }
+        return n;
     }
 
     /** Standard 4-char Soundex on a single word. Returns "" for empty / non-letter input. */
@@ -702,11 +748,12 @@ public final class SpellIndex {
      * to recognise.
      */
     private static void rebuildSoundex(Map<String, ResourceLocation> phrases) {
-        Map<String, List<ResourceLocation>> sx = new HashMap<>();
+        Map<String, List<SoundexEntry>> sx = new HashMap<>();
         for (Map.Entry<String, ResourceLocation> e : phrases.entrySet()) {
             String code = soundexPhrase(e.getKey());
             if (code.isEmpty()) continue;
-            sx.computeIfAbsent(code, k -> new ArrayList<>()).add(e.getValue());
+            sx.computeIfAbsent(code, k -> new ArrayList<>())
+              .add(new SoundexEntry(e.getKey(), e.getValue()));
         }
         phraseSoundex = sx;
     }
