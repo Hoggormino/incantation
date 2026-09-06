@@ -255,6 +255,7 @@ public final class ConfigMoreScreen extends Screen {
         sb.append("dedupMillis=").append(c.dedupMillis.get()).append('\n');
         sb.append("echoLockoutMillis=").append(c.echoLockoutMillis.get()).append('\n');
         sb.append("minConfidence=").append(c.minConfidence.get()).append('\n');
+        sb.append("minMsPerLetter=").append(c.minMsPerLetter.get()).append('\n');
         sb.append("requireSneak=").append(c.requireSneak.get()).append('\n');
         sb.append("triggerWord=").append(c.triggerWord.get()).append('\n');
         sb.append("showMisses=").append(c.showMisses.get()).append('\n');
@@ -347,6 +348,9 @@ public final class ConfigMoreScreen extends Screen {
             case "dedupMillis":       c.dedupMillis.set(Integer.parseInt(val.trim())); return true;
             case "echoLockoutMillis": c.echoLockoutMillis.set(Integer.parseInt(val.trim())); return true;
             case "minConfidence":     c.minConfidence.set(Double.parseDouble(val.trim())); return true;
+            // Clamped for the same reason speechPeakRms is, below: a pasted profile is text a
+            // human can edit, and defineInRange throws on an out-of-range set.
+            case "minMsPerLetter":    c.minMsPerLetter.set(Math.max(0, Math.min(200, Integer.parseInt(val.trim())))); return true;
             case "requireSneak":      c.requireSneak.set(Boolean.parseBoolean(val)); return true;
             case "triggerWord":       c.triggerWord.set(val); return true;
             case "showMisses":        c.showMisses.set(Boolean.parseBoolean(val)); return true;

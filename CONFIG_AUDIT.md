@@ -6,6 +6,9 @@ unchanged. The rest are below, with what breaks if they go.
 One of these turned out to be a **live bug**; another was struck from the delete list
 entirely instead of being removed — see the notes.
 
+`speechPeakRms` and `minMsPerLetter` were both added in 0.10.6, after this audit was written, and
+are not part of the 57 counted here.
+
 
 ## Delete (5)
 

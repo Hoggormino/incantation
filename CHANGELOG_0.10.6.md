@@ -2,8 +2,9 @@
 
 Everything since 0.10.5.
 
-Two bugs from the CurseForge comments, both of the same unpleasant kind: the mod heard you
-perfectly and then quietly did the wrong thing about it.
+Two bugs from the CurseForge comments and one found on the way to the second. The first two are
+the same unpleasant kind: the mod heard you and then quietly did the wrong thing about it — once
+by refusing a repeat, once by casting on a guess it had not finished checking.
 
 ---
 
@@ -34,18 +35,35 @@ line per utterance. The Test Arena looked healthy throughout because it stops at
 before it ever reaches the echo check. Thanks to **tomasek1a** for a report that described all
 three symptoms precisely enough to find the cause from.
 
-**A spell could be matched from words that sound nothing like it.** When the mod cannot match what
-it heard exactly, it falls back through near-miss matching to a sound-alike comparison — the thing
-that turns "fire boltz" back into "fire bolt". That last comparison reduces any word to four
-characters: a first letter and three consonant sounds. For a short name that is most of the word.
-For a long one it is almost none of it, and everything past the fourth character was simply not
-being compared, so a long spell name would collect unrelated words that happened to start the same
-way.
+**Invisibility could be cast from words that sound nothing like it.** The recogniser is only ever
+allowed to hear spell names, so when it hears something else it picks the closest name it knows —
+and a long name is the natural magnet, because it can absorb the most audio. The mod then cast on
+the recogniser's *running guess*, before the final answer, and that path had no check on it at
+all: the confidence setting only ever applied to the final result.
 
-Sound-alike matching now also requires the two to be about the same length before it will trust
-them. Genuine near-misses are a character or two apart and still match; a word half the length of
-the spell name no longer does. Reported against Invisibility, which is long enough to be the worst
-case of it — thank you.
+Two things changed. Every match now has to have been *spoken* for long enough to plausibly be
+that phrase — 25 ms per letter by default (`minMsPerLetter`; "heal" 100 ms, "invisibility"
+300 ms), measured from the recogniser's own word timings. Real spell names measure roughly
+50-120 ms per letter; short one-syllable names like "shield" are the tightest, around 40, which is
+why the default sits well under that rather than close to it. A running guess that comes up short
+is not cast — the final answer decides, and nothing is held waiting for more audio. Only when the
+completed word still comes up short does it get rejected, shown as `(too short 150ms < 300ms)` in
+the Live Monitor. And `perSpellMinConfidence` now has teeth: a spell listed there never casts from
+a running guess. It waits for the complete utterance and is judged at its own threshold, so
+`irons_spellbooks:invisibility=0.7` is the knob for a spell that keeps getting force-fitted. That
+costs a listed spell the wait for its final answer — about half a second after you stop speaking,
+and it waits for you to stop, so say a listed spell on its own rather than in the middle of a
+sentence. Everything not listed still casts the instant it is recognised. Reported against
+Invisibility — thank you.
+
+**Sound-alike matching now requires the two words to be about the same length.** Found while
+chasing that report, and not its cause — across every Iron's Spells phrase nothing shares
+Invisibility's sound-alike code, so that path could not have produced it — but a real weakness on
+its own. The comparison that turns "fire boltz" back into "fire bolt" reduces any word to four
+characters: a first letter and three consonant sounds. For a short name that is most of the word;
+for a long one it is almost none of it, and everything past the fourth character was simply not
+compared. Genuine near-misses are a character or two apart and still match; a word half the length
+of the spell name no longer does.
 
 **Voice volume scaling now earns the voice level bonus instead of shrinking your spellbook.**
 `voiceVolumeScaling` used to promise "whisper for level 1, shout for your spellbook's level," and

@@ -88,9 +88,12 @@ public final class VoiceController {
      * stopped on the same call and the Codex read "0ms". A zero that is obviously wrong is worse
      * than no number, because it makes the whole panel look broken.
      *
-     * <p>Cleared when the gate closes, so each utterance is timed from its own beginning. Two
-     * casts inside one continuous breath both measure from that breath, which is the honest
-     * answer: that is when the player started speaking.
+     * <p>Re-stamped on the noise gate's closed-&gt;open edge, and deliberately NOT cleared when
+     * the gate closes: closing is what starts the flush, and the flush is what produces the
+     * final result that dispatches the cast — so a value cleared on close was always zero by
+     * the time anything wanted it. See the closing edge in the mic-frame path. Two casts inside
+     * one continuous breath both measure from that breath, which is the honest answer: that is
+     * when the player started speaking.
      */
     private static volatile long speechStartNanos = 0L;
     /** Loudest raw frame RMS heard since the noise gate last opened, i.e. the peak of the
@@ -542,6 +545,15 @@ public final class VoiceController {
     private static volatile boolean lastEventWasFinal       = false;
     private static volatile int     lastDispatchedUtterance = -1;
 
+    /** nanoTime of the last FINAL that entered {@link #onPhraseRecognized} — the moment the
+     *  previous utterance ended. Read only by the acoustic completeness gate, which uses it to
+     *  decide whether the noise gate's speech-start stamp belongs to the utterance being judged
+     *  or to the one before it. */
+    private static volatile long    lastFinalNanos          = 0L;
+    /** The utterance whose "waiting for you to finish" row has already been recorded, so a held
+     *  utterance costs one Live Monitor row rather than one per partial frame. */
+    private static volatile int     heldAwaitFinalUtterance = -1;
+
     /** Cast queue entries (FIFO). Each holds the spell id + the nanotime it was queued so the
      *  drainer can drop stale entries. */
     /** {@code volume} is the loudness (0..1) of the utterance that queued the spell, captured at
@@ -569,6 +581,10 @@ public final class VoiceController {
      *  test the reason text itself, which stopped working the moment the reason was
      *  translated. Null when the event needs no tag. */
     public static final String TAG_LOW_CONF = "low_conf";
+    /** The matched phrase was not spoken for long enough to plausibly be that phrase. */
+    public static final String TAG_TOO_SHORT   = "too_short";
+    /** The spell is listed in perSpellMinConfidence, so its partial was held for the final. */
+    public static final String TAG_AWAIT_FINAL = "await_final";
 
     /** One entry per successfully dispatched cast, for the rolling HUD history strip. */
     public record HistoryEntry(String display, long nanoTime) {}
@@ -1833,6 +1849,8 @@ public final class VoiceController {
         lastDispatchedUtterance  = -1;
         lastEventWasFinal        = false;
         utteranceFirstHeardNanos = 0L;
+        lastFinalNanos           = 0L;
+        heldAwaitFinalUtterance  = -1;
         speechStartNanos         = 0L;
         utterancePeakRms         = 0.0;
         lastCastVolume           = 1.0f;
@@ -1901,6 +1919,64 @@ public final class VoiceController {
             if (tok.equals(word)) return true;
         }
         return false;
+    }
+
+    /** Two decimals, ROOT locale — the shape every confidence in the recognition log has. */
+    private static String fmt2(double v) {
+        return String.format(java.util.Locale.ROOT, "%.2f", v);
+    }
+
+    /** Letters in a phrase, spaces and punctuation ignored. {@link Character#isLetter} rather
+     *  than an a-z test, so a Cyrillic or accented phrasebook phrase counts its own letters. */
+    private static int letterCount(String s) {
+        if (s == null) return 0;
+        int n = 0;
+        for (int i = 0; i < s.length(); i++) if (Character.isLetter(s.charAt(i))) n++;
+        return n;
+    }
+
+    /**
+     * Milliseconds the matched phrase actually occupied in the recogniser's word timings, or -1
+     * when there is no usable timing to measure.
+     *
+     * <p>Finds the contiguous run of words equal to the phrase's own words and measures from the
+     * start of the first to the end of the last: the LAST such run for a trailing partial match,
+     * because that is the run {@code lookupTrailingWithTier} matched, and the FIRST otherwise.
+     * When no run is found the whole list is measured instead — a fuzzy or phonetic match never
+     * equals the words that were heard, and a trigger word can split a name in two. That is the
+     * generous answer, and generous is the right direction for a gate that must never quietly
+     * swallow real speech.
+     *
+     * <p>{@code [unk]} entries are ordinary words here, and that is the point: "[unk]
+     * invisibility" is the exact shape this gate exists to catch, so only the spell's own words
+     * may count towards its span, never the noise sitting next to them.
+     *
+     * <p>Vosk's offsets are absolute from recogniser creation, so only differences within one
+     * event mean anything — never compare them against {@link System#nanoTime()}.
+     */
+    private static long measuredSpanMs(List<VoskSession.Word> words, String phrase,
+                                       boolean trailing) {
+        if (words == null || words.isEmpty()) return -1L;
+        String[] want = (phrase == null ? "" : phrase.trim()).split("\\s+");
+        int from = -1, to = -1;
+        if (want.length > 0 && !want[0].isEmpty()) {
+            for (int i = 0; i + want.length <= words.size(); i++) {
+                boolean all = true;
+                for (int j = 0; j < want.length; j++) {
+                    if (!want[j].equals(words.get(i + j).word())) { all = false; break; }
+                }
+                if (all) {
+                    from = i;
+                    to   = i + want.length - 1;
+                    if (!trailing) break;
+                }
+            }
+        }
+        if (from < 0) { from = 0; to = words.size() - 1; }
+        double startSec = words.get(from).start();
+        double endSec   = words.get(to).end();
+        if (Double.isNaN(startSec) || Double.isNaN(endSec) || endSec < startSec) return -1L;
+        return Math.round((endSec - startSec) * 1000.0);
     }
 
     /** Recognition chatter is useful while tuning but noisy for a normal session. Log at INFO
@@ -2260,13 +2336,23 @@ public final class VoiceController {
     /**
      * Vosk callback — fires on the capture thread.
      *
-     * Partial (mid-utterance) results are matched <b>strictly</b> (exact phrase only): they're
-     * the fast path and too noisy to run the lenient fallbacks against. Final results may use
-     * the full fuzzy/substring chain, but only if their average word confidence clears the
-     * configured floor — that's what stops garbled audio like "beam black hole missile" from
-     * casting via a greedy substring grab.
+     * <p>Partial (mid-utterance) results are matched <b>strictly</b> — the exact phrase, or the
+     * spell as the trailing words of the partial: they're the fast path and too noisy to run the
+     * lenient fallbacks against. Final results may use the full fuzzy/substring chain, but only
+     * if their average word confidence clears the configured floor — that's what stops garbled
+     * audio like "beam black hole missile" from casting via a greedy substring grab.
+     *
+     * <p>Both paths must then clear the acoustic completeness gate: whatever matched has to have
+     * been <i>spoken</i> for long enough to plausibly be the phrase it matched, measured from
+     * {@code words}. And a spell listed in {@code perSpellMinConfidence} never casts from a
+     * partial at all — it waits for its final, because a partial carries no confidence worth
+     * judging it by.
+     *
+     * @param words the recogniser's own per-word timings for this result, never null. Empty means
+     *              it gave us none, and the completeness gate falls back or fails open.
      */
-    private static void onPhraseRecognized(String phrase, boolean isFinal, double confidence) {
+    private static void onPhraseRecognized(String phrase, boolean isFinal, double confidence,
+                                           java.util.List<VoskSession.Word> words) {
         // Take the utterance's peak once, here, and retire it as soon as a final has consumed it.
         //
         // The peak is normally cleared when the noise gate opens for the next utterance, and that
@@ -2324,6 +2410,11 @@ public final class VoiceController {
         }
         if (utteranceFirstHeardNanos == 0L) utteranceFirstHeardNanos = System.nanoTime();
         lastEventWasFinal = isFinal;
+        // Where the PREVIOUS utterance ended, kept before this event overwrites it. The acoustic
+        // gate's fallback below has to know whether the noise gate's speech-start stamp was taken
+        // after that boundary, and this is the last moment the old value still exists.
+        long previousFinalNanos = lastFinalNanos;
+        if (isFinal) lastFinalNanos = System.nanoTime();
 
         // Hands-free queue control: "no" clears the queue, "yes" is a no-op acknowledgement
         // (the queue auto-drains anyway). Only finals — partials would fire instantly on the
@@ -2406,9 +2497,12 @@ public final class VoiceController {
             ? java.util.List.of(phrase, strippedPhrase)
             : java.util.List.of(usingTrigger && strippedPhrase.isEmpty() ? phrase : strippedPhrase);
         // Initial coarse confidence gate: drop anything well below the global floor early so we
-        // don't waste lookup work. Per-spell overrides are applied later, after we know which
-        // spell the phrase resolved to — they can only RELAX the gate, never tighten it below
-        // the global setting.
+        // don't waste lookup work. Skipped entirely as soon as any per-spell override exists,
+        // because this runs before the lookup and cannot yet know whether the spell about to be
+        // found is one of them. Nothing is lost by skipping it: an unlisted spell is still judged
+        // at minConfidence on its final, at the per-spell block further down, and a listed spell
+        // waits for its final and is then judged at its own threshold — which may be higher than
+        // the global one or lower.
         if (isFinal && confidence < VoiceSpellsConfig.cMinConfidence
                 && VoiceSpellsConfig.cPerSpellConfidence.isEmpty()) {
             recordEvent(phrase, Component.translatable("voicespells.monitor.low_conf_simple",
@@ -2422,13 +2516,19 @@ public final class VoiceController {
 
         Optional<ResourceLocation> id;
         char matchTier = ' ';
+        // The grammar phrase that MATCHED, which is not the phrase that was heard for any tier
+        // but E. The completeness gate below counts this one's letters: a fuzzy match on
+        // "invisible" is being asked to be "invisibility", and it is the name it resolved to
+        // that has to have been spoken, not the shorter thing the player actually said.
+        String matchedPhrase = "";
         // Loadout lookup runs first: if the phrase matches a configured loadout name we pick
         // the first castable spell from the list (cooldown + mana aware via ClientMagicData),
         // rather than falling through to the generic phrase → single-spell lookup.
         List<ResourceLocation> loadoutSpells = null;
+        String loadoutPhrase = "";
         for (String cand : matchCandidates) {
             loadoutSpells = SpellIndex.lookupLoadout(cand);
-            if (loadoutSpells != null && !loadoutSpells.isEmpty()) break;
+            if (loadoutSpells != null && !loadoutSpells.isEmpty()) { loadoutPhrase = cand; break; }
         }
         if (loadoutSpells != null && !loadoutSpells.isEmpty()) {
             ResourceLocation chosen = pickCastableFromLoadout(loadoutSpells);
@@ -2439,6 +2539,10 @@ public final class VoiceController {
             }
             id = Optional.of(chosen);
             matchTier = 'L';
+            // Normalised the way the index normalises its own keys, because the completeness
+            // gate splits this into words and compares them with the recogniser's.
+            matchedPhrase = loadoutPhrase.trim().toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("\\s+", " ");
         } else {
             // Resolution strategy. Finals run the full lookup chain (exact → fuzzy →
             // substring → phonetic). Partials are restricted to EXACT + TRAILING-SUFFIX:
@@ -2470,7 +2574,10 @@ public final class VoiceController {
                 }
             }
             id = result.map(SpellIndex.LookupResult::id);
-            if (result.isPresent()) matchTier = result.get().tier();
+            if (result.isPresent()) {
+                matchTier     = result.get().tier();
+                matchedPhrase = result.get().phrase();
+            }
         }
 
         if (id.isEmpty()) {
@@ -2505,6 +2612,106 @@ public final class VoiceController {
         String spellKey = spellId.toString();
         long now = System.nanoTime();
 
+        // Two gates on whether this match deserves to be believed at all, and both of them sit
+        // ahead of every other gate and of the dedup anchors further down. A held or rejected
+        // match must leave no trace — no anchor, no queue entry, no latency sample, no history
+        // row — or the utterance it belongs to would be deduped against itself when the final
+        // it was waiting for finally arrives.
+
+        // (a) A spell listed in perSpellMinConfidence never casts from a running guess.
+        //
+        // A partial is Vosk's guess at audio it has not finished hearing, and it carries no
+        // usable confidence at all — VoskSession hands every partial a flat 1.0. So every
+        // confidence check in this method is finals-only, which meant that for exactly the spell
+        // a player lists here — the one the recogniser keeps force-fitting onto unrelated speech
+        // — the setting that exists to raise its bar was bypassed by the very path the bad
+        // matches were arriving on. Listing a spell now buys the wait instead: nothing casts
+        // until the complete utterance is in and there is a real confidence to judge.
+        // One read of the map. It is a volatile reference that cacheColors() replaces wholesale
+        // on a config reload from the client thread, so a containsKey followed by a get could
+        // straddle a reload that removed this spell and unbox a null on the capture thread.
+        java.util.Map<String, Double> perSpell = VoiceSpellsConfig.cPerSpellConfidence;
+        Double  perSpellNeed = perSpell.get(spellKey);
+        boolean listed       = perSpellNeed != null;
+        if (listed && !isFinal) {
+            // One row per utterance, not one per partial frame.
+            if (heldAwaitFinalUtterance != utteranceId) {
+                heldAwaitFinalUtterance = utteranceId;
+                recordEvent(phrase, spellKey + " " + tr("voicespells.monitor.awaiting_final"),
+                    confidence, matchTier, TAG_AWAIT_FINAL);
+                logRecog("Heard '{}' (partial, tier {}) -> holding {} for its final "
+                        + "(listed in perSpellMinConfidence, need {})",
+                    phrase, matchTier, spellId, fmt2(perSpellNeed));
+            }
+            return;
+        }
+
+        // (b) Acoustic completeness: whatever matched has to have been SPOKEN for long enough to
+        // plausibly be the phrase it matched.
+        //
+        // The grammar only ever lets Vosk hear spell names, so when it hears something else it
+        // answers with the closest name it knows — and a long name is the natural magnet, because
+        // it can absorb the most audio. That is how Invisibility came to be cast from speech that
+        // sounded nothing like it. Duration is the one thing that force-fit cannot fake: the
+        // recogniser tells us where each word started and ended, and a 150 ms cough is
+        // not twelve letters of "invisibility".
+        int    perLetter = VoiceSpellsConfig.cMinMsPerLetter;
+        int    letters   = letterCount(matchedPhrase);
+        long   needMs    = (long) perLetter * letters;
+        // Trailing only for a partial that lookupTrailingWithTier matched, because that matcher
+        // accepts the spell as the LAST words of the partial — measuring the first occurrence
+        // would be measuring the wrong audio.
+        long   spanMs    = measuredSpanMs(words, matchedPhrase, matchTier == 'S' && !isFinal);
+        String spanSrc   = "vosk";
+        if (spanMs < 0) {
+            // No word timings for this event. Fall back to the noise gate's own "speech started
+            // here" stamp, but only when that stamp demonstrably belongs to THIS utterance: it
+            // was taken after the final that ended the previous one, and no later than this
+            // utterance's first recognition event. Either side of that window it is a neighbour's
+            // stamp, and measuring against it would reject good speech or wave bad speech
+            // through. When it does not belong we fail OPEN and cast — a missing measurement is
+            // not evidence of a bad match, and this gate must never become one more way for the
+            // mod to go quiet on somebody.
+            //
+            // One case the window cannot resolve: a lone final with no partial before it stamps
+            // utteranceFirstHeardNanos on this very call, so a stamp the capture thread already
+            // took for the NEXT utterance (it stamps outside the recogniser lock, then blocks on
+            // feed16k while the flush thread is in here) lands inside the window too. Such a
+            // final gets no fallback at all. With word timings present this branch is never
+            // reached, so what it costs is nothing; what it prevents is measuring one utterance
+            // against another's start.
+            long ss = speechStartNanos;
+            boolean belongs = ss > 0L && ss > previousFinalNanos && ss <= utteranceFirstHeardNanos
+                && !(isFinal && newUtterance);
+            if (belongs) { spanMs = (now - ss) / 1_000_000L; spanSrc = "gate"; }
+            else         { spanSrc = "none"; }
+        }
+        if (perLetter > 0 && spanMs >= 0 && spanMs < needMs) {
+            if (isFinal) {
+                recordEvent(phrase, spellKey + " "
+                        + tr("voicespells.monitor.too_short", spanMs, needMs),
+                    confidence, matchTier, TAG_TOO_SHORT);
+                logRecog("Heard '{}' (final, conf {}, tier {}) -> rejected {}: "
+                        + "spoken {}ms ({}) < min {}ms ({} letters x {}ms)",
+                    phrase, fmt2(confidence), matchTier, spellId,
+                    spanMs, spanSrc, needMs, letters, perLetter);
+            } else {
+                // The log, and deliberately not the Live Monitor. A partial's words are already
+                // fully timed by the time it arrives — the recogniser trails the audio, it does
+                // not hand out half-measured words — so a partial that is too short is an early
+                // reject that the final routinely overturns, not a wait for more audio. Recording
+                // "(too short)" for a word that then casts a moment later would put a verdict in
+                // the monitor that the same utterance contradicts, and FirstRunScreen shows the
+                // newest row first, in the suppressed colour: that row would be the entire story
+                // a new player is told about a spell that worked.
+                logRecog("Heard '{}' (partial, conf {}, tier {}) -> holding {}: "
+                        + "spoken {}ms ({}) < min {}ms ({} letters x {}ms)",
+                    phrase, fmt2(confidence), matchTier, spellId,
+                    spanMs, spanSrc, needMs, letters, perLetter);
+            }
+            return;
+        }
+
         // Equipped-only hard gate. When cRestrictToOwned is on AND the last scan produced
         // trustworthy data (ownedScanReliable), the spell MUST be in the actively-equipped set
         // (main hand / off hand / curios) or we reject it — a reliable-but-empty set means the
@@ -2522,8 +2729,10 @@ public final class VoiceController {
             }
         }
 
-        // Per-spell confidence override — relaxes (or tightens) the global gate for individual
-        // spells. Only relevant on finals (partials already passed lookupExact, no fuzzy noise).
+        // Per-spell confidence override — relaxes or tightens the global gate for individual
+        // spells. Finals only, and that is now true by construction rather than by hope: a listed
+        // spell's partial was held above and never reaches this line, so the threshold is always
+        // being applied to a confidence that means something.
         if (isFinal && !VoiceSpellsConfig.cPerSpellConfidence.isEmpty()) {
             double threshold = VoiceSpellsConfig.cPerSpellConfidence.getOrDefault(
                 spellKey, (double) VoiceSpellsConfig.cMinConfidence);
@@ -2715,11 +2924,13 @@ public final class VoiceController {
         // "quieter than a quarter of your speaking level", and whether that is a quiet player or
         // a reference calibrated off a cough is only answerable from the two numbers it came
         // from. Diagnostic only; nothing reads this line. Needs debugMonitor to reach INFO.
-        logRecog("Heard '{}' ({}, conf {}, tier {}) -> dispatching {} at loudness {} (peak {} / ref {})",
+        logRecog("Heard '{}' ({}, conf {}, tier {}) -> dispatching {} at loudness {} "
+                + "(peak {} / ref {}), spoken {}ms ({}) min {}ms",
             phrase, isFinal ? "final" : "partial",
             String.format(java.util.Locale.ROOT, "%.2f", confidence), matchTier, spellId,
             String.format(java.util.Locale.ROOT, "%.2f", vol),
-            Math.round(utterancePeak), Math.round(loudnessReference()));
+            Math.round(utterancePeak), Math.round(loudnessReference()),
+            spanMs, spanSrc, needMs);
         ResourceLocation dispatched = spellId;
         lastCastVolume = vol;
         Minecraft.getInstance().execute(() -> {

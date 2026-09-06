@@ -348,8 +348,20 @@ public final class SpellIndex {
      *    <li>{@code P} - phonetic (Soundex)</li>
      *    <li>{@code L} - loadout pick (set by VoiceController, not by this class)</li>
      *  </ul>
+     *
+     *  <p>{@code phrase} is the normalised grammar phrase that MATCHED - the key out of the
+     *  phrase index - not the text that was heard. On every tier but {@code E} the two differ,
+     *  and the difference is the point: a caller weighing whether enough audio went by for this
+     *  to have been said has to count the letters of the name it landed on, not of the noise it
+     *  landed from. Tier {@code L} is assembled by VoiceController, which fills in the spoken
+     *  phrase itself.
      */
-    public record LookupResult(ResourceLocation id, char tier) {}
+    public record LookupResult(ResourceLocation id, char tier, String phrase) {}
+
+    /** What a private matcher found: the index phrase it matched and the spell that phrase
+     *  belongs to. The phrase has to come back out of these helpers because only they know
+     *  which key won, and by the time the caller has an id that is gone. */
+    private record Hit(String phrase, ResourceLocation id) {}
 
     /** One row per indexed spell id (deduped across alias phrases), sorted by id, each paired
      *  with the spoken phrases that map to it. Backs the in-game spell browser. */
@@ -373,31 +385,35 @@ public final class SpellIndex {
         String norm = normalize(phrase);
         Map<String, ResourceLocation> phrases = STATE.get().phraseToId;
         ResourceLocation id = phrases.get(norm);
-        if (id != null) return Optional.of(new LookupResult(id, 'E'));
+        if (id != null) return Optional.of(new LookupResult(id, 'E', norm));
         // Fuzzy fallback — edit-distance tolerance is configurable (0 disables it). Ambiguous
         // near-misses (multiple different spells tied at the minimum distance) still reject.
         int fuzzyMax = com.niko.voicespells.VoiceSpellsConfig.cFuzzyMaxDistance;
         if (fuzzyMax > 0) {
-            Optional<ResourceLocation> fuzzy = fuzzyLookup(norm, phrases, fuzzyMax);
-            if (fuzzy.isPresent()) return Optional.of(new LookupResult(fuzzy.get(), 'F'));
+            Optional<Hit> fuzzy = fuzzyLookup(norm, phrases, fuzzyMax);
+            if (fuzzy.isPresent()) {
+                return Optional.of(new LookupResult(fuzzy.get().id(), 'F', fuzzy.get().phrase()));
+            }
         }
         // Substring fallback (configurable) — Vosk's grammar mode chains words, so it often
         // emits "[unk] sunbeam" or "ender chest sunbeam" when the user said one spell. Take
         // the longest known phrase that appears on word boundaries inside the heard text.
         if (com.niko.voicespells.VoiceSpellsConfig.cSubstringMatch) {
-            Optional<ResourceLocation> sub = substringLookup(norm, phrases);
-            if (sub.isPresent()) return Optional.of(new LookupResult(sub.get(), 'S'));
+            Optional<Hit> sub = substringLookup(norm, phrases);
+            if (sub.isPresent()) {
+                return Optional.of(new LookupResult(sub.get().id(), 'S', sub.get().phrase()));
+            }
         }
         // Phonetic last-resort: per-word Soundex collapse. Useful when Vosk produces a sound-
         // alike misspelling that survives fuzzy + substring (e.g. "fire boltz" → "fire bolt").
         // Only accepts unambiguous codes — multiple spells sharing a Soundex code reject so we
         // never cast the wrong one.
-        return phoneticLookup(norm).map(rid -> new LookupResult(rid, 'P'));
+        return phoneticLookup(norm).map(h -> new LookupResult(h.id(), 'P', h.phrase()));
     }
 
     /** Phonetic lookup: hash the heard phrase to a per-word Soundex code and return the spell
      *  if exactly one spell shares that code. Anything ambiguous or unmatched returns empty. */
-    private static Optional<ResourceLocation> phoneticLookup(String phrase) {
+    private static Optional<Hit> phoneticLookup(String phrase) {
         if (phrase == null || phrase.length() < 4) return Optional.empty(); // too short to safely match
         String code = soundexPhrase(phrase);
         if (code.isEmpty()) return Optional.empty();
@@ -410,22 +426,28 @@ public final class SpellIndex {
         // classes - no matter how long the word was, so "invisibility" and "invasive" are both
         // I512 and the bucket cannot tell them apart. That is fine for the near-misses this tier
         // exists to rescue ("fire boltz" -> "fire bolt", one character apart) and badly wrong for
-        // anything else: a player reported a spell being matched from "random words that are
-        // nothing like it", and a long name is exactly the one that collects them, because the
-        // eight letters past the code are simply not compared. So require the two to be of
-        // roughly the same size before trusting a code they agree on.
-        boolean plausible = false;
+        // anything else: everything past the fourth character is simply not compared, and the
+        // longer the name the more of it that is.
+        //
+        // Found while chasing a report of a spell cast from "random words that are nothing like
+        // it" - and it was NOT the cause of that. Checked across every Iron's Spells phrase:
+        // nothing else lands on Invisibility's code, so this tier could not have produced that
+        // match. The cause was the recogniser force-fitting stray audio onto the longest phrase
+        // in the grammar, which is dealt with in VoiceController. This is a real hole that was
+        // closed on the way past, not the fix for the report. Require the two to be of roughly
+        // the same size before trusting a code they agree on.
+        String plausible = null;
         for (SoundexEntry e : candidates) {
-            if (lengthsAreComparable(phrase, e.phrase())) { plausible = true; break; }
+            if (lengthsAreComparable(phrase, e.phrase())) { plausible = e.phrase(); break; }
         }
-        if (!plausible) {
+        if (plausible == null) {
             VoiceSpells.LOGGER.debug("Phonetic match \"{}\" ({}) rejected - length implausible",
                 phrase, code);
             return Optional.empty();
         }
         ResourceLocation hit = distinct.iterator().next();
         VoiceSpells.LOGGER.debug("Phonetic match \"{}\" ({}) -> {}", phrase, code, hit);
-        return Optional.of(hit);
+        return Optional.of(new Hit(plausible, hit));
     }
 
     /**
@@ -508,10 +530,11 @@ public final class SpellIndex {
      * policy would pick the hallucinated "thunderstorm"; earliest-wins picks the real
      * "sunbeam" the user actually said.
      */
-    private static Optional<ResourceLocation> substringLookup(String input,
+    private static Optional<Hit> substringLookup(String input,
             Map<String, ResourceLocation> phrases) {
         String padded = " " + input + " ";
         ResourceLocation best = null;
+        String bestPhrase = null;
         int bestStart = Integer.MAX_VALUE;
         int bestLen = 0;
         for (Map.Entry<String, ResourceLocation> e : phrases.entrySet()) {
@@ -522,6 +545,7 @@ public final class SpellIndex {
             // "fire" disambiguation when both anchor at the same position).
             if (start < bestStart || (start == bestStart && phrase.length() > bestLen)) {
                 best = e.getValue();
+                bestPhrase = phrase;
                 bestStart = start;
                 bestLen = phrase.length();
             }
@@ -529,7 +553,7 @@ public final class SpellIndex {
         if (best != null) {
             VoiceSpells.LOGGER.debug("Substring match in \"{}\" -> {} (at offset {})",
                 input, best, bestStart);
-            return Optional.of(best);
+            return Optional.of(new Hit(bestPhrase, best));
         }
         return Optional.empty();
     }
@@ -539,10 +563,11 @@ public final class SpellIndex {
      * empty unless exactly one phrase achieves the minimum distance — ambiguous matches are
      * rejected so we never autocorrect into the wrong spell.
      */
-    private static Optional<ResourceLocation> fuzzyLookup(String input,
+    private static Optional<Hit> fuzzyLookup(String input,
             Map<String, ResourceLocation> phrases, int maxDistance) {
         if (input.length() < 4) return Optional.empty(); // too short to safely autocorrect
         ResourceLocation best = null;
+        String bestPhrase = null;
         int bestDist = maxDistance + 1;
         boolean tied = false;
         for (Map.Entry<String, ResourceLocation> e : phrases.entrySet()) {
@@ -550,6 +575,7 @@ public final class SpellIndex {
             if (d < bestDist) {
                 bestDist = d;
                 best = e.getValue();
+                bestPhrase = e.getKey();
                 tied = false;
             } else if (d == bestDist) {
                 // Same distance from a different spell -> ambiguous, but only if it's a different
@@ -559,7 +585,7 @@ public final class SpellIndex {
         }
         if (best != null && bestDist <= maxDistance && !tied) {
             VoiceSpells.LOGGER.debug("Autocorrected \"{}\" -> {} (distance {})", input, best, bestDist);
-            return Optional.of(best);
+            return Optional.of(new Hit(bestPhrase, best));
         }
         return Optional.empty();
     }
@@ -1063,18 +1089,19 @@ public final class SpellIndex {
         Map<String, ResourceLocation> phrases = STATE.get().phraseToId;
         ResourceLocation id = phrases.get(norm);
         if (id != null) return Optional.of(id);
-        Optional<ResourceLocation> fuzzy = fuzzyLookup(norm, phrases, 2);
+        Optional<ResourceLocation> fuzzy = fuzzyLookup(norm, phrases, 2).map(Hit::id);
         if (fuzzy.isPresent()) return fuzzy;
-        Optional<ResourceLocation> sub = substringLookup(norm, phrases);
+        Optional<ResourceLocation> sub = substringLookup(norm, phrases).map(Hit::id);
         if (sub.isPresent()) return sub;
-        return phoneticLookup(norm);
+        return phoneticLookup(norm).map(Hit::id);
     }
 
     /** Exact-only resolution with tier reporting (always {@code E} on success). */
     public static Optional<LookupResult> lookupExactWithTier(String phrase) {
         if (phrase == null) return Optional.empty();
-        ResourceLocation id = STATE.get().phraseToId.get(normalize(phrase));
-        return id == null ? Optional.empty() : Optional.of(new LookupResult(id, 'E'));
+        String norm = normalize(phrase);
+        ResourceLocation id = STATE.get().phraseToId.get(norm);
+        return id == null ? Optional.empty() : Optional.of(new LookupResult(id, 'E', norm));
     }
 
     /** Trailing-suffix resolution for partials. Matches only if a known spell phrase is the
@@ -1088,12 +1115,13 @@ public final class SpellIndex {
         Map<String, ResourceLocation> phrases = STATE.get().phraseToId;
         // Direct hit on the whole text (covers single-word utterances).
         ResourceLocation direct = phrases.get(norm);
-        if (direct != null) return Optional.of(new LookupResult(direct, 'S'));
+        if (direct != null) return Optional.of(new LookupResult(direct, 'S', norm));
         // Walk word-boundaries from left to right; each candidate is "input substring starting
         // at this boundary, through end-of-text". Take the LONGEST match so a "fire" prefix
         // doesn't beat the actual "fireball" trailing match.
         int n = norm.length();
         ResourceLocation best = null;
+        String bestTail = null;
         int bestLen = 0;
         for (int i = 0; i < n; i++) {
             if (i > 0 && norm.charAt(i - 1) != ' ') continue;
@@ -1101,10 +1129,11 @@ public final class SpellIndex {
             ResourceLocation rid = phrases.get(tail);
             if (rid != null && tail.length() > bestLen) {
                 best = rid;
+                bestTail = tail;
                 bestLen = tail.length();
             }
         }
-        return best == null ? Optional.empty() : Optional.of(new LookupResult(best, 'S'));
+        return best == null ? Optional.empty() : Optional.of(new LookupResult(best, 'S', bestTail));
     }
 
     private static String normalize(String text) {

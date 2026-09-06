@@ -29,6 +29,10 @@ import java.util.Locale;
  *     because we enable {@code setWords(true)}; the consumer can run the lenient
  *     fuzzy/substring fallbacks but gate them behind an average-confidence floor.
  *
+ * Both paths also carry per-word timings ({@code setWords} plus {@code setPartialWords}), which
+ * is how the consumer can tell a spell name that was actually spoken from a short noise the
+ * grammar force-fitted onto one - confidence alone never could, and on partials there is none.
+ *
  * Audio arrives from MicCapture already at 16 kHz mono 16-bit — the rate Vosk wants — so there
  * is no resampling anywhere in the path.
  *
@@ -91,12 +95,36 @@ public final class VoskSession implements AutoCloseable {
         }
     }
 
+    /**
+     * One recognised word with the recogniser's own timing, in seconds counted from the moment
+     * the recogniser was created.
+     *
+     * <p>Only {@code end - start} differences <i>within one event</i> carry meaning. The clock is
+     * the recogniser's audio clock: it keeps running across in-stream finals and has no relation
+     * to {@link System#nanoTime()}, so comparing a value here against a wall clock produces a
+     * number that looks plausible and is nonsense.
+     *
+     * <p>{@code conf} is {@link Double#NaN} only when the element had no {@code conf} member at
+     * all. Partials carry a flat 1.0 that means nothing (the same 1.0-and-ignore rule as the
+     * event's own confidence); a grammar-mode final carries a real value on only some of its
+     * words and nothing on the rest.
+     */
+    public record Word(String word, double start, double end, double conf) {}
+
     /** Consumer callback. {@code isFinal} distinguishes a settled utterance result (with a
      *  meaningful {@code confidence} 0..1) from a mid-utterance partial (confidence is 1.0 and
-     *  should be ignored — partials are handled strictly instead). */
+     *  should be ignored — partials are handled strictly instead).
+     *
+     *  <p>{@code words} holds the recogniser's per-word timings for this same text, in order,
+     *  including any {@code [unk]} the recogniser inserted. It is immutable and never null; an
+     *  empty list means no timing was available for this event: a consumer that measures audio
+     *  may fall back on its own speech-start stamp for it, and otherwise has to fail open — never
+     *  read it as a zero-length utterance.
+     *  Partials carry timings too, because the session asks for them with
+     *  {@code setPartialWords(true)}. */
     @FunctionalInterface
     public interface PhraseSink {
-        void accept(String text, boolean isFinal, double confidence);
+        void accept(String text, boolean isFinal, double confidence, java.util.List<Word> words);
     }
 
     private final Model model;
@@ -130,6 +158,12 @@ public final class VoskSession implements AutoCloseable {
         try {
             fresh = new Recognizer(model, SAMPLE_RATE, buildGrammarJson(phrases));
             fresh.setWords(true);
+            // Timings on PARTIAL results too. Partials are the path that used to dispatch a cast
+            // with nothing checked at all, so the completeness gate downstream needs to know how
+            // much audio a partial match actually covered. Every recogniser this class hands out
+            // has to ask for them - a site that forgets shows up not as an error but as casts
+            // that never get measured.
+            fresh.setPartialWords(true);
         } catch (Throwable t) {
             VoiceSpells.LOGGER.error("Grammar rebuild failed, keeping current grammar: {}",
                 t.toString());
@@ -161,6 +195,7 @@ public final class VoskSession implements AutoCloseable {
         try {
             fresh = new Recognizer(model, SAMPLE_RATE);
             fresh.setWords(true);
+            fresh.setPartialWords(true); // as in rebuildGrammar - every recogniser reports timings
         } catch (Throwable t) {
             VoiceSpells.LOGGER.error("Could not open a free-dictation recognizer: {}", t.toString());
             return;
@@ -217,7 +252,9 @@ public final class VoskSession implements AutoCloseable {
         try { model.close(); }      catch (Throwable ignored) {}
     }
 
-    /** Mid-utterance partial: {@code {"partial":"fire ball"}}. No confidence; flagged !final. */
+    /** Mid-utterance partial: {@code {"partial":"fire ball","partial_result":[{"word":"fire",
+     *  "start":0.03,"end":0.42},…]}}. No confidence; flagged !final. The timings ride along
+     *  because every recogniser here is created with {@code setPartialWords(true)}. */
     private void emitPartial(String json) {
         if (json == null || json.isEmpty()) return;
         try {
@@ -225,9 +262,15 @@ public final class VoskSession implements AutoCloseable {
             if (!obj.has("partial")) return;
             String text = obj.get("partial").getAsString().trim().toLowerCase(Locale.ROOT);
             if (text.isEmpty() || text.equals("[unk]")) return;
+            // Deduped on the TEXT alone, and it has to stay that way. A partial trails the audio
+            // by the better part of a second and arrives with its words already fully timed - a
+            // word's end does not creep forward while the text stands still - so an unchanged
+            // partial carries nothing new to judge, and re-delivering it every frame would only
+            // buy a monitor row per frame. It also means a partial the consumer finds too short
+            // is an early no rather than a wait for more audio: the final answer decides.
             if (text.equals(lastTriedPartial)) return; // unchanged since last frame
             lastTriedPartial = text;
-            onPhrase.accept(text, false, 1.0);
+            onPhrase.accept(text, false, 1.0, parseWords(obj, "partial_result"));
         } catch (Throwable t) {
             VoiceSpells.LOGGER.debug("Vosk partial parse: {}", t.toString());
         }
@@ -243,9 +286,46 @@ public final class VoskSession implements AutoCloseable {
             String text = obj.get("text").getAsString().trim().toLowerCase(Locale.ROOT);
             if (text.isEmpty() || text.equals("[unk]")) return;
             double conf = averageConfidence(obj);
-            onPhrase.accept(text, true, conf);
+            onPhrase.accept(text, true, conf, parseWords(obj, "result"));
         } catch (Throwable t) {
             VoiceSpells.LOGGER.debug("Vosk final parse: {}", t.toString());
+        }
+    }
+
+    /**
+     * Per-word timings out of a result object — {@code "result"} on a final,
+     * {@code "partial_result"} on a partial. Never null.
+     *
+     * <p>A word is only usable with {@code word}, {@code start} and {@code end}, and if a single
+     * element is missing one of those the WHOLE list is thrown away. Half a timing list is worse
+     * than none: the consumer lines these words up against the matched phrase to measure it, so a
+     * gap would silently measure the wrong stretch of audio and reject a spell the player really
+     * did say. An empty list means "cannot judge": the consumer may fall back on its own
+     * speech-start stamp, and otherwise fails open.
+     *
+     * <p>{@code conf} is the exception and must never cost the list: grammar-mode finals carry it
+     * on only some words, and partials carry a flat 1.0 that means nothing, so an absent member
+     * is recorded as {@link Double#NaN} rather than thrown away with everything else. Words are lowercased with {@link Locale#ROOT} to match the text the
+     * emitters hand over alongside them.
+     */
+    private static List<Word> parseWords(JsonObject obj, String key) {
+        try {
+            if (!obj.has(key) || !obj.get(key).isJsonArray()) return List.of();
+            JsonArray arr = obj.getAsJsonArray(key);
+            if (arr.isEmpty()) return List.of();
+            java.util.ArrayList<Word> out = new java.util.ArrayList<>(arr.size());
+            for (var el : arr) {
+                if (!el.isJsonObject()) return List.of();
+                JsonObject w = el.getAsJsonObject();
+                if (!w.has("word") || !w.has("start") || !w.has("end")) return List.of();
+                double conf = w.has("conf") ? w.get("conf").getAsDouble() : Double.NaN;
+                out.add(new Word(w.get("word").getAsString().toLowerCase(Locale.ROOT),
+                    w.get("start").getAsDouble(), w.get("end").getAsDouble(), conf));
+            }
+            return List.copyOf(out);
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.debug("Vosk word timing parse: {}", t.toString());
+            return List.of();
         }
     }
 
@@ -285,6 +365,7 @@ public final class VoskSession implements AutoCloseable {
             rec = new Recognizer(model, SAMPLE_RATE, grammar);
             // Per-word confidences in final results — required for the consumer's confidence gate.
             rec.setWords(true);
+            rec.setPartialWords(true); // and timings on partials - see rebuildGrammar
         } catch (Throwable t) {
             try { model.close(); } catch (Throwable ignored) {}
             throw new IOException("Failed to create Vosk recognizer: " + t, t);

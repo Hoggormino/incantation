@@ -140,6 +140,7 @@ public final class VoiceSpellsConfig {
         public final ForgeConfigSpec.IntValue     castQueueSize;
         public final ForgeConfigSpec.BooleanValue clientPreflight;
         public final ForgeConfigSpec.DoubleValue  minConfidence;
+        public final ForgeConfigSpec.IntValue     minMsPerLetter;
         public final ForgeConfigSpec.BooleanValue autoDownloadModel;
         public final ForgeConfigSpec.ConfigValue<String> modelPath;
         /** Catalogued model to install and use, when modelPath is not set explicitly. */
@@ -236,8 +237,23 @@ public final class VoiceSpellsConfig {
                       "sending the cast packet, so impossible casts don't round-trip the server.");
             clientPreflight = b.define("clientPreflight", true);
             b.comment("Minimum average word confidence (0..1) for a final result to cast.",
-                      "Raise to reject mumbled/garbled audio, lower if good speech is ignored.");
+                      "Raise to reject mumbled/garbled audio, lower if good speech is ignored.",
+                      "Partial results are not confidence-gated; see minMsPerLetter and",
+                      "perSpellMinConfidence.");
             minConfidence = b.defineInRange("minConfidence", 0.55, 0.0, 1.0);
+            b.comment("Acoustic completeness: a matched spell must have been SPOKEN for at",
+                      "least this many milliseconds per letter of its phrase before it casts.",
+                      "At the default 25, \"heal\" (4 letters) needs 100 ms, \"shield\" (6) needs",
+                      "150 ms and \"invisibility\" (12) needs 300 ms. Real spell names measure",
+                      "roughly 50-120 ms per letter; short one-syllable names like shield are",
+                      "the tightest, around 40. What this stops is the recogniser force-fitting",
+                      "a cough or a stray word onto a long spell name - which is how",
+                      "Invisibility got cast from speech that was nothing like it. A running",
+                      "guess that is too short is not cast; the final answer decides, and a",
+                      "final that is too short is rejected and shows as (too short) in the",
+                      "Live Monitor. Measured from the recogniser's own word timings. Set to 0",
+                      "to disable.");
+            minMsPerLetter = b.defineInRange("minMsPerLetter", 25, 0, 200);
             b.comment("Download the model named by modelId if no model is installed yet.",
                       "Default is vosk-model-small-en-us-0.15 (~40 MB), not the larger one.",
                       "Off = install a model into config/voicespells/model/ yourself.");
@@ -268,9 +284,18 @@ public final class VoiceSpellsConfig {
             triggerWords = b.defineListAllowEmpty("triggerWords",
                 List.of(),
                 o -> o instanceof String s && !s.isBlank());
-            b.comment("Per-spell minimum-confidence overrides. Lets a stubborn spell that the",
-                      "model often hears at low confidence still cast, without lowering the",
-                      "global floor. Format: namespace:spell_id=0.35");
+            b.comment("Per-spell confidence thresholds, and the knob for a spell the",
+                      "recogniser keeps force-fitting onto unrelated speech. A spell listed",
+                      "here never casts from a running guess: it waits for the complete",
+                      "utterance and is then judged at ITS OWN threshold instead of",
+                      "minConfidence - higher or lower. That costs the listed spell a wait of",
+                      "about half a second after you stop speaking - and it waits for you to",
+                      "stop, so say it on its own rather than in the middle of a sentence.",
+                      "Raise it for a magnet spell (irons_spellbooks:invisibility=0.7); lower",
+                      "it for a stubborn one the model hears at low confidence",
+                      "(irons_spellbooks:fire_bolt=0.35). Spells not listed keep instant",
+                      "partial casting and are still judged at minConfidence on their final.",
+                      "Format: namespace:spell_id=0.35");
             perSpellMinConfidence = b.defineListAllowEmpty("perSpellMinConfidence",
                 List.of(),
                 o -> o instanceof String s && s.indexOf('=') > 0);
@@ -437,6 +462,7 @@ public final class VoiceSpellsConfig {
     public static volatile int     cCastQueueSize     = 3;
     public static volatile boolean cClientPreflight   = true;
     public static volatile double  cMinConfidence   = 0.55;
+    public static volatile int     cMinMsPerLetter  = 25;
     public static volatile boolean cRequireSneak    = false;
     public static volatile String  cTriggerWord     = "";
     public static volatile java.util.Set<String> cTriggerWords = java.util.Set.of();
@@ -480,6 +506,7 @@ public final class VoiceSpellsConfig {
         cCastQueueSize    = c.castQueueSize.get();
         cClientPreflight  = c.clientPreflight.get();
         cMinConfidence    = c.minConfidence.get();
+        cMinMsPerLetter   = c.minMsPerLetter.get();
         cRequireSneak     = c.requireSneak.get();
         cTriggerWord      = c.triggerWord.get().trim().toLowerCase(java.util.Locale.ROOT);
         // Build the merged trigger-word set (legacy single + new list).
