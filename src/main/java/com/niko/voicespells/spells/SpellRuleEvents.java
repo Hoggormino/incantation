@@ -24,10 +24,14 @@ import java.util.function.Consumer;
  * </ul>
  *
  * <p>{@code ModifySpellLevelEvent} is deliberately NOT among them. It exists and its
- * {@code addLevels(int)} is real, but it never fires on the path a voice cast takes — the level
- * is already fixed by the time the cast is initiated — so a hook there registered cleanly and
- * did nothing. The level bonus is applied in {@link SpellCaster} instead, where the mod owns the
- * number it passes in.
+ * {@code addLevels(int)} is real, and since {@link SpellCaster} started resolving the cast level
+ * through {@code getLevelFor} it does now fire on the voice path — once per cast, outside
+ * {@code castMode=FREE}, posted by that call. It still cannot carry the level bonus: it fires
+ * before {@link SpellRules#beginVoiceCast} stamps the player, so at that moment nothing can tell a
+ * spoken cast from a clicked one and the bonus would land on both. (Before that call it did not
+ * fire here at all, and a hook registered cleanly and did nothing — which is how the option
+ * shipped dead once already.) The level bonus is applied in {@link SpellCaster} instead, where the
+ * mod owns the number it passes in and knows the cast is a spoken one.
  *
  * <p>Server-side. Cooldown and spell level are gameplay, so a client cannot be trusted with them,
  * and an incantation requirement that only the client enforced would be worth nothing.
@@ -119,10 +123,13 @@ public final class SpellRuleEvents {
 
     // No ModifySpellLevelEvent hook.
     //
-    // It was registered here and never fired on the voice-cast path: by the time
-    // attemptInitiateCast runs, the level is already decided, so the bonus silently did nothing.
-    // SpellCaster applies it directly to the level it is about to cast with, which is the value
-    // Iron's Spells actually uses.
+    // It was registered here once and fired for nobody: back then the level was already decided by
+    // the time attemptInitiateCast ran, so the bonus silently did nothing. That is no longer the
+    // reason to stay away from it - SpellCaster's own getLevelFor call posts the event, so it now
+    // fires once per voice cast outside castMode=FREE - but a hook here would fire before
+    // SpellRules.beginVoiceCast stamps the player, with no way to tell a spoken cast from a
+    // clicked one, and would hand the bonus to both. SpellCaster applies it directly to the level
+    // it is about to cast with, which is the value Iron's Spells actually uses.
 
     /**
      * Charge the level bonus at base price.
@@ -155,6 +162,26 @@ public final class SpellRuleEvents {
      * ({@code "1/2"}), so the run logs at most one line per distinct band.
      */
     public static void proveLevelOnce(String key, String detail) { proveOnce("level " + key, detail); }
+
+    /**
+     * Say once that a cast's level was RESOLVED — not that a voice advantage was applied.
+     *
+     * <p>Separate from {@link #proveLevelOnce} because the two report opposite things. The
+     * affinity-curio and {@code ModifySpellLevelEvent} levels {@link SpellCaster} resolves before
+     * it adds anything are parity with a clicked cast, not something voice casting grants; logged
+     * through the "Voice advantage ... applied" banner they told a host who was debugging "is my
+     * voice bonus working?" that it was, on a server where {@code voiceLevelBonus} is 0. Keyed by
+     * outcome like the banner it replaces, so a run logs one line per distinct resolution.
+     */
+    public static void noteLevelOnce(String key, String detail) {
+        if (PROVEN.add("level-resolved " + key)) {
+            VoiceSpells.LOGGER.info(
+                "Voice cast level resolved to match a clicked cast (not a voice advantage): {}",
+                detail);
+        } else {
+            VoiceSpells.LOGGER.debug("Voice cast level resolved: {}", detail);
+        }
+    }
 
     private static void proveOnce(String what, String detail) {
         if (PROVEN.add(what)) {

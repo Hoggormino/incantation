@@ -34,6 +34,8 @@ public final class OwnedSpells {
     private static final String CURIOS_API    = "top.theillusivec4.curios.api.CuriosApi";
     private static final String CURIOS_HANDLER= "top.theillusivec4.curios.api.type.capability.ICuriosItemHandler";
     private static final String SLOT_RESULT   = "top.theillusivec4.curios.api.SlotResult";
+    private static final String AFFINITY_DATA = "io.redspace.ironsspellbooks.api.item.curios.AffinityData";
+    private static final String SPELL_REGISTRY= "io.redspace.ironsspellbooks.api.registry.SpellRegistry";
 
     private OwnedSpells() {}
 
@@ -68,18 +70,34 @@ public final class OwnedSpells {
     private static volatile Class<?> spellSlotClass;  // SpellSlot — getAllSpells() element type on current builds (may be null)
     private static volatile Method   spellSlotGetData;// SpellSlot.spellData()/getSpellData() -> SpellData
     private static volatile Method   dataGetLevel;    // SpellData.getLevel() -> int
+    private static volatile Method   affinityHas;     // AffinityData.hasAffinityData(ItemStack) -> boolean
+    private static volatile Method   affinityGet;     // AffinityData.getAffinityData(ItemStack) -> AffinityData
+    private static volatile Method   affinityBonus;   // AffinityData.getBonusFor(AbstractSpell) -> int
+    private static volatile Method   registryGetSpell;// SpellRegistry.getSpell(String) -> AbstractSpell
 
     /**
-     * The level each equipped spell is inscribed at, by spell id.
+     * The level each equipped spell will actually cast at, by spell id - inscribed, plus the
+     * bonus the player's worn affinity curios add.
      *
-     * <p>The scan already walks every equipped SpellData and threw this away, so the client had
-     * no idea what level it was about to cast at and every mana check hardcoded 1. On an upgraded
-     * spellbook that under-counts the cost, so the client waved a cast through and the server
-     * refused it - the player speaks, nothing happens, and the only clue is a failure toast.
+     * <p>The scan already walks every equipped SpellData and threw the level away, so the client
+     * had no idea what level it was about to cast at and every mana check hardcoded 1. On an
+     * upgraded spellbook that under-counts the cost, so the client waved a cast through and the
+     * server refused it - the player speaks, nothing happens, and the only clue is a failure
+     * toast. The affinity half is here for exactly the same reason: SpellCaster now resolves the
+     * cast level through Iron's Spells' own {@code getLevelFor}, so pricing a spell at its
+     * inscribed level puts the two sides one level - and one mana bracket - apart for anybody
+     * wearing an affinity ring.
+     *
+     * <p>Only the affinity half of {@code getLevelFor} is reproduced. The other half posts
+     * {@code ModifySpellLevelEvent}, which must not be fired once per equipped spell per scan on
+     * the client bus, so an addon that adjusts levels through that event stays invisible here.
+     * The server's own preflight remains the authority and still refuses the cast with a reason;
+     * this only stops the two disagreeing in the case that actually happens.
      */
     private static volatile java.util.Map<String, Integer> levels = java.util.Map.of();
 
-    /** Inscribed level of an equipped spell, or 1 when it is not equipped or unknown. */
+    /** The level an equipped spell will cast at - inscribed plus affinity curios - or 1 when it
+     *  is not equipped or unknown. */
     public static int levelOf(String spellId) {
         Integer lv = levels.get(spellId);
         return lv == null || lv < 1 ? 1 : lv;
@@ -141,6 +159,26 @@ public final class OwnedSpells {
         } catch (Throwable t) {
             spellSlotClass = null;
             spellSlotGetData = null;
+        }
+        // Optional affinity resolution. Best-effort in every direction: a build without
+        // AffinityData, or without SpellRegistry.getSpell(String), simply leaves these null and
+        // the levels map stays exactly what it was before - the inscribed level - which is the
+        // same answer this class gave for its whole life. Never a reason to refuse a cast.
+        try {
+            Class<?> affinityCls = Class.forName(AFFINITY_DATA);
+            Class<?> spellCls2   = Class.forName(SPELL_CLASS);
+            affinityHas      = affinityCls.getMethod("hasAffinityData", ItemStack.class);
+            affinityGet      = affinityCls.getMethod("getAffinityData", ItemStack.class);
+            affinityBonus    = affinityCls.getMethod("getBonusFor", spellCls2);
+            registryGetSpell = Class.forName(SPELL_REGISTRY).getMethod("getSpell", String.class);
+        } catch (Throwable noAffinity) {
+            affinityHas = null;
+            affinityGet = null;
+            affinityBonus = null;
+            registryGetSpell = null;
+            VoiceSpells.LOGGER.debug(
+                "Affinity level reflection unavailable; the client will price casts at the "
+                + "inscribed level: {}", noAffinity.toString());
         }
         // Optional Curios resolution — we degrade to hand-only when Curios is missing.
         try {
@@ -224,6 +262,14 @@ public final class OwnedSpells {
                         ItemStack stack = (ItemStack) curiosStackGetter.invoke(slotResult);
                         addSpellsFrom(stack, out);
                     }
+                    // Last, because it needs every equipped spell already in the map: affinity
+                    // curios raise the level the server will cast at, and a client that prices
+                    // the cast at the inscribed level instead lets the loadout picker settle on
+                    // a spell the server then refuses for mana - which dead-ends, because the
+                    // picker has already stopped looking at the rest of the loadout. Same
+                    // handler the spellbook walk just used, so this costs one more findCurios
+                    // per scan, once a second.
+                    addAffinityLevels(handler, lv);
                 }
             } catch (Throwable t) {
                 VoiceSpells.LOGGER.debug("Curios scan failed: {}", t.toString());
@@ -363,6 +409,60 @@ public final class OwnedSpells {
             }
         } catch (Throwable t) {
             // Individual stack scan failures are non-fatal — skip and continue.
+        }
+    }
+
+    /**
+     * Add each worn affinity curio's bonus on top of the inscribed levels just collected.
+     *
+     * <p>This is the AffinityData half of Iron's Spells' own
+     * {@code AbstractSpell.getLevelFor(int, LivingEntity)}: it sums {@code getBonusFor(spell)}
+     * over the stacks Curios reports, exactly as that method does. The other half - posting
+     * {@code ModifySpellLevelEvent} - is deliberately not reproduced: it would fire once per
+     * equipped spell on every scan, on the client bus, for a number used only to estimate a mana
+     * cost, and any listener with side effects would run for casts that never happen.
+     *
+     * <p>Fails silent and leaves the inscribed levels alone, like everything else in this class:
+     * the worst outcome is the estimate this had before, and the server's preflight still has the
+     * final say.
+     */
+    private static void addAffinityLevels(Object handler, java.util.Map<String, Integer> lv) {
+        if (lv.isEmpty() || affinityHas == null || affinityGet == null || affinityBonus == null
+                || registryGetSpell == null || curiosFindCurios == null
+                || curiosStackGetter == null) {
+            return;
+        }
+        try {
+            Predicate<ItemStack> hasAffinity = stack -> {
+                try {
+                    return stack != null && !stack.isEmpty()
+                        && (boolean) affinityHas.invoke(null, stack);
+                } catch (Throwable t) { return false; }
+            };
+            @SuppressWarnings("unchecked")
+            java.util.List<Object> worn =
+                (java.util.List<Object>) curiosFindCurios.invoke(handler, hasAffinity);
+            if (worn == null || worn.isEmpty()) return;   // the common case: nothing to add
+            // Resolve the affinity records once, not once per spell.
+            java.util.List<Object> data = new java.util.ArrayList<>(worn.size());
+            for (Object slotResult : worn) {
+                ItemStack stack = (ItemStack) curiosStackGetter.invoke(slotResult);
+                Object d = affinityGet.invoke(null, stack);
+                if (d != null) data.add(d);
+            }
+            if (data.isEmpty()) return;
+            for (java.util.Map.Entry<String, Integer> e : lv.entrySet()) {
+                Object spell = registryGetSpell.invoke(null, e.getKey());
+                if (spell == null) continue;
+                int bonus = 0;
+                for (Object d : data) {
+                    bonus += ((Number) affinityBonus.invoke(d, spell)).intValue();
+                }
+                if (bonus > 0) e.setValue(e.getValue() + bonus);
+            }
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.debug(
+                "Affinity level scan failed; pricing at the inscribed level: {}", t.toString());
         }
     }
 

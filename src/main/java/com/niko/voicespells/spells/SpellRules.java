@@ -20,8 +20,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Iron's Spells exposes two usable hooks — {@code SpellCooldownAddedEvent.Pre} (cancellable,
  * with {@code setEffectiveCooldown}) and {@code SpellPreCastEvent} (cancellable) — both with
  * identical signatures on 1.20.1 and 1.21.1, so only the bus registration is version-split. The
- * level bonus does not go through an event at all: {@code ModifySpellLevelEvent} never fires on
- * this path, so {@link SpellCaster} applies it where it already owns the cast level.
+ * level bonus does not go through an event at all: {@code ModifySpellLevelEvent} does fire on this
+ * path now — {@link SpellCaster}'s own {@code getLevelFor} call posts it — but it fires before the
+ * stamp below exists, so a hook there could not tell a spoken cast from a clicked one and would
+ * give both the bonus. {@link SpellCaster} applies it where it already owns the cast level.
  *
  * <p><b>How a cast is known to be ours.</b> The events fire deep inside Iron's Spells and carry no
  * indication of who started the cast, so {@link SpellCaster} stamps the player immediately before
@@ -247,9 +249,12 @@ public final class SpellRules {
      * Extra spell levels configured for a voice cast, or 0.
      *
      * <p>Read by {@code SpellCaster} BEFORE it casts, not by an event hook. The first attempt used
-     * {@code ModifySpellLevelEvent}, which never fires on this path - the level is already fixed
-     * by the time {@code attemptInitiateCast} is called, so the bonus silently did nothing.
-     * SpellCaster owns the number it is about to cast with, so that is where the bonus belongs.
+     * {@code ModifySpellLevelEvent}, which back then never fired on this path - the level was
+     * already fixed by the time {@code attemptInitiateCast} was called, so the bonus silently did
+     * nothing. It does fire now, posted by SpellCaster's own {@code getLevelFor} call, but too
+     * early to be useful: the voice stamp is not set yet, so a hook there would hand the bonus to
+     * clicked casts too. SpellCaster owns the number it is about to cast with, so that is where
+     * the bonus belongs.
      */
     /**
      * What a specific player's voice advantages are, after per-player overrides.

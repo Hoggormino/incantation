@@ -327,10 +327,49 @@ public final class SpellCaster {
 
             }
 
+            // What Iron's Spells itself would have cast this at.
+            //
+            // The level inscribed on the book, the imbued item or the scroll is NOT the level a
+            // click casts at. Utils.serverSideInitiateCast reads SpellData.getLevel() and then
+            // runs it through AbstractSpell.getLevelFor(int, LivingEntity) before handing the
+            // RESULT to attemptInitiateCast; ServerPlayerEvents.onUseItem and Scroll.use do the
+            // same. getLevelFor sums the AffinityData bonus from the player's worn Curios and
+            // posts ModifySpellLevelEvent so addons can adjust the number. This class passed the
+            // raw inscribed level straight through, so every voice cast silently dropped both:
+            // Fireball inscribed at level 3 with a fire affinity ring cast at 4 when clicked and
+            // at 3 when spoken. With the default voiceLevelBonus of 0 that made a spoken cast
+            // strictly WEAKER than the same click, and broke the one thing this whole level path
+            // promises - that the item's level is a floor a voice cast never lands below.
+            //
+            // Calling it here is not a double-apply. attemptInitiateCast does not call getLevelFor
+            // itself - verified with javap against irons_spellbooks 1.21.1-3.16.2 and 1.20.1-3.15.4,
+            // there is no such invoke anywhere in its body; every one of Iron's Spells' own callers
+            // resolves the level first and passes it in, which is exactly what this now does. And
+            // nothing else in this class or in SpellRules adds an affinity or event-derived level,
+            // so ModifySpellLevelEvent is posted once per voice cast, the same as for a click.
+            //
+            // Not under FREE, deliberately. That branch casts from no item at all - an empty
+            // stack, CastSource.COMMAND, no mana and no cooldown - so there is no clicked cast to
+            // be at parity with, and a fixed level that owes nothing to the player's gear is the
+            // whole reason an event server picks the mode. Resolving there would floor a player
+            // wearing three affinity curios at level 4 while the config text they read promises
+            // level 1, which is a behaviour change well past the bug being fixed. Skipped rather
+            // than clamped, so inscribed and castLevel both stay at the hardcoded 1 there and the
+            // resolution log below stays quiet.
+            int inscribed = castLevel;
+            if (mode != com.niko.voicespells.VoiceSpellsServerConfig.CastMode.FREE) {
+                castLevel = resolveCastLevel(spell, player, inscribed);
+            }
+
             // Voice level bonus, applied HERE because this is the number Iron's Spells will
-            // actually cast with. The first implementation tried ModifySpellLevelEvent, which
-            // never fires on this path - the level is already fixed by the time
-            // attemptInitiateCast is called - so the option silently did nothing.
+            // actually cast with. The first implementation tried ModifySpellLevelEvent, and back
+            // then that event genuinely never fired on this path - the level was already fixed by
+            // the time attemptInitiateCast was called - so the option silently did nothing. The
+            // resolveCastLevel call above changed that much: getLevelFor posts the event, so it
+            // now fires exactly once per voice cast outside FREE. A hook there still cannot carry
+            // the bonus, but for a different reason - it fires before SpellRules.beginVoiceCast
+            // stamps the player, so nothing at that point can tell a spoken cast from a clicked
+            // one, and the bonus would land on both.
             //
             // Outside the spellbook branch on purpose. It used to sit inside it, which meant that
             // under castMode=FREE - the mode an event server reaches for, because it needs no
@@ -352,13 +391,14 @@ public final class SpellCaster {
             // manaDelta below measures from the floor rather than from the level actually cast.
             //
             // What voiceVolumeScaling means, since 0.10.6: it scales the BONUS, not the item. The
-            // spell's inscribed level - on the spellbook, the imbued item or the scroll, and 1
-            // under FREE - is the floor, and no volume reading can push a cast below it. The
-            // option used to multiply the inscribed level instead, which is how it came to promise
-            // "whisper for level 1, shout for your spellbook's level" and deliver level 1 however
-            // loudly the spell was said: the volume it was handed was sampled after the player had
-            // stopped talking, so it was always near zero. Scaling the bonus means a bad reading
-            // can only cost the extra levels it would have granted.
+            // level the item itself would have cast at - resolved just above, so the floor carries
+            // an affinity curio's levels exactly as a click would - is the floor, and no volume
+            // reading can push a cast below it. The option used to multiply the inscribed level
+            // instead, which is how it came to promise "whisper for level 1, shout for your
+            // spellbook's level" and deliver level 1 however loudly the spell was said: the volume
+            // it was handed was sampled after the player had stopped talking, so it was always near
+            // zero. Scaling the bonus means a bad reading can only cost the extra levels it would
+            // have granted.
             int floor    = castLevel;
             int maxBonus = SpellRules.configuredLevelBonus(player);
             boolean scaling;
@@ -383,6 +423,20 @@ public final class SpellCaster {
             // 10 would make a voice cast WEAKER than the item it came from - the one thing this
             // whole path promises never happens.
             castLevel  = Math.max(floor, Math.min(floor + earned, 10));
+            // Say once when the item's own level was not the one inscribed on it. Same reason the
+            // bonus announces itself below: on a default server voiceLevelBonus is 0, so that block
+            // never runs, and an affinity curio's levels would arrive with nothing anywhere saying
+            // they had - which is indistinguishable from the state this just fixed. Keyed by the
+            // outcome, so a run logs one line per distinct step rather than one per cast.
+            if (floor != inscribed) {
+                // noteLevelOnce, not proveLevelOnce: this is parity with a click, not a voice
+                // advantage, and the "Voice advantage ... applied" banner would answer a host
+                // debugging "is my voice bonus working?" with yes on a server where
+                // voiceLevelBonus is 0.
+                SpellRuleEvents.noteLevelOnce("resolved " + inscribed + "->" + floor,
+                    spellId + " inscribed " + inscribed + " -> " + floor
+                        + " (affinity curios / ModifySpellLevelEvent)");
+            }
             if (maxBonus > 0) {
                 // Same reason the other two advantages announce themselves once: a level bonus
                 // that silently does nothing is indistinguishable from one that works, and this
@@ -398,6 +452,7 @@ public final class SpellCaster {
                     spellId + " level " + floor + " -> " + castLevel
                         + " (bonus " + earned + "/" + maxBonus
                         + (scaling ? ", loudness " + String.format(Locale.ROOT, "%.2f", loudness) : "")
+                        + (floor != inscribed ? ", inscribed " + inscribed : "")
                         + ")");
             } else if (scaling && spoken && !SpellRules.anyLevelBonusConfigured()) {
                 // voiceVolumeScaling with nothing to scale is a config mistake that looks exactly
@@ -410,7 +465,8 @@ public final class SpellCaster {
                 SpellRuleEvents.warnConfigOnce("volume-scaling-idle",
                     "voiceVolumeScaling is on but voiceLevelBonus is 0 and no playerAdvantages "
                         + "entry grants levels - there is nothing to scale, so voice casts run at "
-                        + "the spellbook's inscribed level (level 1 under FREE)");
+                        + "whatever level the item itself would have cast at, affinity curios "
+                        + "included (level 1 under FREE)");
             }
             // How much the bonus inflated the price. Carried on the voice stamp and subtracted by
             // the SpellOnCastEvent hook at the instant Iron's Spells charges for it - not credited
@@ -702,6 +758,61 @@ public final class SpellCaster {
         }
         Class<?> m = scrollMark;
         return m != null && m.isInstance(stack.getItem());
+    }
+
+    /**
+     * Iron's Spells' own {@code AbstractSpell#getLevelFor(int, LivingEntity)}, resolved lazily and
+     * cached exactly like the scroll marker above.
+     *
+     * <p>Resolved once because it is called on every cast and a {@code getMethod} lookup per cast
+     * buys nothing; cached as the {@code Method} rather than as a flag so a rename costs one failed
+     * lookup for the run instead of one per cast.
+     *
+     * <p>It is {@code public final} on both targeted builds of Iron's Spells (1.21.1-3.16.2 and
+     * 1.20.1-3.15.4), so the degradation below is not a path normal operation ever takes - it is
+     * there for a future Iron's Spells that renames or removes the method, and for an install
+     * without Curios, whose absence makes the method's own body throw. In either case the answer is
+     * the level inscribed on the item, which is precisely what this class did before, so a failure
+     * here costs the affinity levels and never the cast. Nothing about the level is worth refusing
+     * to cast over.
+     */
+    private static volatile Method levelForMethod;
+    private static volatile boolean levelForResolved = false;
+
+    private static int resolveCastLevel(Object spell, ServerPlayer player, int inscribed) {
+        if (!levelForResolved) {
+            synchronized (SpellCaster.class) {
+                if (!levelForResolved) {
+                    try {
+                        levelForMethod = Class.forName(SPELL_CLASS)
+                            .getMethod("getLevelFor", int.class, LivingEntity.class);
+                    } catch (Throwable t) {
+                        levelForMethod = null;
+                        VoiceSpells.LOGGER.warn(
+                            "AbstractSpell.getLevelFor(int, LivingEntity) is not present on this "
+                            + "build of Iron's Spells; voice casts will use the level inscribed on "
+                            + "the item, which means an affinity curio's bonus levels apply to a "
+                            + "clicked cast but not to a spoken one: {}", t.toString());
+                    }
+                    levelForResolved = true;
+                }
+            }
+        }
+        Method m = levelForMethod;
+        if (m == null) return inscribed;
+        try {
+            int resolved = ((Number) m.invoke(spell, inscribed, player)).intValue();
+            // A listener on ModifySpellLevelEvent may legitimately lower the level, and honouring
+            // that is the whole point of asking - a spoken cast should land where a clicked one
+            // would. Below 1 is not a level anything casts at, though, and it would be carried
+            // through the floor arithmetic above into attemptInitiateCast, so treat that one case
+            // as a broken listener and keep the inscribed level.
+            return resolved >= 1 ? resolved : inscribed;
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.debug("getLevelFor failed; using the inscribed level {}: {}",
+                inscribed, t.toString());
+            return inscribed;
+        }
     }
 
     /**

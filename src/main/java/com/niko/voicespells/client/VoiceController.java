@@ -1410,9 +1410,11 @@ public final class VoiceController {
                     && !ownedSpellIds.contains(key)) continue;
 
             // On cooldown, or costing more mana than the player has? Skip — that is what the
-            // snapshot holds. Both checks read the spell's real inscribed level, because level 1
-            // made a loadout pick a spell the player could not afford, which then failed
-            // server-side with no route to the next candidate.
+            // snapshot holds. Both checks read the level the spell will really cast at - its
+            // inscribed level plus the player's affinity curios - because a level-1 estimate made
+            // a loadout pick a spell the player could not afford, which then failed server-side
+            // with no route to the next candidate. Getting the affinity levels wrong dead-ends
+            // the same way, which is why the snapshot resolves them; see tickPreflightSnapshot.
             if (blocked.contains(key)) continue;
 
             return rid;
@@ -1576,10 +1578,19 @@ public final class VoiceController {
                 boolean block = false;
                 if (onCd != null) block = (boolean) onCd.invoke(cooldowns, spell);
                 if (!block && pfManaCost != null && mana != Float.MAX_VALUE) {
-                    // The level the spell is actually inscribed at, not a hardcoded 1. Using 1
+                    // The level the spell will actually cast at, not a hardcoded 1. Using 1
                     // under-counts the cost on any upgraded spellbook, so this waved the cast
                     // through, the packet went out, and the server refused it — the player
                     // speaks, nothing happens, and the only feedback is a failure toast.
+                    //
+                    // levelOf carries the affinity curios' levels too, because SpellCaster now
+                    // resolves the cast level through Iron's Spells' own getLevelFor and would
+                    // otherwise be pricing a different spell level than this is. What the client
+                    // still cannot see is a ModifySpellLevelEvent listener: getLevelFor posts
+                    // that event, and posting it here - once per equipped spell, every tick, on
+                    // the client bus - is not something a mana estimate is allowed to do. The
+                    // server's preflight stays the authority and answers with a reason; this is
+                    // only here to keep the two from disagreeing in the case that happens.
                     int cost = ((Number) pfManaCost.invoke(spell, OwnedSpells.levelOf(key)))
                         .intValue();
                     block = cost > mana;

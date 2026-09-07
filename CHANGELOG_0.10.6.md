@@ -65,23 +65,34 @@ for a long one it is almost none of it, and everything past the fourth character
 compared. Genuine near-misses are a character or two apart and still match; a word half the length
 of the spell name no longer does.
 
+**Voice casts were missing the levels your affinity items give you.** Iron's Spells adds spell
+levels for the affinity gear you are wearing — a fire affinity ring casts your Fireball a level
+above the one inscribed on your spellbook — and clicking has always counted them. Speaking did not.
+Fireball inscribed at level 3, with that ring on, went off at 4 when you clicked it and at 3 when
+you said it, so on a default server a spoken cast was quietly *weaker* than the same click: the one
+thing the voice level system is supposed to guarantee never happens. The mod now works the level out
+exactly the way a click does, so your affinity bonus — and any change an addon mod makes to a
+spell's level — counts for a spoken cast too. That level is the floor everything else builds on:
+`voiceLevelBonus` adds on top of it, and the mana you are charged is what the same click would have
+charged, not a point more.
+
 **Voice volume scaling now earns the voice level bonus instead of shrinking your spellbook.**
 `voiceVolumeScaling` used to promise "whisper for level 1, shout for your spellbook's level," and
 in practice every spoken cast came out at level 1 however loudly you said it, because the volume
-was being read after you had already stopped talking. It now means something better. The spell's
-inscribed level — on the spellbook, the imbued item, or the scroll (level 1 under FREE) — is
-always the floor; a voice cast never lands below it. `voiceLevelBonus` (or a player's
-`playerAdvantages` level) is the most a spoken cast can add on top, and with `voiceVolumeScaling`
-on, how much of it you earn depends on how loudly you said the spell: your normal speaking voice
-earns about half, a raised voice all of it, a whisper none. The bonus always lands on a whole
-level, never a fraction of one. Loudness is judged against your own voice, one spoken word at a
-time: run Config → More… → Calibrate mic once — say four or five spell names at your normal
-volume, with a short pause between them — and the mod remembers how loud one word from you sounds.
-It used to compare a single spoken word against the loudest stretch of the whole five-second
-recording, which sits above any ordinary word however evenly you spoke, so normal speech was scored
-as a whisper and most of the bonus could not be earned at all. It now measures the words in the
-recording the same way a cast measures the one you just said. Until you calibrate, a voice cast
-earns the middle of the bonus rather than none of it. The extra levels are still charged at the
+was being read after you had already stopped talking. It now means something better. The level your
+item itself would cast at — the spellbook, the imbued item or the scroll, affinity bonus included
+(level 1 under FREE) — is always the floor; a voice cast never lands below it. `voiceLevelBonus` (or
+a player's `playerAdvantages` level) is the most a spoken cast can add on top, and with
+`voiceVolumeScaling` on, how much of it you earn depends on how loudly you said the spell: your
+normal speaking voice earns about half, a raised voice all of it, a whisper none. The bonus always
+lands on a whole level, never a fraction of one. Loudness is judged against your own voice, one
+spoken word at a time: run Config → More… → Calibrate mic once — say four or five spell names at
+your normal volume, with a short pause between them — and the mod remembers how loud one word from
+you sounds. It used to compare a single spoken word against the loudest stretch of the whole
+five-second recording, which sits above any ordinary word however evenly you spoke, so normal speech
+was scored as a whisper and most of the bonus could not be earned at all. It now measures the words
+in the recording the same way a cast measures the one you just said. Until you calibrate, a voice
+cast earns the middle of the bonus rather than none of it. The extra levels are still charged at the
 spell's ordinary mana cost. A spell repeated with the quick-recast key repeats at the loudness it
 was originally said, and a queued spell fires at the loudness of the words that queued it. With the
 option off, every spoken cast gets the full bonus, as before.
