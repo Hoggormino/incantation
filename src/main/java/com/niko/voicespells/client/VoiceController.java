@@ -254,6 +254,69 @@ public final class VoiceController {
     private static final int CALIB_RING_LEN = 64;
     private static final double[] CALIB_RING = new double[CALIB_RING_LEN];
     private static volatile int calibRingCount = 0;
+    /** Which frame of the calibration window counts as "the room". The screen asks for four or
+     *  five spell names with a pause between them, and the 20th percentile is the room only for
+     *  as long as at least that fifth of the window stays quiet - which real pauses satisfy and
+     *  reading the names straight through does not. At the field-measured 383-930ms per name,
+     *  five names back to back are most of a five-second window, and then the percentile is a
+     *  speech-onset frame rather than the room. {@link #CALIB_GATE_MAX_OF_WORD} and the refusal
+     *  test's peak cap are the fallbacks for that case; this constant cannot detect it. A
+     *  percentile
+     *  rather than the minimum on purpose: the quietest single frame of a window is whatever the
+     *  microphone did in one unusually still 100ms, and building the gate on it puts the gate
+     *  back under the room, which is the failure this whole measurement exists to end. */
+    private static final double CALIB_NOISE_PERCENTILE = 0.20;
+    /** How far above the measured room the noise gate is placed, and how far above it a spoken
+     *  word has to reach before it is believed to be speech. The speech multiplier is set above
+     *  the gate multiplier so a window whose loudest content barely outgrew its quietest is still
+     *  refused. That is not a proof that the room-relative test can fire, and an earlier version
+     *  of this comment claimed it was: the saved gate is only {@code CALIB_GATE_OVER_NOISE *
+     *  noiseFloor} when neither the peak cap, nor the 100 clamp floor, nor the word bound below
+     *  decided it instead, and the clamp floor decides it on every quiet microphone. What keeps
+     *  the test honest there is {@link #CALIB_SPEECH_OVER_GATE}, not this pair. */
+    private static final double CALIB_GATE_OVER_NOISE   = 2.0;
+    private static final double CALIB_SPEECH_OVER_NOISE = 3.0;
+    /** How far above the gate the run walk used a word has to peak before it is believed to be
+     *  speech, alongside the room-relative bar above.
+     *
+     *  <p>The room bar is the one that fires in a noisy room, and it is arithmetically dead in a
+     *  quiet one: every run the walk finds is at or above the walk's own threshold, and that
+     *  threshold has a hard floor of 100, so on a clean microphone with a room floor of 15 the
+     *  room bar asks for a word median under 45 when nothing under 100 can enter the median at
+     *  all. Three keystrokes peaking 130 would then be written to disk as this player's speaking
+     *  voice, every real word would read as three times the reference, and the loudness curve
+     *  would sit pinned at 1.0 until they calibrated again - the mirror image of the bug this
+     *  estimator was rebuilt to fix. The old test measured against the gate for exactly this
+     *  reason; it is kept beside the room test rather than replaced by it.
+     *
+     *  <p>1.75 is chosen against measurements rather than taste: the reported field window (word
+     *  median 185 at a gate of 100) clears it, a keystroke window (150 at 100) does not. */
+    private static final double CALIB_SPEECH_OVER_GATE  = 1.75;
+    /** Ceiling on the noise-derived gate, as a fraction of the loudest frame in the window. The
+     *  percentile stops being "the room" when the player talks straight through the five seconds
+     *  with no pauses - then the 20th percentile is their quietest SPEECH, and doubling it would
+     *  set a gate their ordinary words cannot open. Whatever the room measurement says, the gate
+     *  stays below half of the loudest thing this microphone actually produced. */
+    private static final double CALIB_GATE_MAX_OF_PEAK = 0.5;
+    /** Ceiling on the noise-derived gate, as a fraction of the QUIETEST word the window actually
+     *  contained.
+     *
+     *  <p>The peak cap above is a cap against one frame, and one frame is the thing this file
+     *  distrusts everywhere else - see the CALIB_RING note about the chair creak. A single
+     *  transient inflates {@code calibPeak}, lifts that ceiling out of reach and leaves the gate
+     *  standing at twice a "room" measurement that may itself be speech. A gate above the
+     *  player's own spell names is the worst thing this method can do: {@code loud = rms >=
+     *  cNoiseGateRms} is then false for every frame of every name they say, the sticky gate never
+     *  opens, {@code feed16k} is never reached, Vosk receives no audio whatsoever, and not one
+     *  spell can be cast until the player hand-edits the toml. Silent, total, and reproduced
+     *  exactly by recalibrating in the same room.
+     *
+     *  <p>So the raise is bounded by evidence about words instead: half the smallest word the run
+     *  walk found, which no single transient can move. Half rather than all of it because the
+     *  gate has to open on the quiet leading frames of a word, not merely on its peak - a gate
+     *  just under the peak truncates word onsets, and audio starting mid-word is precisely the
+     *  dropped-first-word failure the fragment rescue in SpellIndex exists to paper over. */
+    private static final double CALIB_GATE_MAX_OF_WORD = 0.5;
     private static volatile double  lastCalibThreshold = -1;
     /** Speaking reference the last calibration wrote, or -1 if it refused to write one (nothing
      *  loud enough was heard). The More screen shows both numbers, so a player can see whether
@@ -342,10 +405,53 @@ public final class VoiceController {
         }
 
         double mean = calibSum / calibCount;
-        // Half the mean works well as a gate floor — it sits between observed silence and
-        // observed speech for typical mics. Clamped to a sensible range so a calibration in
-        // total silence doesn't disable the gate, and a noisy mic doesn't blow past it.
-        double threshold = Math.max(100, Math.min(3000, mean * 0.5));
+
+        // Lift the window out of the ring ONCE, in chronological order, for everything below.
+        // Chronological, not physical order: once the ring has wrapped, slot 0 is no longer the
+        // oldest frame, and walking the array as it is laid out would splice the end of the
+        // window onto its beginning and invent a run across that seam. The run walk further down
+        // used to do this indexing inline; both it and the room measurement need the same frames,
+        // and one copy is cheaper to read than the same modulo written twice.
+        int total = calibRingCount;
+        int seen  = Math.min(total, CALIB_RING_LEN);
+        int start = total > CALIB_RING_LEN ? total % CALIB_RING_LEN : 0;
+        double[] frames = new double[seen];
+        for (int i = 0; i < seen; i++) frames[i] = CALIB_RING[(start + i) % CALIB_RING_LEN];
+
+        // What this player's ROOM sounds like, measured rather than inferred from the mean.
+        //
+        // The mean averages the whole window, speech included, so half of it is not an estimate
+        // of the room at all - it is an estimate of the room plus however much the player talked.
+        // On a quiet microphone it lands BELOW the room: reported from the field with mean=105,
+        // where half the mean is 52, the clamp floor of 100 took over, and the room's own hiss
+        // was already crossing 100 on its own. Everything downstream then failed quietly. Noise
+        // opened the gate, the walk below cut that noise into two- and three-frame "words", those
+        // fake words joined the median and dragged it down to 185 while the player's real speech
+        // in the same window was peaking between 180 and 503, and the refusal test then threw the
+        // whole calibration away as noise. The guard was right about what it saw and the player
+        // could not calibrate at all, which puts the entire loudness curve out of their reach.
+        //
+        // A low percentile of the frames is the room, and it is one of the terms in both decisions
+        // below instead of the mean or the threshold being the only one. Only one of the terms,
+        // though: the percentile is the room only while part of the window is actually quiet, so
+        // neither decision is left resting on it alone.
+        double[] quiet = java.util.Arrays.copyOf(frames, seen);
+        java.util.Arrays.sort(quiet);
+        int floorIdx = (int) Math.floor(CALIB_NOISE_PERCENTILE * (seen - 1));
+        double noiseFloor = quiet[Math.max(0, Math.min(seen - 1, floorIdx))];
+
+        // Half the mean sits between observed silence and observed speech on a mic with healthy
+        // gain, and it is safe by construction - it is half of an average the player's own speech
+        // is inside, so it is below that speech. That makes it the gate the run walk below uses,
+        // and the gate that is saved when the window teaches us nothing better.
+        //
+        // The room measurement may RAISE it, but not here. Deriving the gate from the room and
+        // the single loudest frame and writing it to disk on the spot was a way to save a gate
+        // the player's own voice cannot open, and that failure is worse than the one this
+        // measurement was added to end: it is not a calibration that refuses, it is a mod that
+        // goes permanently and silently deaf. The raise is decided after the walk, against the
+        // words the walk found. See CALIB_GATE_MAX_OF_WORD.
+        double walkGate = Math.max(100, Math.min(3000, mean * 0.5));
 
         // How loudly this player speaks, for the loudness curve the cast volume rides on.
         //
@@ -360,10 +466,20 @@ public final class VoiceController {
         // a voiceLevelBonus of 2 paid +1 at best and usually +0.
         //
         // So walk the window in order and cut it into words: each maximal run of consecutive
-        // frames at or above the freshly computed gate threshold is one thing the player said,
+        // frames at or above the gate threshold is one thing the player said,
         // its PEAK is what a cast reports for a span of speech, and the reference is the median
         // of those word peaks - a median across several words that no single spike can move,
         // which is why calibPeak is still not the answer.
+        //
+        // The threshold this walk uses is the UNRAISED one, on purpose. The walk is the only
+        // evidence this method has about what the player's words measured, and running it at a
+        // gate derived from the room would make that evidence conditional on the very number it
+        // is here to bound. An earlier draft did run it at the raised gate and claimed the raise
+        // was what deleted the two noise runs from the field report's median - but for those
+        // numbers the gate does not move at all (the room has to measure above 50 before twice it
+        // clears the 100 floor), so the claim described something that had not happened. What
+        // rescues that window is the refusal test below; what the walk is for is bounding the
+        // gate.
         //
         // Close to the cast-side estimator rather than identical to it, and the remaining gap is
         // known: the runtime gate is sticky for NOISE_GATE_STICKY_NANOS (450ms) after the last
@@ -374,12 +490,6 @@ public final class VoiceController {
         // of magnitude smaller and in the direction that over-pays rather than the one that paid
         // nothing, so it is written down instead of being called parity.
         double reference = -1;
-        int total = calibRingCount;
-        int seen  = Math.min(total, CALIB_RING_LEN);
-        // Chronological, not physical order. Once the ring has wrapped, slot 0 is no longer the
-        // oldest frame, and walking the array as it is laid out would splice the end of the
-        // window onto its beginning and invent a run across that seam.
-        int start = total > CALIB_RING_LEN ? total % CALIB_RING_LEN : 0;
         double[] runPeaks = new double[seen];
         int runCount = 0, singleFrameRuns = 0;
         double runPeak = 0;
@@ -387,8 +497,8 @@ public final class VoiceController {
         // One extra iteration with a below-threshold sentinel, so a window that ends mid-word
         // still closes its last run instead of discarding it.
         for (int i = 0; i <= seen; i++) {
-            double rms = i < seen ? CALIB_RING[(start + i) % CALIB_RING_LEN] : -1.0;
-            if (rms >= threshold) {
+            double rms = i < seen ? frames[i] : -1.0;
+            if (rms >= walkGate) {
                 runLen++;
                 if (rms > runPeak) runPeak = rms;
             } else if (runLen > 0) {
@@ -406,6 +516,36 @@ public final class VoiceController {
                 runPeak = 0;
             }
         }
+        // Sort the word peaks once. Their median is the voice reference; their smallest is the
+        // evidence the gate is bounded by, just below.
+        double[] sorted = java.util.Arrays.copyOf(runPeaks, runCount);
+        java.util.Arrays.sort(sorted);
+        double median = runCount == 0 ? -1
+            : (runCount % 2 == 1)
+                ? sorted[runCount / 2]
+                : (sorted[runCount / 2 - 1] + sorted[runCount / 2]) * 0.5;
+
+        // Only now, with the words in hand, decide what gate to save.
+        //
+        // The room measurement is allowed to raise the gate off half the mean - that is the point
+        // of measuring it, and on a microphone whose own hiss crosses the 100 floor nothing else
+        // can - but it may never raise it past something this player was actually heard to say.
+        // Both bounds are needed and neither is enough alone: the "room" is speech when the
+        // player never pauses, and calibPeak is a chair scrape. Half the quietest word the walk
+        // found is neither of those things.
+        //
+        // With fewer than three words there is no evidence to raise on, so the gate stays exactly
+        // where the old formula put it. A calibration that learned nothing has to leave the
+        // player no worse off than before they ran it.
+        double threshold = walkGate;
+        if (runCount >= 3) {
+            double roomGate = Math.min(CALIB_GATE_OVER_NOISE * noiseFloor,
+                                       CALIB_GATE_MAX_OF_PEAK * calibPeak);
+            double wordBound = CALIB_GATE_MAX_OF_WORD * sorted[0];
+            threshold = Math.max(walkGate,
+                                 Math.min(Math.min(3000, roomGate), wordBound));
+        }
+
         if (runCount < 3) {
             // runCount is now the number of WORDS - transients never entered it - so this is a
             // plain "did they say enough for a median to mean anything" test. Three is the floor
@@ -426,18 +566,49 @@ public final class VoiceController {
                 + "volume, with a short pause between them.",
                 runCount, singleFrameRuns, seen);
         } else {
-            double[] sorted = java.util.Arrays.copyOf(runPeaks, runCount);
-            java.util.Arrays.sort(sorted);
-            double median = (runCount % 2 == 1)
-                ? sorted[runCount / 2]
-                : (sorted[runCount / 2 - 1] + sorted[runCount / 2]) * 0.5;
-            if (median < 2 * threshold) {
-                // Speech sits well clear of the gate; something hovering just above it is room
-                // noise that happened to qualify, and calibrating to noise would make ordinary
-                // speech a shout.
-                VoiceSpells.LOGGER.warn("Calibration found only noise hovering at the gate "
-                    + "(median {} vs threshold {}); the existing voice reference is kept.",
-                    String.format("%.0f", median), String.format("%.0f", threshold));
+            // Does the speech stand clear of the room, AND of the gate that let it through? Both,
+            // because either question alone is unanswerable in the regime the other one owns.
+            //
+            // Against the gate alone - which is what this test used to ask - the comparison is
+            // with a constant whenever the 100 clamp floor is in play, so on a quiet microphone
+            // it weighed this player's voice against the number 100 and against nothing their
+            // room was doing. That is how a real voice at 185 came to be thrown out as "noise
+            // hovering at the gate", and thrown out identically on every retry, because nothing
+            // about a constant changes when the player leans closer to the mic.
+            //
+            // Against the room alone it is the other way round: runs can only exist at or above
+            // the walk's gate and that gate is never under 100, so with a room floor of 15 the
+            // test asks for a median under 45 and can never fire at all. Three keystrokes would
+            // be saved as this player's speaking voice.
+            //
+            // The room term also gets the same peak cap the gate gets, for the same reason: when
+            // the player reads the names with no pauses the percentile is inside their own
+            // speech, every run peak is at most calibPeak by construction, and an uncapped
+            // 3 * noiseFloor is then a bar arithmetic guarantees they cannot clear however
+            // loudly they speak. Speaking up scales both sides of that ratio together and
+            // automatic gain control actively compresses it back, so the refusal would repeat
+            // forever and the remedy it printed would be the wrong one.
+            double roomBar = Math.min(CALIB_SPEECH_OVER_NOISE * noiseFloor,
+                                      CALIB_GATE_MAX_OF_PEAK * calibPeak);
+            double gateBar = CALIB_SPEECH_OVER_GATE * walkGate;
+            if (median < roomBar || median < gateBar) {
+                // What is left is what this test was built for: a window in which whatever
+                // crossed the gate never grew much louder than the quiet between it, which is a
+                // fan, a fridge or a keyboard rather than a voice. Calibrating to that would make
+                // ordinary speech read as a shout forever after, so the previous reference is
+                // kept, exactly as with the other refusal.
+                //
+                // "typical word loudness", not "loudest words": this is the MEDIAN of the word
+                // peaks. The earlier wording printed 185 for a window whose loudest word peaked
+                // at 503, and the whole purpose of the numbers in this line is to be reasoned
+                // about before recalibrating.
+                VoiceSpells.LOGGER.warn("Calibration could not tell your voice from the room "
+                    + "(typical word loudness {} against a room noise floor of {} and a gate of "
+                    + "{}); the existing voice reference is kept. Speak up or move closer to the "
+                    + "microphone - or raise its input gain - and leave a clear pause between the "
+                    + "names, so there is some quiet in the window to measure the room from.",
+                    String.format("%.0f", median), String.format("%.0f", noiseFloor),
+                    String.format("%.0f", walkGate));
             } else {
                 reference = Math.min(32767.0, median);
             }
@@ -452,14 +623,17 @@ public final class VoiceController {
         } catch (Throwable ignored) {}
         lastCalibThreshold = threshold;
         lastCalibReference = reference;
-        // Mean, peak, threshold, word count and reference on one line on purpose: a reference
-        // that disagrees wildly with the peak is exactly the transient this estimator exists to
-        // survive, and the word count - multi-frame runs only, so coughs are not in it - says
-        // whether the player actually talked for the window. Seeing them together is what makes
-        // either visible in a log.
-        VoiceSpells.LOGGER.info("Noise gate calibrated: mean={}, peak={}, set threshold={}, "
-            + "words={}, voice reference={}",
-            String.format("%.0f", mean), String.format("%.0f", calibPeak),
+        // Mean, noise floor, peak, threshold, word count and reference on one line on purpose: a
+        // reference that disagrees wildly with the peak is exactly the transient this estimator
+        // exists to survive, and the word count - multi-frame runs only, so coughs are not in it
+        // - says whether the player actually talked for the window. The noise floor is here
+        // because it is now the number both decisions are scaled against: without it a refusal,
+        // or a threshold that came out higher than half the mean, reads as arbitrary, and the
+        // player asking "why will it not calibrate" has nothing to point at.
+        VoiceSpells.LOGGER.info("Noise gate calibrated: mean={}, noise floor={}, peak={}, "
+            + "set threshold={}, words={}, voice reference={}",
+            String.format("%.0f", mean), String.format("%.0f", noiseFloor),
+            String.format("%.0f", calibPeak),
             String.format("%.0f", threshold), runCount,
             reference > 0 ? String.format("%.0f", reference) : "unchanged");
     }
@@ -2701,10 +2875,17 @@ public final class VoiceController {
         Optional<ResourceLocation> id;
         char matchTier = ' ';
         // The grammar phrase that MATCHED, which is not the phrase that was heard for any tier
-        // but E. The completeness gate below counts this one's letters: a fuzzy match on
-        // "invisible" is being asked to be "invisibility", and it is the name it resolved to
-        // that has to have been spoken, not the shorter thing the player actually said.
+        // but E. The completeness gate below looks for this one in the recogniser's word list to
+        // find WHERE to measure.
         String matchedPhrase = "";
+        // And the phrase whose letters that gate CHARGES for, which is the same string for every
+        // tier but the fragment rescue: a fuzzy match on "invisible" is being asked to be
+        // "invisibility", and it is the name it resolved to that has to have been spoken, not the
+        // shorter thing the player actually said. The fragment rescue is the one tier that knows
+        // the player did not say the whole name, so it splits the two - it measures the fragment
+        // it heard and is still charged for the name it landed on, or a tail word would buy a
+        // long spell for less audio than the spell's own shortest cast needs.
+        String gatePhrase = "";
         // Loadout lookup runs first: if the phrase matches a configured loadout name we pick
         // the first castable spell from the list (cooldown + mana aware via ClientMagicData),
         // rather than falling through to the generic phrase → single-spell lookup.
@@ -2727,6 +2908,7 @@ public final class VoiceController {
             // gate splits this into words and compares them with the recogniser's.
             matchedPhrase = loadoutPhrase.trim().toLowerCase(java.util.Locale.ROOT)
                 .replaceAll("\\s+", " ");
+            gatePhrase = matchedPhrase;
         } else {
             // Resolution strategy. Finals run the full lookup chain (exact → fuzzy →
             // substring → phonetic). Partials are restricted to EXACT + TRAILING-SUFFIX:
@@ -2761,6 +2943,7 @@ public final class VoiceController {
             if (result.isPresent()) {
                 matchTier     = result.get().tier();
                 matchedPhrase = result.get().phrase();
+                gatePhrase    = result.get().gatePhrase();
             }
         }
 
@@ -2840,7 +3023,7 @@ public final class VoiceController {
         // recogniser tells us where each word started and ended, and a 150 ms cough is
         // not twelve letters of "invisibility".
         int    perLetter = VoiceSpellsConfig.cMinMsPerLetter;
-        int    letters   = letterCount(matchedPhrase);
+        int    letters   = letterCount(gatePhrase);
         long   needMs    = (long) perLetter * letters;
         // Trailing only for a partial that lookupTrailingWithTier matched, because that matcher
         // accepts the spell as the LAST words of the partial — measuring the first occurrence

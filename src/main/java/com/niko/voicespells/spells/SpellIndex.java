@@ -344,7 +344,8 @@ public final class SpellIndex {
      *  <ul>
      *    <li>{@code E} - exact phrase</li>
      *    <li>{@code F} - fuzzy (Levenshtein)</li>
-     *    <li>{@code S} - substring fallback</li>
+     *    <li>{@code S} - substring fallback, either direction: a grammar phrase found
+     *        inside the heard text, or the heard text found as the tail of a grammar phrase</li>
      *    <li>{@code P} - phonetic (Soundex)</li>
      *    <li>{@code L} - loadout pick (set by VoiceController, not by this class)</li>
      *  </ul>
@@ -355,8 +356,20 @@ public final class SpellIndex {
      *  to have been said has to count the letters of the name it landed on, not of the noise it
      *  landed from. Tier {@code L} is assembled by VoiceController, which fills in the spoken
      *  phrase itself.
+     *
+     *  <p>{@code gatePhrase} is what that caller must count LETTERS of, and for every tier but
+     *  the fragment rescue it is the same string as {@code phrase}. The two come apart only in
+     *  {@link #suffixFragmentLookup(String, Map)}, whose premise is that the player did not say
+     *  the rest of the name: there {@code phrase} is the heard fragment, so the span is measured
+     *  over audio that exists, while {@code gatePhrase} stays the grammar phrase, so a tail word
+     *  cannot buy a long name for less audio than the name itself costs. See the comment there.
      */
-    public record LookupResult(ResourceLocation id, char tier, String phrase) {}
+    public record LookupResult(ResourceLocation id, char tier, String phrase, String gatePhrase) {
+        /** Every tier but the fragment rescue measures and charges the same phrase. */
+        public LookupResult(ResourceLocation id, char tier, String phrase) {
+            this(id, tier, phrase, phrase);
+        }
+    }
 
     /** What a private matcher found: the index phrase it matched and the spell that phrase
      *  belongs to. The phrase has to come back out of these helpers because only they know
@@ -378,8 +391,8 @@ public final class SpellIndex {
 
     public record SpellRow(String id, String phrases) {}
 
-    /** Full resolution chain (exact → fuzzy → substring → phonetic), reporting the matching
-     *  tier so callers can surface "why it matched" diagnostics. */
+    /** Full resolution chain (exact → fuzzy → substring → fragment → phonetic), reporting the
+     *  matching tier so callers can surface "why it matched" diagnostics. */
     public static Optional<LookupResult> lookupWithTier(String phrase) {
         if (phrase == null) return Optional.empty();
         String norm = normalize(phrase);
@@ -402,6 +415,19 @@ public final class SpellIndex {
             Optional<Hit> sub = substringLookup(norm, phrases);
             if (sub.isPresent()) {
                 return Optional.of(new LookupResult(sub.get().id(), 'S', sub.get().phrase()));
+            }
+            // Fragment rescue — the mirror image of the substring tier just above, which is why
+            // it shares that tier's config switch and its 'S' letter rather than inventing a new
+            // one: that one finds a grammar phrase inside the heard text, this one finds the
+            // heard text inside a grammar phrase. Same family of match, same knob, one letter.
+            //
+            // The only tier that reports two phrases: the heard FRAGMENT to measure the span
+            // over, and the grammar phrase it resolved to for the letters that span has to pay
+            // for. See LookupResult and suffixFragmentLookup.
+            Optional<Hit> frag = suffixFragmentLookup(norm, phrases);
+            if (frag.isPresent()) {
+                return Optional.of(
+                    new LookupResult(frag.get().id(), 'S', norm, frag.get().phrase()));
             }
         }
         // Phonetic last-resort: per-word Soundex collapse. Useful when Vosk produces a sound-
@@ -556,6 +582,117 @@ public final class SpellIndex {
             return Optional.of(new Hit(bestPhrase, best));
         }
         return Optional.empty();
+    }
+
+    /**
+     * Fragment rescue: resolve heard text that is a whole-word SUFFIX of exactly one grammar
+     * phrase.
+     *
+     * <p>Vosk drops leading words. A player's session produced six dead casts in one sitting
+     * from this alone — "ball" four times and "fall" twice, the tails of the grammar aliases
+     * "fire ball" and "star fall" — and, worse, a seventh where "surge" (the tail of "heat
+     * surge") fell through to the phonetic tier and cast <b>scorch</b>: the two genuinely share
+     * the Soundex code S620 and pass the length check, so that tier worked exactly as designed
+     * and cast the wrong spell. In all seven the right answer was already sitting in the
+     * grammar. Nothing else in the chain could see it, because every other tier asks whether the
+     * heard text contains or resembles a phrase, and a dropped first word leaves text that is
+     * neither.
+     *
+     * <p>Three deliberate restrictions, each one narrowing this to the failure that was actually
+     * observed:
+     * <ul>
+     *   <li><b>Suffix, not any position.</b> The recogniser drops what came first, not what came
+     *       last. A mid-phrase fragment is much weaker evidence and is not accepted.</li>
+     *   <li><b>Word boundaries.</b> The match is against {@code " " + input}, so "all" is not a
+     *       fragment of "fire ball" and "urge" is not a fragment of "heat surge".</li>
+     *   <li><b>Unambiguous or nothing, in BOTH directions.</b> If two different spells have
+     *       phrases containing the fragment as a whole word, this returns empty and the chain
+     *       falls through to phonetic exactly as it does today. "bolt" is the tail of "fire
+     *       bolt", "guiding bolt" and "lightning bolt", so it stays unmatched rather than
+     *       guessing between three spells.
+     *
+     *       <p>Counting only the tails was not enough, and the hole was not hypothetical. Built
+     *       against the real grammar - 115 enabled Iron's Spells spells plus the ALIASES map,
+     *       132 phrases - there are 56 one-word suffixes that are unique among tails, and three
+     *       of them are also the LEADING word of some other spell: "ball" is the tail of "fire
+     *       ball" but the head of "ball lightning"; "fire" the tail of "wall of fire" but the
+     *       head of "fire ball", "fire bolt", "fire breath" and "fire arrow"; "frost" the tail of
+     *       "ray of frost" but the head of "frost bite", "frost wave" and "frost step". This rule
+     *       was written for a recogniser that drops the first word - but the same decoder drops
+     *       the last word too, which is exactly how a bare "ball" arrives in the first place, and
+     *       in that direction a tails-only scan sees nothing. Each of those three was a silent
+     *       miss before this tier existed and would have become a cast of the wrong spell. They
+     *       stay unmatched; "surge", "skin", "stop", "bite", "wave" and the other fifty-odd
+     *       genuinely unique tails still resolve.</li>
+     * </ul>
+     *
+     * <p>Ambiguity is counted in SPELLS, not in phrases. Several spells here own more than one
+     * spelling of the same name — "abyssal shroud" also answers to "abyss shroud" and "abysmal
+     * shroud" — so a phrase-count rule would refuse "shroud" for being three-way ambiguous when
+     * all three routes lead to one spell and there is nothing to be ambiguous about. What has to
+     * be unique is the answer, not the number of ways of writing the question. ("tentacles" is
+     * not an example of this: sculk_tentacles and void_tentacles are two different spells, and
+     * the id rule refuses it too — correctly.)
+     *
+     * <p>The three-letter floor is only there so a stray monosyllable cannot reach this tier;
+     * every real trailing word in the grammar is longer than that, so it costs nothing.
+     *
+     * <p>An exact match still wins: this runs after exact and fuzzy have both missed.
+     *
+     * <p><b>The caller reports the heard fragment as the matched phrase, and the grammar phrase
+     * it resolved to alongside it.</b> Both, because VoiceController's spoken-duration gate needs
+     * them for different halves of the same question: the fragment is where in the audio to
+     * measure - the player did not say the rest of the name, so hunting for the whole name in the
+     * word list would measure the wrong span or nothing at all - while the resolved phrase is how
+     * much audio the answer costs.
+     *
+     * <p>Reporting the fragment for both was a hole in that gate rather than a lower bar for this
+     * tier. The gate exists because the grammar can only answer with spell names, so stray audio
+     * gets force-fit onto the longest name it can absorb; charging the fragment's letters instead
+     * of the name's meant "wall of fire" could be bought with 100ms of audio through "fire",
+     * "pocket dimension" with 225ms through "dimension", and the floor for the whole grammar fell
+     * to three letters — below one 100ms capture chunk, where the shortest complete phrase costs
+     * four. That is the Invisibility force-fit the gate was built to stop, re-opened through a
+     * side door.
+     */
+    private static Optional<Hit> suffixFragmentLookup(String input,
+            Map<String, ResourceLocation> phrases) {
+        if (input == null || input.length() < 3) return Optional.empty();
+        // Leading space is the word boundary, and it also guarantees the phrase is strictly
+        // longer than the fragment — an equal-length "suffix" is an exact match, and tier E
+        // already returned it long before this runs.
+        String tailNeedle  = " " + input;
+        // Padding both sides of both strings makes one contains() answer "does this phrase use
+        // the fragment as a whole word ANYWHERE", head and middle included. A phrase ending in
+        // the fragment satisfies it too, so this is the superset the ambiguity check needs and
+        // the endsWith below is what picks the one answer out of it.
+        String wholeNeedle = " " + input + " ";
+        ResourceLocation found = null;      // the tail match this would resolve to
+        String foundPhrase = null;
+        ResourceLocation owner = null;      // any spell using the fragment as a whole word
+        for (Map.Entry<String, ResourceLocation> e : phrases.entrySet()) {
+            String key = e.getKey();
+            if (!(" " + key + " ").contains(wholeNeedle)) continue;
+            if (owner == null) {
+                owner = e.getValue();
+            } else if (!owner.equals(e.getValue())) {
+                VoiceSpells.LOGGER.debug(
+                    "Fragment \"{}\" is a whole word in phrases of more than one spell "
+                    + "({} and {}) - no match", input, owner, e.getValue());
+                return Optional.empty();
+            }
+            if (key.endsWith(tailNeedle) && found == null) {
+                found = e.getValue();
+                foundPhrase = key;
+            }
+        }
+        // Whole-word but never a tail: the fragment is somebody's first or middle word and the
+        // player did not lose a leading word, they lost a trailing one. That is not evidence
+        // this tier is willing to act on.
+        if (found == null) return Optional.empty();
+        VoiceSpells.LOGGER.debug("Fragment match \"{}\" -> {} (tail of \"{}\")",
+            input, found, foundPhrase);
+        return Optional.of(new Hit(foundPhrase, found));
     }
 
     /**
