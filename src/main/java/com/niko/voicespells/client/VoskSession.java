@@ -24,7 +24,12 @@ import java.util.Locale;
  *
  * Two emission paths:
  *   - <b>partial</b> (mid-utterance, every frame): no confidence available from
- *     Vosk, so the consumer treats these strictly (exact phrase only).
+ *     Vosk (a flat 1.0), so the consumer only accepts an exact match or the spell
+ *     name as the trailing words of the partial — never the fuzzy/substring/phonetic
+ *     fallbacks a final gets — and still holds the result to the same speak-duration
+ *     floor as a final. A spell listed in {@code perSpellMinConfidence} gets no
+ *     partial vote at all and is held until its final, because the flat confidence
+ *     would otherwise walk straight past the threshold that spell exists to enforce.
  *   - <b>final</b> (utterance boundary / flush): word confidences are available
  *     because we enable {@code setWords(true)}; the consumer can run the lenient
  *     fuzzy/substring fallbacks but gate them behind an average-confidence floor.

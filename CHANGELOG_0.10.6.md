@@ -74,12 +74,17 @@ always the floor; a voice cast never lands below it. `voiceLevelBonus` (or a pla
 `playerAdvantages` level) is the most a spoken cast can add on top, and with `voiceVolumeScaling`
 on, how much of it you earn depends on how loudly you said the spell: your normal speaking voice
 earns about half, a raised voice all of it, a whisper none. The bonus always lands on a whole
-level, never a fraction of one. Loudness is judged against your own voice: run
-Config → More… → Calibrate mic once, speaking at your normal volume, and the mod remembers how
-loud that is; until you do, it assumes a typical microphone. The extra levels are still charged at
-the spell's ordinary mana cost. A spell repeated with the quick-recast key repeats at the loudness
-it was originally said, and a queued spell fires at the loudness of the words that queued it. With
-the option off, every spoken cast gets the full bonus, as before.
+level, never a fraction of one. Loudness is judged against your own voice, one spoken word at a
+time: run Config → More… → Calibrate mic once — say four or five spell names at your normal
+volume, with a short pause between them — and the mod remembers how loud one word from you sounds.
+It used to compare a single spoken word against the loudest stretch of the whole five-second
+recording, which sits above any ordinary word however evenly you spoke, so normal speech was scored
+as a whisper and most of the bonus could not be earned at all. It now measures the words in the
+recording the same way a cast measures the one you just said. Until you calibrate, a voice cast
+earns the middle of the bonus rather than none of it. The extra levels are still charged at the
+spell's ordinary mana cost. A spell repeated with the quick-recast key repeats at the loudness it
+was originally said, and a queued spell fires at the loudness of the words that queued it. With the
+option off, every spoken cast gets the full bonus, as before.
 
 ---
 

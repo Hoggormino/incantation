@@ -126,8 +126,12 @@ public final class ConfigMoreScreen extends Screen {
                 if (!VoiceController.isCalibrating()) {
                     VoiceController.startNoiseGateCalibration();
                     // C_WARN, which means "in progress" - this used to use the theme accent,
-                    // back when there was one.
-                    flashStatus(Component.translatable("voicespells.more.calibrating"), Theme.C_WARN);
+                    // back when there was one. Fitted, because the line now has to say three
+                    // things - how many names, at what volume, with gaps between them - inside a
+                    // 310px panel, and a translation of it will be longer than the English. An
+                    // ellipsis is a bad outcome; text running off the panel is a worse one.
+                    flashStatus(Theme.fit(font, Component.translatable(
+                        "voicespells.more.calibrating").getString(), panelW), Theme.C_WARN);
                 }
             });
         grid.add(calibBtn);
@@ -373,9 +377,13 @@ public final class ConfigMoreScreen extends Screen {
             // profile importable instead of failing on its first line.
             case "themePreset", "uiPalette": return true;
             case "noiseGateRms":      c.noiseGateRms.set(Double.parseDouble(val.trim())); return true;
-            // Clamped to the config's own range: a pasted profile is text a human can edit, and
-            // defineInRange throws on an out-of-range set, which would abort the import halfway
-            // through and leave the screen half-applied.
+            // Clamped to the config's own range ourselves, because ConfigValue.set() will not do
+            // it for us: it writes straight into the backing config map and the cache with no
+            // range check at all, not even a log line, let alone a throw. A pasted profile is
+            // text a human can edit, and an out-of-range value from one would take effect this
+            // session immediately - the mod would just start behaving badly with nothing to say
+            // why. The clamp is there to keep a bad paste from silently doing that, not to dodge
+            // an abort that set() was never going to raise.
             case "speechPeakRms":     c.speechPeakRms.set(Math.max(0.0, Math.min(32767.0, Double.parseDouble(val.trim())))); return true;
             case "handsFreeConfirm":  c.handsFreeConfirm.set(Boolean.parseBoolean(val)); return true;
             case "alwaysShowHeard":   c.alwaysShowHeard.set(Boolean.parseBoolean(val)); return true;
@@ -453,6 +461,15 @@ public final class ConfigMoreScreen extends Screen {
         boolean calibratingNow = VoiceController.isCalibrating();
         if (wasCalibrating && !calibratingNow) {
             calibResultUntil = System.currentTimeMillis() + 4000L;
+            // A refused voice reference gets its own line on the status row, because the button
+            // cannot carry one. "Gate N · voice kept" is true and tells the player nothing about
+            // what to do differently, and the reason a calibration refuses - it heard fewer than
+            // three whole words - lives only in a log they will never open. Said here in the
+            // terms the test actually checks: separate names, with gaps between them.
+            if (VoiceController.lastCalibReference() <= 0) {
+                flashStatus(Theme.fit(font, Component.translatable(
+                    "voicespells.more.calib_no_voice").getString(), panelW), Theme.C_WARN);
+            }
         }
         wasCalibrating = calibratingNow;
         if (calibBtn != null) {

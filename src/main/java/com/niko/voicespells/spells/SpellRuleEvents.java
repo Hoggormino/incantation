@@ -195,13 +195,37 @@ public final class SpellRuleEvents {
             // ten-second window found it unclaimed and went through.
             if (SpellRules.claimOwnCast(p, spellId)) return;
 
-            // Only a cast the PLAYER initiated can be required to have been spoken. A command
-            // block, a datapack function or /cast produces a SpellPreCastEvent whose entity is
-            // the targeted player, and cancelling those makes map mechanics stop working for
-            // exactly the players who use voice - the ones the rule has switched on for. Compared
-            // by name so the CastSource class is never imported; an unrecognised source is left
-            // alone rather than blocked.
+            // Compared by name so the CastSource class is never imported; an unrecognised source
+            // is left alone rather than blocked.
             String source = String.valueOf(call(e, "getCastSource"));
+
+            // A cast the player themselves began, and that is NOT the stamped one claiming its
+            // own authorisation, means the spoken cast is over - so its mana discount goes with
+            // it.
+            //
+            // Iron's Spells refuses to begin a second cast while one is in flight -
+            // attemptInitiateCast cancels the cast in progress and returns before it ever posts
+            // this event - so an event for a cast this player STARTED proves the stamped cast has
+            // resolved or been cancelled. The cancel path posts no SpellOnCastEvent, so nothing
+            // used to take the discount back: an interrupted voice cast left it on the stamp for
+            // the rest of the ten seconds and the next clicked cast of that spell was charged as
+            // though it had been spoken.
+            //
+            // COMMAND is excluded because that proof does not hold for it. A command block, a
+            // datapack function or /cast posts a pre-cast event whose entity is the TARGETED
+            // player, who began nothing and may well be mid-way through a long spoken cast - and
+            // revoking there charges them the boosted price for a cast they legitimately spoke,
+            // the exact overcharge the discount exists to prevent. The mod's own FREE-mode cast
+            // is a COMMAND cast too, but it never reaches this line: it is claimed above, and a
+            // fresh spoken cast rewrites the whole stamp anyway.
+            //
+            // Still above the source filter below, which returns for every source it does not
+            // recognise: an unfamiliar player-initiated source should still end the discount.
+            if (!source.equals("COMMAND")) SpellRules.revokeManaDiscount(p);
+
+            // Only a cast the PLAYER initiated can be required to have been spoken. Cancelling a
+            // command block's or a datapack's cast makes map mechanics stop working for exactly
+            // the players who use voice - the ones the rule has switched on for.
             if (!source.equals("SPELLBOOK") && !source.equals("SCROLL") && !source.equals("SWORD")) return;
             if (!SpellRules.blockClickedCast(p, spellId)) return;
             e.getClass().getMethod("setCanceled", boolean.class).invoke(e, true);

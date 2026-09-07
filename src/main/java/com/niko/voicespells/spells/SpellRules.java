@@ -61,7 +61,9 @@ public final class SpellRules {
      *
      * @param precastUsed  the pre-cast gate has let its one cast through
      * @param manaDiscount what the level bonus added to this cast's price, to be taken off again
-     *                     when Iron's Spells charges for it; zeroed once applied
+     *                     when Iron's Spells charges for it; zeroed once applied, and also once
+     *                     the cast it belongs to has plainly ended - see
+     *                     {@link #revokeManaDiscount}
      * @param cooldownUsed the cooldown scaling has been applied
      */
     private record Pending(String spellId, long atNanos, boolean precastUsed,
@@ -397,6 +399,42 @@ public final class SpellRules {
      */
     public static boolean claimOwnCast(Player player, String spellId) {
         return player != null && claimPrecast(player.getUUID(), spellId);
+    }
+
+    /**
+     * Take the mana discount back off the stamp, because the cast it was issued for is over.
+     *
+     * <p>Called from the pre-cast hook for every cast a player BEGINS that is not the stamped one
+     * claiming its own authorisation. Iron's Spells will not start a second cast while one is in
+     * flight - {@code attemptInitiateCast} cancels the cast in progress and returns BEFORE it posts
+     * the pre-cast event, checked in the bytecode of both jars rather than assumed - so such an
+     * event is proof that the spoken cast has already resolved or been cancelled. Either way the
+     * discount is spent or dead, and the next cast is charged in full.
+     *
+     * <p>The caller excludes {@code CastSource.COMMAND} for exactly that reason: a command block,
+     * a datapack function or {@code /cast} names the TARGETED player as the entity, so the event
+     * says nothing about a cast that player started and may well arrive while their spoken one is
+     * still in the air.
+     *
+     * <p>This is the half {@link #discountedManaCost} could not cover. Consuming the discount there
+     * stops it being used TWICE; nothing stopped the FIRST use landing on the wrong cast. A voice
+     * cast that starts and is then interrupted - the player moves, is hit, swaps item - goes down
+     * Iron's own cancel path, which posts no {@code SpellOnCastEvent}, so the stamp kept its
+     * discount for the rest of its ten seconds and an ordinary right-click of the same spell
+     * collected an offset it had not earned. The discount exists only to pay back a level bonus
+     * that a spoken cast receives and a clicked one does not.
+     *
+     * <p>Only the discount is dropped, not the entry. The cooldown entitlement has to outlive this:
+     * a recast spell applies no cooldown until its recasts are used up, and every recast is
+     * initiated the same way any other cast is, so clearing the whole stamp here would quietly take
+     * the cooldown scaling away from exactly those spells.
+     */
+    public static void revokeManaDiscount(Player player) {
+        if (player == null) return;
+        UUID id = player.getUUID();
+        Pending p = pending.get(id);
+        if (p == null || p.manaDiscount() <= 0) return;
+        pending.put(id, new Pending(p.spellId(), p.atNanos(), p.precastUsed(), 0, p.cooldownUsed()));
     }
 
     public static boolean blockClickedCast(Player player, String spellId) {

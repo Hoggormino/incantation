@@ -162,7 +162,9 @@ public final class VoiceSpellsConfig {
         public final ForgeConfigSpec.BooleanValue alwaysShowHeard;
         public final ForgeConfigSpec.BooleanValue handsFreeConfirm;
         public final ForgeConfigSpec.DoubleValue  noiseGateRms;
-        /** How loudly this player normally speaks, learned by "Calibrate mic"; 0 = never run. */
+        /** How loudly this player normally speaks, learned by "Calibrate mic" as the median peak
+         *  of the words heard during the window; 0 = never run, in which case the loudness curve
+         *  returns a neutral middle value instead of guessing a level. */
         public final ForgeConfigSpec.DoubleValue  speechPeakRms;
         /** When the mic is allowed to feed the recognizer. */
         public final ForgeConfigSpec.EnumValue<GatingMode> gatingMode;
@@ -347,17 +349,24 @@ public final class VoiceSpellsConfig {
                       "Raise this if you see phantom casts on background noise; lower if",
                       "soft speech is being missed. Set to 0 to disable the gate entirely.");
             noiseGateRms = b.defineInRange("noiseGateRms", 350.0, 0.0, 6000.0);
-            b.comment("How loud you normally speak: the level heard during the last 'Calibrate mic'",
-                      "run, as a microphone frame RMS. Voice casts are judged against it when the",
-                      "server has voiceVolumeScaling on - speaking at this level earns about half",
-                      "the voice level bonus, a quarter of it (a whisper) none of it, and 1.5x",
-                      "(a raised voice) all of it.",
+            b.comment("How loud you normally speak: the level 'Calibrate mic' heard the last time",
+                      "you ran it, as a microphone frame RMS. Calibration cuts its five seconds",
+                      "into the words you actually said - each run of loud frames is one word -",
+                      "takes the loudest frame of each, and stores the median of those. A cast is",
+                      "measured the same way, as the loudest frame of what you just said, which is",
+                      "what makes the comparison mean anything.",
+                      "Voice casts are judged against it when the server has voiceVolumeScaling",
+                      "on - speaking at this level earns about half the voice level bonus, a",
+                      "quarter of it (a whisper) none of it, and 1.5x (a raised voice) all of it.",
                       "Measured relative to your own voice on purpose: the same raised voice is a",
                       "different RMS on every microphone and at every gain setting.",
                       "The bonus itself is whole levels, so with voiceLevelBonus = 1 there is no",
                       "gradient to hear - your normal speaking voice already earns it, and only",
                       "dropping clearly below it (a whisper) loses it.",
-                      "0 = never calibrated, in which case a typical microphone (3000) is assumed.",
+                      "0 = never calibrated. Nothing is assumed in that case: every cast is scored",
+                      "as a normal speaking voice, so you earn the middle of the bonus rather than",
+                      "none of it. A guessed level used to be assumed here, and on a microphone",
+                      "quieter than the guess it silently scored every cast at zero.",
                       "Set by Config -> More... -> Calibrate mic; there is no reason to type a",
                       "number here by hand.");
             speechPeakRms = b.defineInRange("speechPeakRms", 0.0, 0.0, 32767.0);

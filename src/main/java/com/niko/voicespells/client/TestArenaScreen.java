@@ -239,6 +239,20 @@ public final class TestArenaScreen extends Screen {
                         outcome = "→ " + name + "  "
                             + Component.translatable("voicespells.arena.cast_marker").getString();
                         color = Theme.F_MATCH;
+                    } else if (VoiceController.TAG_AWAIT_FINAL.equals(e.tag())) {
+                        // Not a verdict - the phrase is still waiting on its final before
+                        // perSpellMinConfidence judges it, and might cast a moment from now.
+                        // The generic suppressed amber said "dead end" about a row that is
+                        // still open.
+                        outcome = "… " + name + "  " + reason;
+                        color = Theme.C_WARN;
+                    } else if (VoiceController.TAG_TOO_SHORT.equals(e.tag())) {
+                        // The recogniser force-fit this name onto audio too brief to be it -
+                        // the same "closest name wins" failure TAG_LOW_CONF flags above, just
+                        // caught by duration instead of confidence. It earns the same doubt,
+                        // not the shrug the routine holds ("(queued)", "(afk)") get.
+                        outcome = "· " + name + "  " + reason;
+                        color = Theme.F_NOMATCH;
                     } else {
                         // Suppressed: shown, but never in the colour that means "this fired".
                         outcome = "· " + name + "  " + reason;

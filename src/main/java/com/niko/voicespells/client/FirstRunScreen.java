@@ -42,9 +42,16 @@ public final class FirstRunScreen extends Screen {
      *  brighten the Next button on the mic-check step so the player has a clear "I demonstrated
      *  the meter, I'm ready" signal. */
     private boolean micDetectedThisVisit = false;
-    /** Nanotime when the screen opened, so we can detect "a cast happened while this screen
-     *  was up" and auto-advance step 3. */
+    /** Nanotime when the screen opened. Drives the mic-check timeout on step 1. */
     private final long openedAtNanos = System.nanoTime();
+    /** Nanotime when the CURRENT step was entered.
+     *
+     *  <p>Step 3's auto-advance has to measure from here, not from {@link #openedAtNanos}. Step 2
+     *  asks the player to talk into their microphone, and under a closed grammar almost anything
+     *  they say resolves to some spell phrase, so a screen-lifetime window is already satisfied
+     *  before step 3 is ever drawn - the step would finish on its first frame and the player would
+     *  never see the one instruction that makes the mod work. */
+    private long stepEnteredNanos = System.nanoTime();
 
     private NeonButton nextBtn;
 
@@ -92,7 +99,7 @@ public final class FirstRunScreen extends Screen {
         if (step > 0) {
             addRenderableWidget(NeonButton.of(backX, btnY, btnW, 20,
                 Component.translatable("voicespells.wizard.back"),
-                b -> { step--; rebuildWidgets(); }));
+                b -> { step--; stepEnteredNanos = System.nanoTime(); rebuildWidgets(); }));
         }
         if (step < STEPS - 1) {
             addRenderableWidget(NeonButton.of(midX, btnY, btnW, 20,
@@ -131,7 +138,7 @@ public final class FirstRunScreen extends Screen {
         nextBtn = NeonButton.of(nextX, btnY, btnW, 20,
             nextLabel, b -> {
                 if (step == STEPS - 1) finish();
-                else { step++; rebuildWidgets(); }
+                else { step++; stepEnteredNanos = System.nanoTime(); rebuildWidgets(); }
             });
         // On the mic-check step, gate Next behind actually seeing audio - but not forever.
         //
@@ -183,6 +190,22 @@ public final class FirstRunScreen extends Screen {
         super.removed();
     }
 
+    /** Whether the recogniser has resolved a spell name since the current step was entered. Any outcome
+     *  counts, including the "(menu)" rejection this screen causes - what is being proven is that
+     *  the words reached the recogniser and matched, not that a spell went off. */
+    private boolean heardASpellSinceOpening() {
+        try {
+            for (VoiceController.RecognitionEvent e : VoiceController.recentEvents()) {
+                if (e.nanoTime() > stepEnteredNanos && e.matched() != null && !e.matched().isEmpty()) {
+                    return true;
+                }
+            }
+        } catch (Throwable ignored) {
+            // A wizard step must never be the thing that throws on the render thread.
+        }
+        return false;
+    }
+
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         // Latch mic-detected if we ever see audio during this screen's lifetime. Threshold
@@ -198,10 +221,16 @@ public final class FirstRunScreen extends Screen {
                 && System.nanoTime() - openedAtNanos >= 12_000_000_000L) {
             nextBtn.active = true;
         }
-        // Step 3 auto-advance: if the player actually casts something while this screen is up,
-        // they've passed "try a spell" — finish the wizard for them.
-        if (step == STEPS - 1
-                && VoiceController.lastCastNanos() > openedAtNanos) {
+        // Step 3 auto-advance: the recogniser HEARING a spell name, not a cast.
+        //
+        // A cast cannot happen while this screen is up - the wizard is a screen, and the menu gate
+        // rejects every match with "(menu)" before it dispatches. So waiting on lastCastNanos()
+        // was waiting for the one thing the wizard itself prevents: the step could never finish on
+        // its own, and its text promised a cast that the open screen was busy blocking. What does
+        // still happen with a screen open is recognition, and a resolved spell name is the thing
+        // this step actually asks the player to prove - their microphone works and the grammar
+        // knows what they said.
+        if (step == STEPS - 1 && heardASpellSinceOpening()) {
             finish();
             return;
         }
@@ -350,11 +379,20 @@ public final class FirstRunScreen extends Screen {
                     // split as the Live Monitor and the Test Arena.
                     String raw = e.matched();
                     int sp = raw == null ? -1 : raw.indexOf(' ');
-                    int color = raw == null ? Theme.F_NOMATCH : sp > 0 ? Theme.F_DEDUP : Theme.F_MATCH;
+                    // A row held for its final answer is not a rejection: perSpellMinConfidence
+                    // is still deciding and it may cast a moment later. Drawn suppressed, it
+                    // would be the entire story a new player is told about a spell that then
+                    // worked - on the one step whose Next button waits for them to see casting
+                    // work. Same amber and ellipsis the Live Monitor and the Test Arena give it.
+                    boolean awaiting = sp > 0 && VoiceController.TAG_AWAIT_FINAL.equals(e.tag());
+                    int color = raw == null ? Theme.F_NOMATCH
+                        : awaiting ? Theme.C_WARN
+                        : sp > 0 ? Theme.F_DEDUP : Theme.F_MATCH;
                     String outcome = raw == null
                         ? "— " + Component.translatable("voicespells.wizard.no_match").getString()
                         : sp > 0
-                            ? "· " + shortId(raw.substring(0, sp)) + " " + raw.substring(sp + 1)
+                            ? (awaiting ? "… " : "· ")
+                                + shortId(raw.substring(0, sp)) + " " + raw.substring(sp + 1)
                             : "→ " + shortId(raw);
                     String text = String.format(java.util.Locale.ROOT, "%2ds  \"%s\"  %s",
                         ageSec, e.heard(), outcome);

@@ -12,8 +12,11 @@ training, and the speech model installs itself on first launch.
 
 Incantation opens your microphone itself — no voice-chat mod involved — and feeds the audio
 straight to a Vosk recognizer whose grammar is built from the spell names your installed mods
-actually register. Anything that isn't a spell name resolves to "unknown" rather than snapping to
-the nearest spell, so background noise doesn't fire anything.
+actually register. A closed grammar's only way to say no is its `[unk]` token, and it will often
+prefer the least-bad spell name over it - so 0.10.6 adds the defences that make that safe: a match
+has to have been *spoken* long enough to plausibly be that phrase, and any spell you list in
+`perSpellMinConfidence` waits for the complete utterance and its own confidence bar before it
+will fire.
 
 Casting is then gated on what you actually have equipped: a spellbook in your Curios slot, an
 imbued weapon you're holding, or imbued armor you're wearing. Saying the name of a spell you don't

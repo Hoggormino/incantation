@@ -108,9 +108,12 @@ public final class LiveMonitorScreen extends Screen {
             long ageSec = TimeUnit.NANOSECONDS.toSeconds(now - e.nanoTime());
             int color;
             String outcome;
-            // No dedup row: the controller drops a repeated phrase before recordEvent, so there
-            // is nothing to draw for it. A branch that matched a "(deduped)" suffix lived here
-            // for a long time after the last thing that produced it was removed.
+            // The dedup row IS drawn now. Until 0.10.6 the controller dropped a suppressed
+            // repeat before recordEvent and there was nothing here to draw - a branch matching a
+            // dead "(deduped)" suffix outlived the thing that produced it by a long way. A
+            // suppressed repeat now records one "(repeat too soon)" row per utterance, and it
+            // arrives as an id plus a reason, so it draws in the suppressed colour like every
+            // other rejection and needs no branch of its own.
             if (e.matched() == null) {
                 color = Theme.F_NOMATCH;
                 outcome = Component.translatable("voicespells.monitor.no_match").getString();
@@ -121,8 +124,24 @@ public final class LiveMonitorScreen extends Screen {
                 String raw = e.matched();
                 int sp = raw.indexOf(' ');
                 if (sp > 0) {
-                    color = Theme.F_DEDUP;
-                    outcome = "· " + shortId(raw.substring(0, sp)) + " " + raw.substring(sp + 1);
+                    String id = raw.substring(0, sp);
+                    String reason = raw.substring(sp + 1);
+                    if (VoiceController.TAG_AWAIT_FINAL.equals(e.tag())) {
+                        // Held, not rejected - perSpellMinConfidence is waiting on the final,
+                        // and the row may still turn into a cast. The generic suppressed amber
+                        // said "dead end" about something still open.
+                        color = Theme.C_WARN;
+                        outcome = "… " + shortId(id) + " " + reason;
+                    } else if (VoiceController.TAG_TOO_SHORT.equals(e.tag())) {
+                        // Same force-fit doubt a low-conf rejection carries, just caught by
+                        // duration instead of confidence - it deserves that doubt, not the
+                        // shrug routine holds like "(queued)" get.
+                        color = Theme.F_NOMATCH;
+                        outcome = "· " + shortId(id) + " " + reason;
+                    } else {
+                        color = Theme.F_DEDUP;
+                        outcome = "· " + shortId(id) + " " + reason;
+                    }
                 } else {
                     color = Theme.F_MATCH;
                     outcome = "→ " + shortId(raw) + " "
