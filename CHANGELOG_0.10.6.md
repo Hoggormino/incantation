@@ -56,6 +56,26 @@ and it waits for you to stop, so say a listed spell on its own rather than in th
 sentence. Everything not listed still casts the instant it is recognised. Reported against
 Invisibility — thank you.
 
+**The recogniser drops the first word, and the mod now recognises what is left.** Say "fireball"
+and the speech engine sometimes reports only `ball`; "star fall" comes back as `fall`, "heat surge"
+as `surge`. Those casts simply did not happen — the mod looked for a spell called "ball", found
+none, and said nothing. Worse, `surge` was close enough in sound to Scorch that it cast Scorch
+instead, and `hole` had been quietly reaching Heal the same way for as long as both have existed.
+
+The answer was always sitting in the list of phrases the recogniser was told to listen for. If what
+it heard is the end of exactly one of those phrases, that is the spell you meant, and it now casts.
+Only the end of a phrase, and only when exactly one matches: `bolt` still does nothing, because
+Fire Bolt, Guiding Bolt and Lightning Bolt all end that way and guessing between them would be
+worse than asking you to say it again.
+
+**Calibrating your voice works on a quiet microphone.** The microphone check set its noise gate
+from an average that included your own speech, which estimates the room badly — and on a quiet
+setup it landed *below* the room's own hum. Room noise then crossed the gate, got counted as
+words, and dragged the measurement down until the check refused its own result every single time.
+The player it happened to could never finish calibrating, so the whole whisper-to-shout range was
+out of reach for them. It now measures the room first and judges both the gate and the result
+against that, and it will not raise the gate past the words it just heard you say.
+
 **Sound-alike matching now requires the two words to be about the same length.** Found while
 chasing that report, and not its cause — across every Iron's Spells phrase nothing shares
 Invisibility's sound-alike code, so that path could not have produced it — but a real weakness on
