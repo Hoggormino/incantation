@@ -1171,6 +1171,7 @@ public final class VoiceController {
 
     /** Kick off model loading off the main thread. Safe to call multiple times. */
     public static void preloadAsync() {
+        if (shutdownDone.get()) return; // never reload the model after shutdown() closed it
         if (session != null) return;
         if (System.nanoTime() < nextLoadAttemptNanos) return;
         if (!loading.compareAndSet(false, true)) return;
@@ -2339,13 +2340,97 @@ public final class VoiceController {
         else                                 VoiceSpells.LOGGER.debug(fmt, args);
     }
 
-    /** Closes the underlying session — call on client shutdown. */
+    /**
+     * Latched by {@link #shutdown()}. Nothing may reopen the microphone or reload the model once
+     * the game has started tearing itself down.
+     *
+     * <p>This is not paranoia. {@code GameShuttingDownEvent} is posted from
+     * {@code Minecraft.stop()}, which runs at the <i>top</i> of a frame; the rest of that frame
+     * still renders and still ticks, so our own {@code ClientTickEvent.Post} listener runs after
+     * shutdown() has already closed the device and would sail straight into
+     * {@code tickCaptureSuspension()}'s {@code if (capture == null) syncCapture()} and open a
+     * fresh capture device — one frame before Minecraft destroys the sound engine, which is
+     * exactly the state this whole fix exists to avoid. The latch is checked in the one method
+     * that opens anything, so normal play is untouched: it is false for the entire session.
+     */
+    private static final AtomicBoolean shutdownDone = new AtomicBoolean(false);
+
+    /** True once {@link #shutdown()} has run; capture may never be reopened after that. */
+    public static boolean isShuttingDown() { return shutdownDone.get(); }
+
+    /**
+     * Held only across the two places that swap the {@code session} field: the loader thread
+     * publishing a freshly opened one, and {@link #shutdown()} taking it away.
+     *
+     * <p>The latch alone is not enough for the model load, because {@link #preloadAsync()} can
+     * only refuse to <i>start</i> one. A load takes seconds — longer if the model is still
+     * downloading — and it is kicked off on the title screen, which is exactly where somebody
+     * quits. Without this, the loader could test the latch, lose the thread to shutdown, and then
+     * publish a live native model into a client that has already closed everything it knew about;
+     * nothing would ever close that one. Under the lock the two orders are the only two possible:
+     * the loader publishes first and shutdown closes what it finds, or shutdown gets there first
+     * and the loader closes its own. Neither closes anything twice.
+     *
+     * <p>A private lock, and no native close performed while holding it: {@code VoskSession}'s
+     * own methods are synchronized on the session, and a flush can be mid-call.
+     */
+    private static final Object SESSION_LOCK = new Object();
+
+    /**
+     * Release the microphone and the speech engine. Called from {@code ClientEvents}' listener on
+     * {@code GameShuttingDownEvent}, i.e. from inside {@code Minecraft.stop()} on the client
+     * thread, while the game is still fully alive.
+     *
+     * <p>Timing is the whole point. This used to be wired as a JVM shutdown hook, which meant it
+     * ran from {@code System.exit(0)} at the end of {@code Minecraft.destroy()} — <i>after</i>
+     * {@code Minecraft.close()} had already run {@code SoundManager.destroy()},
+     * {@code Util.shutdownExecutors()} and {@code Window.close()}. Closing an ALC capture device
+     * after the game has torn down OpenAL, while the daemon capture thread (which {@code
+     * System.exit} does not stop) was still calling {@code alcCaptureSamples} against it, aborted
+     * the process with glibc "double free or corruption (out)" — exit 134, no hs_err file, and
+     * only ever on sessions where the microphone had been opened at least once.
+     *
+     * <p>Idempotent by design: a second call does nothing at all, and a first call on a session
+     * that never opened a device or loaded a model is a clean no-op that still logs. Every step is
+     * wrapped, because a throw while quitting must not become a hang or a second crash.
+     */
     public static void shutdown() {
+        if (!shutdownDone.compareAndSet(false, true)) return;
         lastFrameNanos = 0L;
-        stopCapture();
-        VoskSession s = session;
-        session = null;
-        if (s != null) s.close();
+        // The DEVICE, not the object. `capture` is non-null for the whole time the player is in
+        // a world with listening on, even when openDevice() never succeeded - a machine with no
+        // microphone, or the dead default virtual driver, parks the loop in its retry state with
+        // no device at all. Reporting "closed" there would assert a device was released on exactly
+        // the machines where this report matters, and the abort correlates with whether a device
+        // was ever opened. status() is a machine value and reads "capturing" only after
+        // openDevice() returned true.
+        MicCapture cap = capture;
+        boolean hadMic = cap != null && "capturing".equals(cap.status());
+        try {
+            stopCapture();
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.warn("Voice shutdown: closing the microphone failed: {}", t.toString());
+        }
+        // Take the field before closing so nothing can hand a half-closed session to a late frame,
+        // and take it under SESSION_LOCK so a model load still in flight cannot publish one behind
+        // us. VoskSession.close() is synchronized and latches its own `closed` flag, so a
+        // VoiceSpells-Flush thread mid-flush simply finishes first and any later call is a no-op —
+        // which is also why the close itself happens outside the lock.
+        VoskSession s;
+        synchronized (SESSION_LOCK) {
+            s = session;
+            session = null;
+        }
+        try {
+            if (s != null) s.close();
+        } catch (Throwable t) {
+            VoiceSpells.LOGGER.warn("Voice shutdown: closing the speech engine failed: {}", t.toString());
+        }
+        // One unmistakable line, always, even when there was nothing to close: this is the only
+        // evidence a human has that the shutdown path ran at all before the process exits.
+        VoiceSpells.LOGGER.info("Voice shutdown: microphone {}, speech engine {}",
+            hadMic ? "closed" : "was not open",
+            s != null ? "closed" : "was not loaded");
     }
 
     // ----- OpenAL capture lifecycle -------------------------------------------------------
@@ -2358,6 +2443,9 @@ public final class VoiceController {
      * on world join, and after a device change — and cheap when nothing has changed.
      */
     public static synchronized void syncCapture() {
+        // The game is closing: shutdown() already released the device, and the frame that posted
+        // GameShuttingDownEvent still has a tick left in it that would otherwise reopen one.
+        if (shutdownDone.get()) return;
         // Refuse to open the device when listening makes no sense. Every caller used to be
         // trusted to check this, and one of them didn't: a freshly-written config file fires a
         // reload event, whose callback calls straight through to here, so the microphone opened
@@ -2650,7 +2738,23 @@ public final class VoiceController {
                 currentGrammar(),
                 VoiceController::onPhraseRecognized
             );
-            session = s;
+            // The game may have started closing while this load was running. preloadAsync()'s
+            // latch only refuses to start a load; it cannot un-start one that is already several
+            // seconds into opening (or downloading) a model. Publishing here would hand a live
+            // native model to a client whose shutdown has already been and gone, and nothing
+            // would ever close it. See SESSION_LOCK.
+            boolean wanted;
+            synchronized (SESSION_LOCK) {
+                wanted = !shutdownDone.get();
+                if (wanted) session = s;
+            }
+            if (!wanted) {
+                // Close it ourselves, outside the lock, and leave statusLine alone — the game is
+                // on its way out and nothing is going to read it again.
+                try { s.close(); } catch (Throwable ignored) {}
+                VoiceSpells.LOGGER.info("Vosk model finished loading during shutdown; closed it again");
+                return;
+            }
             VoiceSpells.LOGGER.info("Vosk model loaded from {}", modelPath);
             statusLine = "READY";
         } catch (Throwable t) {

@@ -57,6 +57,20 @@ public final class MicCapture implements AutoCloseable {
     private volatile boolean running;
     private volatile long device = 0L;
 
+    /**
+     * Guards the hand-off of the device handle. {@link #closeDevice()} runs on two threads — the
+     * capture loop on its way out, and {@link #close()} — and "read the handle, null the field,
+     * free the handle" is not atomic on a bare volatile: both threads could read the same non-zero
+     * handle and both call {@code alcCaptureCloseDevice} on it. That is a textbook double free,
+     * and glibc aborts the process for it ("double free or corruption") with no Java stack to show
+     * for it. Claiming the handle under this lock makes exactly one caller the one that frees it.
+     *
+     * <p>A private lock rather than {@code this}: {@link #close()} is synchronized and joins the
+     * capture thread while holding that monitor, so a capture thread reaching for {@code this} on
+     * its way out would deadlock until the join timed out.
+     */
+    private final Object deviceLock = new Object();
+
     /** Human-readable state for the HUD / diagnostics: "closed", "capturing", "no device", … */
     private volatile String status = "closed";
     /** Set once per failure episode so a missing mic warns once, not every retry. */
@@ -166,17 +180,35 @@ public final class MicCapture implements AutoCloseable {
         t.start();
     }
 
-    /** Stop capture and release the device. Blocks briefly for the thread to unwind. */
+    /**
+     * Stop capture and release the device. Blocks briefly for the thread to unwind.
+     *
+     * <p>The handle is freed here <b>only</b> when the capture thread is provably gone. The join
+     * is bounded, and it can genuinely time out: the loop sleeps up to {@code RETRY_INTERVAL_MS}
+     * between reconnect probes, and an interrupt does not cut a native {@code alcCaptureSamples}
+     * short. Freeing under a thread that is still inside a call on that device is a use-after-free
+     * on OpenAL's own heap, which is the same glibc abort as a double free and just as invisible
+     * from Java. If the join times out we leave the handle to its owner instead — the loop calls
+     * {@link #closeDevice()} itself the moment it exits, so nothing leaks; it is merely freed a
+     * little later, by the only thread that could still be using it.
+     */
     @Override
     public synchronized void close() {
         running = false;
         Thread t = thread;
         thread = null;
+        boolean unwound = true;
         if (t != null) {
             t.interrupt();
             try { t.join(500); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            unwound = !t.isAlive();
         }
-        closeDevice();
+        if (unwound) {
+            closeDevice();
+        } else {
+            VoiceSpells.LOGGER.warn(
+                "Capture thread did not stop within 500 ms; leaving it to release the device");
+        }
         status = "closed";
     }
 
@@ -300,8 +332,12 @@ public final class MicCapture implements AutoCloseable {
     }
 
     private void closeDevice() {
-        long d = device;
-        device = 0L;
+        // Claim the handle: whoever nulls the field is the one that frees it. See deviceLock.
+        long d;
+        synchronized (deviceLock) {
+            d = device;
+            device = 0L;
+        }
         if (d == 0L) return;
         try { ALC11.alcCaptureStop(d); } catch (Throwable ignored) {}
         try { ALC11.alcCaptureCloseDevice(d); } catch (Throwable ignored) {}

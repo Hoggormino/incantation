@@ -219,6 +219,14 @@ public final class AudioDevicesScreen extends Screen {
                 VoiceController.setDiagnosticCapture(micHoldOwner, false);
                 VoiceController.stopCapture();
                 for (String dev : targets) {
+                    // Abandon the rest of the scan the moment the game starts shutting down.
+                    // This thread is a daemon opening and closing its own ALC capture device per
+                    // probe, and it deliberately runs to completion regardless of the screen
+                    // closing - so without this it can still be inside probePeak when
+                    // Minecraft.close() reaches SoundManager.destroy(), freeing a device after
+                    // OpenAL is gone. That is the same double free the shutdown listener exists
+                    // to prevent, reached by a second route.
+                    if (VoiceController.isShuttingDown()) break;
                     scanningNow = MicCapture.prettyName(dev);
                     peaks.put(dev, MicCapture.probePeak(dev, PROBE_MS));
                 }

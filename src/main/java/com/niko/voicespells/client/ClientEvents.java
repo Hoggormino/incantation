@@ -25,6 +25,7 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.client.settings.KeyConflictContext;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.GameShuttingDownEvent;
 *///?} else {
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -35,6 +36,7 @@ import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.settings.KeyConflictContext;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.GameShuttingDownEvent;
 //?}
 import org.lwjgl.glfw.GLFW;
 
@@ -156,10 +158,12 @@ public final class ClientEvents {
 //? if forge {
 /*        MinecraftForge.EVENT_BUS.addListener(ClientEvents::onClientTickPost);
         MinecraftForge.EVENT_BUS.addListener(ClientEvents::onClientChat);
+        MinecraftForge.EVENT_BUS.addListener(ClientEvents::onGameShuttingDown);
         MinecraftForge.EVENT_BUS.addListener(VoiceSpellsClientCommands::onRegister);
 *///?} else {
         NeoForge.EVENT_BUS.addListener(ClientEvents::onClientTickPost);
         NeoForge.EVENT_BUS.addListener(ClientEvents::onClientChat);
+        NeoForge.EVENT_BUS.addListener(ClientEvents::onGameShuttingDown);
         NeoForge.EVENT_BUS.addListener(VoiceSpellsClientCommands::onRegister);
 //?}
         // Live-apply external edits to voicespells-client.toml (no game restart).
@@ -170,8 +174,15 @@ public final class ClientEvents {
         // One palette, no accent, so there is nothing config-driven left to re-apply. The hook
         // stays wired because the config class calls it on load and reload and expects a target.
         com.niko.voicespells.VoiceSpellsConfig.themeApplier = Theme::applyPalette;
-        Runtime.getRuntime().addShutdownHook(new Thread(VoiceController::shutdown,
-            "VoiceSpells-Shutdown"));
+        // No JVM shutdown hook here, deliberately — see onGameShuttingDown below. There used to be
+        // one, and it was the bug rather than the safety net: a hook runs from System.exit(0),
+        // which on the normal quit path is the last line of Minecraft.destroy(), long after
+        // Minecraft.close() has already destroyed the sound engine, shut down the executors and
+        // closed the window. Freeing an ALC capture device there — with the daemon capture thread,
+        // which System.exit does not stop, still polling that same device — aborted the process
+        // with a glibc "double free or corruption (out)", exit 134 and no crash report. Do not
+        // re-add it: the event below runs the same code while the game is still alive, and
+        // VoiceController.shutdown() latches, so a second caller would only ever be a no-op.
     }
 
     private static void onClientSetup(FMLClientSetupEvent event) {
@@ -187,6 +198,32 @@ public final class ClientEvents {
         // tickCaptureSuspension() already owns the whole lifecycle: it opens the device once you
         // are in a world and releases it whenever you are not. Letting it be the only thing that
         // opens capture is what makes "the mic is not live on the title screen" actually true.
+    }
+
+    /**
+     * Release the microphone and the speech engine while the game is still alive.
+     *
+     * <p>{@code GameShuttingDownEvent} is posted from {@code Minecraft.stop()} on the client
+     * thread — the window-X path, the title screen's Quit Game button, and the loader's own quit
+     * paths all funnel through it, and the {@code isRunning()} guard means it fires exactly once
+     * per client process. Crucially it fires a long way <i>before</i> teardown: the remainder of
+     * the current frame, the run-loop exit, the "Stopping!" log and several other {@code close()}
+     * calls all still have to happen before {@code Minecraft.close()} reaches
+     * {@code SoundManager.destroy()}. So the capture thread has a live, unhurried JVM to unwind
+     * in and the ALC capture device is closed while OpenAL is still fully up.
+     *
+     * <p>Registered only from {@link #bootstrap} and nowhere else. The event is genuinely posted
+     * on a dedicated server too ({@code DedicatedServer.stopServer()}), so registering it from the
+     * mod constructor or from common code would drag the client-only {@code VoiceController} and
+     * {@code MicCapture} onto a headless server — the dist trap that killed dedicated servers in
+     * 0.9.0 and 0.9.3.
+     *
+     * <p>Not everything routes through here: {@code Minecraft.crash(...)} exits without calling
+     * {@code stop()}, and SIGTERM/SIGKILL bypass the JVM entirely. Both are why
+     * {@code MicCapture.close()} has to be safe to never run at all.
+     */
+    private static void onGameShuttingDown(GameShuttingDownEvent event) {
+        VoiceController.shutdown();
     }
 
     private static void onRegisterKeys(RegisterKeyMappingsEvent event) {
